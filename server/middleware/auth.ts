@@ -2,7 +2,10 @@ import { createHash } from "node:crypto";
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 import type { Pool } from "pg";
 import { parse } from "cookie";
-import type { BaseTier } from "../services/auth/permissions.js";
+import {
+  getEffectivePermissions,
+  type BaseTier
+} from "../services/auth/permissions.js";
 
 export const sessionCookieName = "rnav_session";
 
@@ -42,7 +45,7 @@ declare global {
   namespace Express {
     interface Request {
       authUser?: AuthenticatedUser;
-      sessionTokenHash?: string;
+      presentedSessionTokenHash?: string;
     }
   }
 }
@@ -62,6 +65,15 @@ type IdentityRow = Omit<UserRow, "password_hash"> & {
 
 export function hashSessionToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
+}
+
+export function normalizeAuthenticatedUser(
+  identity: SessionIdentity
+): AuthenticatedUser {
+  return {
+    ...identity,
+    permissions: getEffectivePermissions(identity.permissions, identity.baseTier)
+  };
 }
 
 export function getSessionToken(request: Request) {
@@ -169,13 +181,13 @@ export function createAuthMiddleware(repository: AuthRepository): RequestHandler
       }
 
       const tokenHash = hashSessionToken(token);
-      request.sessionTokenHash = tokenHash;
+      request.presentedSessionTokenHash = tokenHash;
       const identity = await repository.findIdentityBySessionTokenHash(
         tokenHash,
         new Date()
       );
       if (identity) {
-        request.authUser = identity;
+        request.authUser = normalizeAuthenticatedUser(identity);
       }
       next();
     } catch (error) {

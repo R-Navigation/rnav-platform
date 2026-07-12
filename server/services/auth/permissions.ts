@@ -46,7 +46,7 @@ const moduleDefinitions: ConsoleModule[] = [
     key: "profile",
     href: "/console/profile",
     label: "个人资料",
-    requiredAny: ["console.access"]
+    requiredAny: ["console.access", "profile.read_own", "profile.write_own"]
   },
   {
     key: "lab-assets",
@@ -58,7 +58,14 @@ const moduleDefinitions: ConsoleModule[] = [
     key: "procurements",
     href: "/console/procurements",
     label: "采购申请",
-    requiredAny: ["procurements.create", "procurements.read_all"]
+    requiredAny: [
+      "procurements.create",
+      "procurements.read_own",
+      "procurements.read_all",
+      "procurements.review",
+      "procurements.purchase",
+      "procurements.close"
+    ]
   },
   {
     key: "monitor",
@@ -126,11 +133,7 @@ export function getConsoleModules(
   permissions: string[],
   baseTier: BaseTier = "normal"
 ) {
-  if (baseTier === "super") {
-    return moduleDefinitions.map(({ requiredAny: _requiredAny, ...module }) => module);
-  }
-
-  const permissionSet = new Set(permissions);
+  const permissionSet = new Set(getEffectivePermissions(permissions, baseTier));
   return moduleDefinitions
     .filter((module) =>
       module.requiredAny.some((permission) => permissionSet.has(permission))

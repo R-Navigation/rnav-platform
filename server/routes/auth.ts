@@ -4,16 +4,15 @@ import { Router, json, type RequestHandler } from "express";
 import { serialize } from "cookie";
 import {
   hashSessionToken,
+  normalizeAuthenticatedUser,
   requireLogin,
   sessionCookieName,
   type AuthRepository,
   type SessionIdentity
 } from "../middleware/auth.js";
-import {
-  deriveDisplayTier,
-  getEffectivePermissions
-} from "../services/auth/permissions.js";
+import { deriveDisplayTier } from "../services/auth/permissions.js";
 
+// Legacy hashes may use different costs; this fixed policy only equalizes unknown-user work.
 const invalidPasswordHash =
   "$2b$12$cHDtHdJCYXUnLog8oLhRWuxzsLi1wFgplo.q6tZvV1X2xObATr58e";
 const defaultSessionTtlMs = 7 * 24 * 60 * 60 * 1000;
@@ -36,30 +35,56 @@ function cookieOptions(secure: boolean, maxAge?: number) {
   };
 }
 
-function parseCookieSecure(value: string | undefined) {
-  return value === "true" || value === "1";
+type CookieSecureResolution = {
+  explicitValue?: boolean;
+  envValue?: string;
+  nodeEnv?: string;
+};
+
+export function resolveCookieSecure({
+  explicitValue,
+  envValue,
+  nodeEnv
+}: CookieSecureResolution) {
+  if (explicitValue !== undefined) {
+    return explicitValue;
+  }
+  if (envValue !== undefined) {
+    if (envValue === "true") {
+      return true;
+    }
+    if (envValue === "false") {
+      return false;
+    }
+    throw new Error("COOKIE_SECURE must be true or false");
+  }
+  return nodeEnv === "production";
 }
 
 function safeSessionPayload(identity: SessionIdentity) {
-  const permissions = getEffectivePermissions(
-    identity.permissions,
-    identity.baseTier
-  );
   return {
     user: {
       id: identity.id,
       username: identity.username,
       displayName: identity.displayName,
-      tier: deriveDisplayTier(identity.baseTier, permissions)
+      tier: deriveDisplayTier(identity.baseTier, identity.permissions)
     },
-    permissions
+    permissions: identity.permissions
   };
+}
+
+async function compareLoginPassword(password: string, passwordHash?: string) {
+  return bcrypt.compare(password, passwordHash ?? invalidPasswordHash);
 }
 
 export function createAuthRouter(options: AuthRouterOptions) {
   const router = Router();
   const sessionTtlMs = options.sessionTtlMs ?? defaultSessionTtlMs;
-  const secure = options.cookieSecure ?? parseCookieSecure(process.env.COOKIE_SECURE);
+  const secure = resolveCookieSecure({
+    explicitValue: options.cookieSecure,
+    envValue: process.env.COOKIE_SECURE,
+    nodeEnv: process.env.NODE_ENV
+  });
   const now = options.now ?? (() => new Date());
 
   router.post("/api/auth/login", json(), async (request, response, next) => {
@@ -71,9 +96,9 @@ export function createAuthRouter(options: AuthRouterOptions) {
       const user = username
         ? await options.repository.findUserForLogin(username)
         : null;
-      const passwordMatches = await bcrypt.compare(
+      const passwordMatches = await compareLoginPassword(
         password,
-        user?.passwordHash ?? invalidPasswordHash
+        user?.passwordHash
       );
 
       if (!user || !passwordMatches || user.status !== "active") {
@@ -98,6 +123,7 @@ export function createAuthRouter(options: AuthRouterOptions) {
       if (!identity) {
         throw new Error("Created session could not be loaded");
       }
+      const authenticatedIdentity = normalizeAuthenticatedUser(identity);
 
       response.setHeader(
         "set-cookie",
@@ -107,7 +133,7 @@ export function createAuthRouter(options: AuthRouterOptions) {
           cookieOptions(secure, Math.floor(sessionTtlMs / 1000))
         )
       );
-      response.json(safeSessionPayload(identity));
+      response.json(safeSessionPayload(authenticatedIdentity));
     } catch (error) {
       next(error);
     }
@@ -118,8 +144,10 @@ export function createAuthRouter(options: AuthRouterOptions) {
     options.authMiddleware,
     async (request, response, next) => {
       try {
-        if (request.sessionTokenHash) {
-          await options.repository.revokeSession(request.sessionTokenHash);
+        if (request.presentedSessionTokenHash) {
+          await options.repository.revokeSession(
+            request.presentedSessionTokenHash
+          );
         }
         response.setHeader(
           "set-cookie",

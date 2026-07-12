@@ -10,6 +10,7 @@ import {
   type UserForLogin
 } from "../middleware/auth.js";
 import { createAuthRouter } from "./auth.js";
+import { resolveCookieSecure } from "./auth.js";
 import { createConsoleRouter } from "./console.js";
 
 const activePasswordHash = bcrypt.hashSync("correct horse battery staple", 4);
@@ -196,6 +197,21 @@ test("GET /api/console/bootstrap without a session returns 401", async () => {
   assert.equal(response.status, 401);
 });
 
+test("GET /api/console/bootstrap returns 403 without console access", async () => {
+  const repository = new MemoryAuthRepository();
+  const user = addUser(repository);
+  repository.permissions.set(user.id, ["profile.read_own"]);
+  repository.sessions.set(createHash("sha256").update("no-console").digest("hex"), {
+    userId: user.id,
+    expiresAt: new Date(Date.now() + 60_000)
+  });
+
+  const response = await requestApp(repository, "/api/console/bootstrap", {
+    headers: { cookie: sessionCookie("no-console") }
+  });
+  assert.equal(response.status, 403);
+});
+
 test("GET /api/console/bootstrap returns normal member modules", async () => {
   const repository = new MemoryAuthRepository();
   const user = addUser(repository);
@@ -243,7 +259,29 @@ test("GET /api/console/bootstrap returns every module for a super user", async (
     consoleModules: Array<{ key: string }>;
   };
   assert.equal(body.user.tier, "super");
-  assert.equal(body.permissions.length > 0, true);
+  assert.deepEqual(body.permissions.sort(), [
+    "console.access",
+    "lab_assets.read",
+    "lab_assets.write",
+    "monitor.devices.read",
+    "monitor.devices.write",
+    "monitor.settings.write",
+    "permissions.write",
+    "procurements.close",
+    "procurements.create",
+    "procurements.purchase",
+    "procurements.read_all",
+    "procurements.read_own",
+    "procurements.review",
+    "profile.read_own",
+    "profile.write_own",
+    "site.content.write",
+    "site.media.write",
+    "site.members.write",
+    "system.settings.write",
+    "users.read",
+    "users.write"
+  ]);
   assert.deepEqual(
     body.consoleModules.map((module) => module.key),
     [
@@ -257,6 +295,31 @@ test("GET /api/console/bootstrap returns every module for a super user", async (
       "permissions",
       "settings"
     ]
+  );
+});
+
+test("resolveCookieSecure defaults to secure in production", () => {
+  assert.equal(
+    resolveCookieSecure({ nodeEnv: "production", envValue: undefined }),
+    true
+  );
+});
+
+test("resolveCookieSecure honors an explicit option over environment", () => {
+  assert.equal(
+    resolveCookieSecure({
+      explicitValue: false,
+      nodeEnv: "production",
+      envValue: "true"
+    }),
+    false
+  );
+});
+
+test("resolveCookieSecure rejects invalid environment values", () => {
+  assert.throws(
+    () => resolveCookieSecure({ nodeEnv: "development", envValue: "sometimes" }),
+    /COOKIE_SECURE must be true or false/
   );
 });
 

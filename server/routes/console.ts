@@ -1,9 +1,8 @@
 import { Router, type RequestHandler } from "express";
-import { requireLogin } from "../middleware/auth.js";
+import { requirePermission } from "../middleware/requirePermission.js";
 import {
   deriveDisplayTier,
-  getConsoleModules,
-  getEffectivePermissions
+  getConsoleModules
 } from "../services/auth/permissions.js";
 
 type ConsoleRouterOptions = {
@@ -16,19 +15,18 @@ export function createConsoleRouter(options: ConsoleRouterOptions) {
   router.get(
     "/api/console/bootstrap",
     options.authMiddleware,
-    requireLogin,
+    requirePermission("console.access"),
     (request, response) => {
       const user = request.authUser!;
-      const permissions = getEffectivePermissions(user.permissions, user.baseTier);
       response.json({
         user: {
           id: user.id,
           username: user.username,
           displayName: user.displayName,
-          tier: deriveDisplayTier(user.baseTier, permissions)
+          tier: deriveDisplayTier(user.baseTier, user.permissions)
         },
-        permissions,
-        consoleModules: getConsoleModules(permissions, user.baseTier)
+        permissions: user.permissions,
+        consoleModules: getConsoleModules(user.permissions, user.baseTier)
       });
     }
   );
