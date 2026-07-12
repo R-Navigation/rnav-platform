@@ -1,6 +1,7 @@
 import type { Pool, PoolClient, QueryResult } from "pg";
 import { createPostgresPublicSiteRepository } from "../public-site/postgres-repository.js";
 import { pageKeys, type ContactItems, type PageKey, type SiteRecord } from "./schemas.js";
+import type { PublicSiteRepository } from "../public-site/service.js";
 import type { SiteAdminRepository, SiteAdminSnapshot } from "./service.js";
 
 type Queryable = Pick<Pool, "query">;
@@ -82,8 +83,21 @@ async function getRevisions(pool: Queryable) {
   return new Map(result.rows.map((row) => [row.module_key, row.revision]));
 }
 
-export function createPostgresSiteAdminRepository(pool: TransactionPool): SiteAdminRepository {
-  const publicRepository = createPostgresPublicSiteRepository(pool);
+function normalizeSnapshotAssets(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(normalizeSnapshotAssets);
+  if (!value || typeof value !== "object") return value;
+  const result: SiteRecord = {};
+  for (const [key, nestedValue] of Object.entries(value as SiteRecord)) {
+    result[key] = key === "assetId" && nestedValue === "" ? null : normalizeSnapshotAssets(nestedValue);
+  }
+  return result;
+}
+
+export function createPostgresSiteAdminRepository(
+  pool: TransactionPool,
+  dependencies: { publicRepository?: PublicSiteRepository } = {}
+): SiteAdminRepository {
+  const publicRepository = dependencies.publicRepository ?? createPostgresPublicSiteRepository(pool);
 
   const replaceSimpleCollection = (
     moduleKey: string,
@@ -116,10 +130,10 @@ export function createPostgresSiteAdminRepository(pool: TransactionPool): SiteAd
       }]));
       return {
         pages,
-        researchItems: { items: researchItems, updatedAt: revisions.get("research-items") ?? "0" },
-        newsItems: { items: newsItems, updatedAt: revisions.get("news-items") ?? "0" },
-        teamMembers: { items: teamMembers, updatedAt: revisions.get("team-members") ?? "0" },
-        facilityItems: { items: facilityItems, updatedAt: revisions.get("facility-items") ?? "0" },
+        researchItems: { items: normalizeSnapshotAssets(researchItems) as SiteRecord[], updatedAt: revisions.get("research-items") ?? "0" },
+        newsItems: { items: normalizeSnapshotAssets(newsItems) as SiteRecord[], updatedAt: revisions.get("news-items") ?? "0" },
+        teamMembers: { items: normalizeSnapshotAssets(teamMembers) as SiteRecord[], updatedAt: revisions.get("team-members") ?? "0" },
+        facilityItems: { items: normalizeSnapshotAssets(facilityItems) as SiteRecord[], updatedAt: revisions.get("facility-items") ?? "0" },
         contactItems: { items: contactItems, updatedAt: revisions.get("contact-items") ?? "0" }
       };
     },
