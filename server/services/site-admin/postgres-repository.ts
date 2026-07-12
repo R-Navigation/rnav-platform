@@ -223,9 +223,9 @@ export function createPostgresSiteAdminRepository(
     },
 
     replaceNewsItems: replaceSimpleCollection("news-items", "news_items",
-      `INSERT INTO news_items (id, sort_order, date_zh, date_en, badge_zh, badge_en, badge_tone, title_zh, title_en, description_zh, description_en, excerpt_zh, excerpt_en, featured, image_asset_id, image_src, image_alt, image_data_alt, link_label_zh, link_label_en, link_href, link_icon, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,now())`,
-      (item, index) => [item.id, number(item.sortOrder ?? index), ...locale(item.date), ...locale(item.badge), value(item.badgeTone || "cyan"), ...locale(item.title), ...locale(item.description), ...locale(item.excerpt), Boolean(item.featured), ...imageValues(item.image), ...locale(nested(item.link).label), nested(item.link).href || null, nested(item.link).icon || null],
+      `INSERT INTO news_items (id, sort_order, date_zh, date_en, badge_zh, badge_en, badge_tone, title_zh, title_en, description_zh, description_en, excerpt_zh, excerpt_en, featured, image_asset_id, image_src, image_alt, image_data_alt, link_label_zh, link_label_en, link_href, link_icon, link_variant, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,now())`,
+      (item, index) => [item.id, number(item.sortOrder ?? index), ...locale(item.date), ...locale(item.badge), value(item.badgeTone || "cyan"), ...locale(item.title), ...locale(item.description), ...locale(item.excerpt), Boolean(item.featured), ...imageValues(item.image), ...locale(nested(item.link).label), nested(item.link).href || null, nested(item.link).icon || null, value(nested(item.link).variant)],
       "site.news.replace", "news_items"),
 
     replaceTeamMembers(items, expected, actorId) {
@@ -240,7 +240,7 @@ export function createPostgresSiteAdminRepository(
             [item.slug, item.group, number(item.sortOrder ?? index), ...fields.flatMap((field) => locale(item[field])), value(item.enrollmentYear), ...tailFields.flatMap((field) => locale(item[field])), ...imageValues(item.image)]
           );
           const memberId = result.rows[0].id;
-          await insertMany(client, "INSERT INTO team_member_links (team_member_id, sort_order, label_zh, label_en, href, icon) VALUES ($1,$2,$3,$4,$5,$6)", list(item.links).map((entry, childIndex) => [memberId, childIndex, ...locale(entry.label), value(entry.href), value(entry.icon)]));
+          await insertMany(client, "INSERT INTO team_member_links (team_member_id, sort_order, label_zh, label_en, href, icon, variant) VALUES ($1,$2,$3,$4,$5,$6,$7)", list(item.links).map((entry, childIndex) => [memberId, childIndex, ...locale(entry.label), value(entry.href), value(entry.icon), value(entry.variant)]));
           await insertMany(client, "INSERT INTO team_member_contacts (team_member_id, sort_order, label_zh, label_en, value_zh, value_en) VALUES ($1,$2,$3,$4,$5,$6)", list(item.contacts).map((entry, childIndex) => [memberId, childIndex, ...locale(entry.label), ...locale(entry.value)]));
         }
       });

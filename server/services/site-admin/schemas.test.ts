@@ -70,6 +70,25 @@ test("collection fields validate UUIDs, core types, and bounded localized values
   assert.equal(collectionRequestSchemas.facility.safeParse({ expectedUpdatedAt: "0", items: [{ id: "1", category: "quadrupeds", title: { en: "x".repeat(20_001) } }] }).success, false);
 });
 
+test("research, team, and news schemas preserve link variants", () => {
+  const research = collectionRequestSchemas.research.parse({
+    expectedUpdatedAt: "0",
+    items: [{ id: "paper-1", links: [{ href: "/paper", variant: "primary" }] }]
+  });
+  const team = collectionRequestSchemas.team.parse({
+    expectedUpdatedAt: "0",
+    items: [{ slug: "alice", group: "phd", links: [{ href: "/alice", variant: "subtle" }] }]
+  });
+  const news = collectionRequestSchemas.news.parse({
+    expectedUpdatedAt: "0",
+    items: [{ id: "news-1", link: { href: "/news", variant: "secondary" } }]
+  });
+
+  assert.equal(research.items[0].links?.[0].variant, "primary");
+  assert.equal(team.items[0].links?.[0].variant, "subtle");
+  assert.equal(news.items[0].link?.variant, "secondary");
+});
+
 test("team collections use the public group allowlist and preserve legacy member fields", () => {
   for (const group of ["advisor", "postdoc", "phd", "master", "undergrad", "alumni"]) {
     const parsed = collectionRequestSchemas.team.safeParse({

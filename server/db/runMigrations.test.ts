@@ -80,7 +80,8 @@ test("getMigrationFiles returns SQL migrations in lexical order", async () => {
       "006_public_site_legacy.sql",
       "007_public_site_compatibility.sql",
       "008_site_admin_revisions.sql",
-      "009_site_admin_roundtrip.sql"
+      "009_site_admin_roundtrip.sql",
+      "010_site_admin_link_variants.sql"
     ]
   );
 });
@@ -95,6 +96,21 @@ test("site-admin round-trip migration is additive, idempotent, and revision guar
   assert.match(migration, /revision_type IS DISTINCT FROM 'int8'/i);
   assert.match(migration, /revision < 0/i);
   assert.match(migration, /NOT EXISTS/i);
+  assert.doesNotMatch(migration, /DROP (?:TABLE|COLUMN|CONSTRAINT)/i);
+});
+
+test("site-admin link variant migration is additive, idempotent, and type guarded", async () => {
+  const migration = await import("node:fs/promises").then(({ readFile }) =>
+    readFile(new URL("./migrations/010_site_admin_link_variants.sql", import.meta.url), "utf8")
+  );
+
+  assert.match(migration, /team_member_links[\s\S]*ADD COLUMN IF NOT EXISTS variant text/i);
+  assert.match(migration, /news_items[\s\S]*ADD COLUMN IF NOT EXISTS link_variant text/i);
+  assert.match(migration, /information_schema\.columns/i);
+  assert.match(migration, /team_member_links.*variant.*incompatible type/is);
+  assert.match(migration, /news_items.*link_variant.*incompatible type/is);
+  assert.match(migration, /expected text/i);
+  assert.doesNotMatch(migration, /ALTER TABLE research_item_links/i);
   assert.doesNotMatch(migration, /DROP (?:TABLE|COLUMN|CONSTRAINT)/i);
 });
 

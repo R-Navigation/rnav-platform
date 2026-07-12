@@ -105,6 +105,30 @@ test("team contacts persist localized values", async () => {
   assert.deepEqual(contactInsert?.values?.slice(-2), ["中文地址", "english@example.com"]);
 });
 
+test("team and news replacements persist link variants", async () => {
+  const teamClient = new FakeClient();
+  const teamRepository = createPostgresSiteAdminRepository({ connect: async () => teamClient } as never);
+  await teamRepository.replaceTeamMembers([{
+    slug: "alice", group: "phd",
+    links: [{ label: { en: "Profile" }, href: "/alice", icon: "link", variant: "subtle" }]
+  }], "7", "user-1");
+
+  const teamLinkInsert = teamClient.calls.find(({ sql }) => sql.includes("INSERT INTO team_member_links"));
+  assert.match(teamLinkInsert?.sql ?? "", /href, icon, variant/);
+  assert.equal(teamLinkInsert?.values?.at(-1), "subtle");
+
+  const newsClient = new FakeClient();
+  const newsRepository = createPostgresSiteAdminRepository({ connect: async () => newsClient } as never);
+  await newsRepository.replaceNewsItems([{
+    id: "news-1",
+    link: { label: { en: "Details" }, href: "/news", icon: "arrow", variant: "secondary" }
+  }], "7", "user-1");
+
+  const newsInsert = newsClient.calls.find(({ sql }) => sql.includes("INSERT INTO news_items"));
+  assert.match(newsInsert?.sql ?? "", /link_href, link_icon, link_variant/);
+  assert.equal(newsInsert?.values?.at(-1), "secondary");
+});
+
 test("facility replacement preserves a supplied bigint id", async () => {
   const client = new FakeClient();
   const repository = createPostgresSiteAdminRepository({ connect: async () => client } as never);

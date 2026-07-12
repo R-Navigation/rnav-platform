@@ -4,7 +4,7 @@ import type { PublicRecord, PublicSiteRepository } from "./service.js";
 export type Queryable = Pick<Pool, "query">;
 
 const locale = (row: PublicRecord, prefix: string) => ({ zh: row[`${prefix}_zh`] ?? "", en: row[`${prefix}_en`] ?? "" });
-const image = (row: PublicRecord) => row.image_src ? { assetId: row.image_asset_id ?? "", src: row.image_src, alt: row.image_alt ?? "", dataAlt: row.image_data_alt ?? "" } : null;
+const image = (row: PublicRecord) => row.image_asset_id || row.image_src ? { assetId: row.image_asset_id ?? "", src: row.image_src, alt: row.image_alt ?? "", dataAlt: row.image_data_alt ?? "" } : null;
 const groupBy = (rows: PublicRecord[], key: string) => rows.reduce((map, row) => map.set(row[key], [...(map.get(row[key]) ?? []), row]), new Map<unknown, PublicRecord[]>());
 
 export function createPostgresPublicSiteRepository(pool: Queryable): PublicSiteRepository {
@@ -21,11 +21,11 @@ export function createPostgresPublicSiteRepository(pool: Queryable): PublicSiteR
         pool.query("SELECT * FROM research_item_links ORDER BY research_item_id, sort_order, id")
       ]);
       const keywordMap = groupBy(keywords.rows, "research_item_id"), authorMap = groupBy(authors.rows, "research_item_id"), linkMap = groupBy(links.rows, "research_item_id");
-      return items.rows.map((row) => ({ id: row.id, sortOrder: row.sort_order, title: locale(row, "title"), year: row.publication_year ?? "", venue: locale(row, "venue"), type: row.publication_type, topic: row.topic, image: image(row), pdf: row.pdf_src ? { assetId: row.pdf_asset_id ?? "", src: row.pdf_src, label: locale(row, "pdf_label") } : null, keywords: (keywordMap.get(row.id) ?? []).map((item: PublicRecord) => locale(item, "value")), authors: (authorMap.get(row.id) ?? []).map((item: PublicRecord) => ({ name: locale(item, "name"), highlight: item.highlight })), links: (linkMap.get(row.id) ?? []).map((item: PublicRecord) => ({ label: locale(item, "label"), href: item.href, icon: item.icon, variant: item.variant ?? "" })) }));
+      return items.rows.map((row) => ({ id: row.id, sortOrder: row.sort_order, title: locale(row, "title"), year: row.publication_year ?? "", venue: locale(row, "venue"), type: row.publication_type, topic: row.topic, image: image(row), pdf: row.pdf_asset_id || row.pdf_src ? { assetId: row.pdf_asset_id ?? "", src: row.pdf_src, label: locale(row, "pdf_label") } : null, keywords: (keywordMap.get(row.id) ?? []).map((item: PublicRecord) => locale(item, "value")), authors: (authorMap.get(row.id) ?? []).map((item: PublicRecord) => ({ name: locale(item, "name"), highlight: item.highlight })), links: (linkMap.get(row.id) ?? []).map((item: PublicRecord) => ({ label: locale(item, "label"), href: item.href, icon: item.icon, variant: item.variant ?? "" })) }));
     },
     async getNewsItems() {
       const { rows } = await pool.query("SELECT * FROM news_items ORDER BY sort_order, title_en, id");
-      return rows.map((row) => ({ id: row.id, sortOrder: row.sort_order, date: locale(row, "date"), badge: locale(row, "badge"), badgeTone: row.badge_tone, title: locale(row, "title"), description: locale(row, "description"), excerpt: locale(row, "excerpt"), featured: row.featured, image: image(row), link: row.link_href ? { label: locale(row, "link_label"), href: row.link_href, icon: row.link_icon ?? "" } : null }));
+      return rows.map((row) => ({ id: row.id, sortOrder: row.sort_order, date: locale(row, "date"), badge: locale(row, "badge"), badgeTone: row.badge_tone, title: locale(row, "title"), description: locale(row, "description"), excerpt: locale(row, "excerpt"), featured: row.featured, image: image(row), link: row.link_href ? { label: locale(row, "link_label"), href: row.link_href, icon: row.link_icon ?? "", variant: row.link_variant ?? "" } : null }));
     },
     async getTeamMembers() {
       const [members, links, contacts] = await Promise.all([pool.query("SELECT * FROM team_members ORDER BY group_key, sort_order, name_en, id"), pool.query("SELECT * FROM team_member_links ORDER BY team_member_id, sort_order, id"), pool.query("SELECT * FROM team_member_contacts ORDER BY team_member_id, sort_order, id")]);
