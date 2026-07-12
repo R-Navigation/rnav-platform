@@ -1,8 +1,9 @@
 import type { RequestHandler } from "express";
 
-function firstHeader(value: string | string[] | undefined) {
+function singleHeader(value: string | string[] | undefined) {
   const raw = Array.isArray(value) ? value[0] : value;
-  return raw?.split(",", 1)[0].trim() || null;
+  if (!raw || raw.includes(",")) return null;
+  return raw.trim() || null;
 }
 
 function normalizeOrigin(value: string) {
@@ -17,20 +18,26 @@ function normalizeOrigin(value: string) {
   }
 }
 
-function requestOrigin(request: Parameters<RequestHandler>[0]) {
-  const host = firstHeader(request.headers["x-forwarded-host"]) ?? firstHeader(request.headers.host);
+function requestOrigin(request: Parameters<RequestHandler>[0], trustProxy: boolean) {
+  const forwardedHost = singleHeader(request.headers["x-forwarded-host"]);
+  const forwardedProto = singleHeader(request.headers["x-forwarded-proto"]);
+  if (trustProxy && (!forwardedHost || !forwardedProto)) return null;
+  const host = trustProxy ? forwardedHost : singleHeader(request.headers.host);
   if (!host || /[\s/@\\]/.test(host)) return null;
-  const forwardedProto = firstHeader(request.headers["x-forwarded-proto"]);
-  const protocol = (forwardedProto ?? ((request.socket as { encrypted?: boolean } | undefined)?.encrypted ? "https" : "http")).toLowerCase();
+  const protocol = (trustProxy ? forwardedProto : ((request.socket as { encrypted?: boolean } | undefined)?.encrypted ? "https" : "http"))?.toLowerCase();
   if (protocol !== "http" && protocol !== "https") return null;
   return normalizeOrigin(`${protocol}://${host}`);
 }
 
-export const requireSameOrigin: RequestHandler = (request, response, next) => {
-  const origin = firstHeader(request.headers.origin);
-  if (!origin || normalizeOrigin(origin) !== requestOrigin(request)) {
-    response.status(403).json({ error: "Origin denied" });
-    return;
-  }
-  next();
-};
+export function createRequireSameOrigin({ trustProxy = false }: { trustProxy?: boolean } = {}): RequestHandler {
+  return (request, response, next) => {
+    const origin = singleHeader(request.headers.origin);
+    if (!origin || normalizeOrigin(origin) !== requestOrigin(request, trustProxy)) {
+      response.status(403).json({ error: "Origin denied" });
+      return;
+    }
+    next();
+  };
+}
+
+export const requireSameOrigin = createRequireSameOrigin();

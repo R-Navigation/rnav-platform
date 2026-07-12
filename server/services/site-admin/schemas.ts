@@ -11,10 +11,14 @@ const MAX_STRING = 20_000;
 const MAX_LIST = 500;
 const MAX_DEPTH = 20;
 const MAX_NODES = 10_000;
+const MAX_TOTAL_STRING_CHARS = 200_000;
+const MAX_CHILD_ITEMS = 5_000;
 const forbiddenKeys = new Set(["__proto__", "prototype", "constructor"]);
 
 function inspectJson(value: unknown, context: z.RefinementCtx) {
   let nodes = 0;
+  let stringChars = 0;
+  let childItems = 0;
   const visit = (current: unknown, depth: number, path: (string | number)[]) => {
     nodes += 1;
     if (nodes > MAX_NODES) {
@@ -26,6 +30,8 @@ function inspectJson(value: unknown, context: z.RefinementCtx) {
       return;
     }
     if (typeof current === "string") {
+      stringChars += current.length;
+      if (stringChars > MAX_TOTAL_STRING_CHARS) context.addIssue({ code: z.ZodIssueCode.custom, message: "JSON strings are too large", path });
       if (current.length > MAX_STRING) context.addIssue({ code: z.ZodIssueCode.too_big, maximum: MAX_STRING, inclusive: true, type: "string", message: "String is too long", path });
       return;
     }
@@ -35,6 +41,8 @@ function inspectJson(value: unknown, context: z.RefinementCtx) {
       return;
     }
     if (Array.isArray(current)) {
+      childItems += current.length;
+      if (childItems > MAX_CHILD_ITEMS) context.addIssue({ code: z.ZodIssueCode.custom, message: "JSON has too many child items", path });
       if (current.length > MAX_LIST) context.addIssue({ code: z.ZodIssueCode.too_big, maximum: MAX_LIST, inclusive: true, type: "array", message: "List is too long", path });
       current.forEach((item, index) => visit(item, depth + 1, [...path, index]));
       return;
@@ -53,7 +61,14 @@ function inspectJson(value: unknown, context: z.RefinementCtx) {
 }
 
 const safeJson = z.unknown().superRefine(inspectJson);
-const revision = z.string().regex(/^\d+$/).max(30);
+const revision = z.string().regex(/^\d+$/).refine(
+  (value) => /^\d+$/.test(value) && BigInt(value) <= 9_223_372_036_854_775_807n,
+  "Revision exceeds PostgreSQL bigint range"
+);
+const positiveBigint = z.string().regex(/^[1-9]\d*$/).refine(
+  (value) => /^[1-9]\d*$/.test(value) && BigInt(value) <= 9_223_372_036_854_775_807n,
+  "Value exceeds PostgreSQL bigint range"
+);
 const text = z.string().max(MAX_STRING);
 const identifier = z.string().trim().min(1).max(200);
 const optionalText = text.optional();
@@ -68,6 +83,7 @@ export const pageRequestSchema = z.object({ content: safeJson, expectedUpdatedAt
 
 function uniqueField<T extends z.ZodRawShape>(item: z.ZodObject<T>, field: string, required = true) {
   return z.object({ items: z.array(item).max(MAX_LIST), expectedUpdatedAt: revision }).strict().superRefine((body, context) => {
+    inspectJson(body.items, context);
     const seen = new Set<string>();
     body.items.forEach((entry, index) => {
       const value = (entry as SiteRecord)[field];
@@ -104,7 +120,7 @@ const teamItem = z.object({
 }).strict();
 
 const facilityItem = z.object({
-  id: identifier.optional(), category: identifier, sortOrder, icon: optionalText, tag: localized.optional(), title: localized.optional(),
+  id: positiveBigint.optional(), category: identifier, sortOrder, icon: optionalText, tag: localized.optional(), title: localized.optional(),
   description: localized.optional(), specLine: localized.optional(), image,
   specs: z.array(z.object({ label: localized.optional(), value: localized.optional() }).strict()).max(MAX_LIST).optional()
 }).strict();
@@ -125,5 +141,5 @@ export const collectionRequestSchemas = {
       extraCards: z.array(extraCard).max(MAX_LIST)
     }).strict(),
     expectedUpdatedAt: revision
-  }).strict()
+  }).strict().superRefine((body, context) => inspectJson(body.items, context))
 };

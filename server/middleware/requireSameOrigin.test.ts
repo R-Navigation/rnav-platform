@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { NextFunction, Request, Response } from "express";
-import { requireSameOrigin } from "./requireSameOrigin.js";
+import { createRequireSameOrigin } from "./requireSameOrigin.js";
 
-function run(headers: Record<string, string | undefined>) {
-  const request = { headers } as Request;
+function run(headers: Record<string, string | undefined>, trustProxy = false, encrypted = false) {
+  const request = { headers, socket: { encrypted } } as unknown as Request;
   let status = 200;
   let body: unknown;
   let nextCalled = false;
@@ -13,17 +13,17 @@ function run(headers: Record<string, string | undefined>) {
     json(value: unknown) { body = value; return this; }
   } as unknown as Response;
   const next = (() => { nextCalled = true; }) as NextFunction;
-  requireSameOrigin(request, response, next);
+  createRequireSameOrigin({ trustProxy })(request, response, next);
   return { status, body, nextCalled };
 }
 
-test("same-origin accepts normalized case and default HTTPS ports", () => {
+test("trusted proxy accepts normalized case and default HTTPS ports", () => {
   assert.deepEqual(run({
     origin: "HTTPS://ADMIN.EXAMPLE.COM:443",
     host: "ignored.example.com",
     "x-forwarded-host": "admin.example.com",
     "x-forwarded-proto": "https"
-  }), { status: 200, body: undefined, nextCalled: true });
+  }, true), { status: 200, body: undefined, nextCalled: true });
 });
 
 test("same-origin accepts an explicit matching non-default port", () => {
@@ -42,13 +42,22 @@ test("same-origin rejects a spoofed Origin even when Host is present", () => {
   assert.equal(run({ origin: "https://evil.example", host: "admin.example.com" }).status, 403);
 });
 
-test("same-origin uses the first forwarded host and protocol values", () => {
+test("direct mode ignores forwarded headers", () => {
+  assert.equal(run({
+    origin: "http://internal:8080",
+    host: "internal:8080",
+    "x-forwarded-host": "admin.example.com",
+    "x-forwarded-proto": "https"
+  }).nextCalled, true);
+});
+
+test("trusted proxy rejects comma-separated forwarded values", () => {
   assert.equal(run({
     origin: "https://admin.example.com",
     host: "internal:8080",
     "x-forwarded-host": "admin.example.com, evil.example",
     "x-forwarded-proto": "https, http"
-  }).nextCalled, true);
+  }, true).status, 403);
 });
 
 test("same-origin rejects malformed forwarded host spoofing", () => {
@@ -57,5 +66,11 @@ test("same-origin rejects malformed forwarded host spoofing", () => {
     host: "internal:8080",
     "x-forwarded-host": "admin.example.com@evil.example",
     "x-forwarded-proto": "https"
-  }).status, 403);
+  }, true).status, 403);
+});
+
+test("trusted proxy requires exactly one valid forwarded host and protocol", () => {
+  assert.equal(run({ origin: "https://admin.example.com", host: "internal:8080", "x-forwarded-host": "admin.example.com" }, true).status, 403);
+  assert.equal(run({ origin: "https://admin.example.com", host: "internal:8080", "x-forwarded-host": "admin.example.com", "x-forwarded-proto": "ftp" }, true).status, 403);
+  assert.equal(run({ origin: "https://admin.example.com", host: "internal:8080", "x-forwarded-host": "admin.example.com", "x-forwarded-proto": "https" }, true).nextCalled, true);
 });

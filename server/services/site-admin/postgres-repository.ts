@@ -6,11 +6,19 @@ import type { SiteAdminRepository, SiteAdminSnapshot } from "./service.js";
 
 type Queryable = Pick<Pool, "query">;
 type TransactionPool = Pick<Pool, "connect" | "query">;
+type ErrorWithCleanupFailures = Error & { cleanupFailures?: unknown[] };
 
 export class RevisionConflictError extends Error {
   constructor() {
     super("Content revision conflict");
     this.name = "RevisionConflictError";
+  }
+}
+
+export class AssetReferenceError extends Error {
+  constructor() {
+    super("Invalid asset reference");
+    this.name = "AssetReferenceError";
   }
 }
 
@@ -57,6 +65,7 @@ async function inReplacementTransaction(
   replace: (client: PoolClient) => Promise<void>
 ) {
   const client = await pool.connect();
+  let primaryError: unknown;
   try {
     await client.query("BEGIN");
     const revision = await claimRevision(client, input.moduleKey, input.expected);
@@ -65,11 +74,34 @@ async function inReplacementTransaction(
     await client.query("COMMIT");
     return revision;
   } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
+    primaryError = isAssetForeignKeyError(error) ? new AssetReferenceError() : error;
+    try {
+      await client.query("ROLLBACK");
+    } catch (rollbackError) {
+      attachCleanupFailure(primaryError, rollbackError);
+    }
   } finally {
-    client.release();
+    try {
+      client.release();
+    } catch (releaseError) {
+      if (primaryError === undefined) throw releaseError;
+      attachCleanupFailure(primaryError, releaseError);
+    }
   }
+  throw primaryError;
+}
+
+function isAssetForeignKeyError(error: unknown) {
+  if (!error || typeof error !== "object" || (error as { code?: unknown }).code !== "23503") return false;
+  const constraint = String((error as { constraint?: unknown }).constraint ?? "");
+  return /(?:image|pdf)_asset_id|media_assets/i.test(constraint);
+}
+
+function attachCleanupFailure(primaryError: unknown, cleanupError: unknown) {
+  if (!(primaryError instanceof Error)) return;
+  const error = primaryError as ErrorWithCleanupFailures;
+  error.cleanupFailures ??= [];
+  error.cleanupFailures.push(cleanupError);
 }
 
 async function insertMany(client: PoolClient, sql: string, rows: readonly (readonly unknown[])[]) {
@@ -95,9 +127,9 @@ function normalizeSnapshotAssets(value: unknown): unknown {
 
 export function createPostgresSiteAdminRepository(
   pool: TransactionPool,
-  dependencies: { publicRepository?: PublicSiteRepository } = {}
+  dependencies: { publicRepositoryFactory?: (queryable: Queryable) => PublicSiteRepository } = {}
 ): SiteAdminRepository {
-  const publicRepository = dependencies.publicRepository ?? createPostgresPublicSiteRepository(pool);
+  const publicRepositoryFactory = dependencies.publicRepositoryFactory ?? createPostgresPublicSiteRepository;
 
   const replaceSimpleCollection = (
     moduleKey: string,
@@ -116,26 +148,49 @@ export function createPostgresSiteAdminRepository(
 
   return {
     async getSnapshot(): Promise<SiteAdminSnapshot> {
-      const [pageRows, revisions, researchItems, newsItems, teamMembers, facilityItems, contactItems] = await Promise.all([
-        pool.query<{ page_key: string; content_json: unknown }>(
-          "SELECT page_key, content_json FROM page_content WHERE page_key = ANY($1::text[])", [pageKeys]
-        ),
-        getRevisions(pool),
-        publicRepository.getResearchItems(), publicRepository.getNewsItems(), publicRepository.getTeamMembers(),
-        publicRepository.getFacilityItems(), publicRepository.getContactItems()
-      ]);
-      const storedPages = new Map(pageRows.rows.map((row) => [row.page_key, row.content_json]));
-      const pages = Object.fromEntries(pageKeys.map((key) => [key, {
-        content: storedPages.get(key) ?? {}, updatedAt: revisions.get(`page:${key}`) ?? "0"
-      }]));
-      return {
-        pages,
-        researchItems: { items: normalizeSnapshotAssets(researchItems) as SiteRecord[], updatedAt: revisions.get("research-items") ?? "0" },
-        newsItems: { items: normalizeSnapshotAssets(newsItems) as SiteRecord[], updatedAt: revisions.get("news-items") ?? "0" },
-        teamMembers: { items: normalizeSnapshotAssets(teamMembers) as SiteRecord[], updatedAt: revisions.get("team-members") ?? "0" },
-        facilityItems: { items: normalizeSnapshotAssets(facilityItems) as SiteRecord[], updatedAt: revisions.get("facility-items") ?? "0" },
-        contactItems: { items: contactItems, updatedAt: revisions.get("contact-items") ?? "0" }
-      };
+      const client = await pool.connect();
+      let primaryError: unknown;
+      try {
+        await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+        const publicRepository = publicRepositoryFactory(client);
+        const [pageRows, revisions, researchItems, newsItems, teamMembers, facilityItems, contactItems] = await Promise.all([
+          client.query<{ page_key: string; content_json: unknown }>(
+            "SELECT page_key, content_json FROM page_content WHERE page_key = ANY($1::text[])", [pageKeys]
+          ),
+          getRevisions(client),
+          publicRepository.getResearchItems(), publicRepository.getNewsItems(), publicRepository.getTeamMembers(),
+          publicRepository.getFacilityItems(), publicRepository.getContactItems()
+        ]);
+        const storedPages = new Map(pageRows.rows.map((row) => [row.page_key, row.content_json]));
+        const pages = Object.fromEntries(pageKeys.map((key) => [key, {
+          content: storedPages.get(key) ?? {}, updatedAt: revisions.get(`page:${key}`) ?? "0"
+        }]));
+        const snapshot = {
+          pages,
+          researchItems: { items: normalizeSnapshotAssets(researchItems) as SiteRecord[], updatedAt: revisions.get("research-items") ?? "0" },
+          newsItems: { items: normalizeSnapshotAssets(newsItems) as SiteRecord[], updatedAt: revisions.get("news-items") ?? "0" },
+          teamMembers: { items: normalizeSnapshotAssets(teamMembers) as SiteRecord[], updatedAt: revisions.get("team-members") ?? "0" },
+          facilityItems: { items: normalizeSnapshotAssets(facilityItems) as SiteRecord[], updatedAt: revisions.get("facility-items") ?? "0" },
+          contactItems: { items: contactItems, updatedAt: revisions.get("contact-items") ?? "0" }
+        };
+        await client.query("COMMIT");
+        return snapshot;
+      } catch (error) {
+        primaryError = error;
+        try {
+          await client.query("ROLLBACK");
+        } catch (rollbackError) {
+          attachCleanupFailure(primaryError, rollbackError);
+        }
+      } finally {
+        try {
+          client.release();
+        } catch (releaseError) {
+          if (primaryError === undefined) throw releaseError;
+          attachCleanupFailure(primaryError, releaseError);
+        }
+      }
+      throw primaryError;
     },
 
     replacePage(pageKey: PageKey, content: unknown, expected: string, actorId: string) {
@@ -162,7 +217,7 @@ export function createPostgresSiteAdminRepository(
           );
           await insertMany(client, "INSERT INTO research_item_keywords (research_item_id, sort_order, value_zh, value_en) VALUES ($1,$2,$3,$4)", list(item.keywords).map((entry, childIndex) => [item.id, childIndex, ...locale(entry)]));
           await insertMany(client, "INSERT INTO research_item_authors (research_item_id, sort_order, name_zh, name_en, highlight) VALUES ($1,$2,$3,$4,$5)", list(item.authors).map((entry, childIndex) => [item.id, childIndex, ...locale(entry.name), Boolean(entry.highlight)]));
-          await insertMany(client, "INSERT INTO research_item_links (research_item_id, sort_order, label_zh, label_en, href, icon) VALUES ($1,$2,$3,$4,$5,$6)", list(item.links).map((entry, childIndex) => [item.id, childIndex, ...locale(entry.label), value(entry.href), value(entry.icon)]));
+          await insertMany(client, "INSERT INTO research_item_links (research_item_id, sort_order, label_zh, label_en, href, icon, variant) VALUES ($1,$2,$3,$4,$5,$6,$7)", list(item.links).map((entry, childIndex) => [item.id, childIndex, ...locale(entry.label), value(entry.href), value(entry.icon), value(entry.variant)]));
         }
       });
     },
@@ -186,7 +241,7 @@ export function createPostgresSiteAdminRepository(
           );
           const memberId = result.rows[0].id;
           await insertMany(client, "INSERT INTO team_member_links (team_member_id, sort_order, label_zh, label_en, href, icon) VALUES ($1,$2,$3,$4,$5,$6)", list(item.links).map((entry, childIndex) => [memberId, childIndex, ...locale(entry.label), value(entry.href), value(entry.icon)]));
-          await insertMany(client, "INSERT INTO team_member_contacts (team_member_id, sort_order, label_zh, label_en, value_text) VALUES ($1,$2,$3,$4,$5)", list(item.contacts).map((entry, childIndex) => [memberId, childIndex, ...locale(entry.label), value(entry.value)]));
+          await insertMany(client, "INSERT INTO team_member_contacts (team_member_id, sort_order, label_zh, label_en, value_zh, value_en) VALUES ($1,$2,$3,$4,$5,$6)", list(item.contacts).map((entry, childIndex) => [memberId, childIndex, ...locale(entry.label), ...locale(entry.value)]));
         }
       });
     },
@@ -195,10 +250,13 @@ export function createPostgresSiteAdminRepository(
       return inReplacementTransaction(pool, { moduleKey: "facility-items", actorId, action: "site.facilities.replace", targetType: "facility_items", expected, count: items.length }, async (client) => {
         await client.query("DELETE FROM facility_items");
         for (const [index, item] of items.entries()) {
+          const columns = item.id == null ? "category_key" : "id, category_key";
+          const values = [item.category, number(item.sortOrder ?? index), value(item.icon), ...locale(item.tag), ...locale(item.title), ...locale(item.description), ...locale(item.specLine), ...imageValues(item.image)];
+          const parameters = values.map((_, valueIndex) => `$${valueIndex + (item.id == null ? 1 : 2)}`).join(",");
           const result = await client.query<{ id: string }>(
-            `INSERT INTO facility_items (category_key, sort_order, icon, tag_zh, tag_en, title_zh, title_en, description_zh, description_en, spec_line_zh, spec_line_en, image_asset_id, image_src, image_alt, image_data_alt, updated_at)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,now()) RETURNING id::text AS id`,
-            [item.category, number(item.sortOrder ?? index), value(item.icon), ...locale(item.tag), ...locale(item.title), ...locale(item.description), ...locale(item.specLine), ...imageValues(item.image)]
+            `INSERT INTO facility_items (${columns}, sort_order, icon, tag_zh, tag_en, title_zh, title_en, description_zh, description_en, spec_line_zh, spec_line_en, image_asset_id, image_src, image_alt, image_data_alt, updated_at)
+             VALUES (${item.id == null ? "" : "$1,"}${parameters},now()) RETURNING id::text AS id`,
+            item.id == null ? values : [item.id, ...values]
           );
           await insertMany(client, "INSERT INTO facility_item_specs (facility_item_id, sort_order, label_zh, label_en, value_zh, value_en) VALUES ($1,$2,$3,$4,$5,$6)", list(item.specs).map((entry, childIndex) => [result.rows[0].id, childIndex, ...locale(entry.label), ...locale(entry.value)]));
         }

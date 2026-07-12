@@ -2,12 +2,12 @@ import { Router, type RequestHandler } from "express";
 import { z, ZodError } from "zod";
 import { requireLogin } from "../middleware/auth.js";
 import { requirePermission } from "../middleware/requirePermission.js";
-import { requireSameOrigin } from "../middleware/requireSameOrigin.js";
-import { RevisionConflictError } from "../services/site-admin/postgres-repository.js";
+import { createRequireSameOrigin } from "../middleware/requireSameOrigin.js";
+import { AssetReferenceError, RevisionConflictError } from "../services/site-admin/postgres-repository.js";
 import { collectionRequestSchemas, pageKeySchema, pageRequestSchema, type ContactItems, type SiteRecord } from "../services/site-admin/schemas.js";
 import type { SiteAdminService } from "../services/site-admin/service.js";
 
-type Options = { authMiddleware: RequestHandler; service: SiteAdminService };
+type Options = { authMiddleware: RequestHandler; service: SiteAdminService; trustProxy: boolean };
 
 function requireAnyPermission(permissions: string[]): RequestHandler {
   return (request, response, next) => {
@@ -23,8 +23,9 @@ function validationError(response: Parameters<RequestHandler>[1], error: ZodErro
   response.status(400).json({ error: "Validation failed", issues: error.issues });
 }
 
-export function createSiteAdminRouter({ authMiddleware, service }: Options) {
+export function createSiteAdminRouter({ authMiddleware, service, trustProxy }: Options) {
   const router = Router();
+  const requireSameOrigin = createRequireSameOrigin({ trustProxy });
   router.use("/api/site-admin", authMiddleware, requireLogin);
 
   router.get("/api/site-admin/snapshot", requireAnyPermission(["site.content.write", "site.members.write"]), async (_request, response, next) => {
@@ -40,6 +41,7 @@ export function createSiteAdminRouter({ authMiddleware, service }: Options) {
       } catch (error) {
         if (error instanceof ZodError) { validationError(response, error); return; }
         if (error instanceof RevisionConflictError) { response.status(409).json({ error: "Content revision conflict" }); return; }
+        if (error instanceof AssetReferenceError) { response.status(400).json({ error: "Invalid asset reference" }); return; }
         next(error);
       }
     }
@@ -54,6 +56,7 @@ export function createSiteAdminRouter({ authMiddleware, service }: Options) {
     } catch (error) {
       if (error instanceof ZodError) { validationError(response, error); return; }
       if (error instanceof RevisionConflictError) { response.status(409).json({ error: "Content revision conflict" }); return; }
+      if (error instanceof AssetReferenceError) { response.status(400).json({ error: "Invalid asset reference" }); return; }
       next(error);
     }
   };

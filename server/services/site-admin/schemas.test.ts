@@ -22,6 +22,19 @@ test("page requests reject oversized strings and nested functions", () => {
   assert.equal(pageRequestSchema.safeParse({ content: { callback() {} }, expectedUpdatedAt: "0" }).success, false);
 });
 
+test("revision decimals are limited to the PostgreSQL bigint range", () => {
+  assert.equal(pageRequestSchema.safeParse({ content: {}, expectedUpdatedAt: "9223372036854775807" }).success, true);
+  assert.equal(pageRequestSchema.safeParse({ content: {}, expectedUpdatedAt: "9223372036854775808" }).success, false);
+});
+
+test("aggregate traversal budget rejects multiplicative collection payloads", () => {
+  const items = Array.from({ length: 100 }, (_, itemIndex) => ({
+    id: `paper-${itemIndex}`,
+    keywords: Array.from({ length: 100 }, (_, keywordIndex) => ({ en: `keyword-${keywordIndex}` }))
+  }));
+  assert.equal(collectionRequestSchemas.research.safeParse({ expectedUpdatedAt: "0", items }).success, false);
+});
+
 test("research collections validate identifiers and preserve supported fields", () => {
   const parsed = collectionRequestSchemas.research.safeParse({
     expectedUpdatedAt: "3",
@@ -30,6 +43,14 @@ test("research collections validate identifiers and preserve supported fields", 
   assert.equal(parsed.success, true);
   assert.deepEqual(parsed.success && parsed.data.items[0].authors?.[0].highlight, true);
   assert.equal(collectionRequestSchemas.research.safeParse({ expectedUpdatedAt: "3", items: [{ title: { en: "Missing id" } }] }).success, false);
+});
+
+test("facility ids are optional positive bigint decimals and never accepted then discarded", () => {
+  assert.equal(collectionRequestSchemas.facility.safeParse({ expectedUpdatedAt: "0", items: [{ category: "quadrupeds" }] }).success, true);
+  assert.equal(collectionRequestSchemas.facility.safeParse({ expectedUpdatedAt: "0", items: [{ id: "9223372036854775807", category: "quadrupeds" }] }).success, true);
+  for (const id of ["facility-1", "0", "-1", "9223372036854775808"]) {
+    assert.equal(collectionRequestSchemas.facility.safeParse({ expectedUpdatedAt: "0", items: [{ id, category: "quadrupeds" }] }).success, false, id);
+  }
 });
 
 test("collection fields validate UUIDs, core types, and bounded localized values", () => {
@@ -46,7 +67,7 @@ test("collection fields validate UUIDs, core types, and bounded localized values
   }).success, true);
   assert.equal(collectionRequestSchemas.research.safeParse({ expectedUpdatedAt: "0", items: [{ id: "paper-1", image: { assetId: "not-a-uuid", src: "/paper.jpg" } }] }).success, false);
   assert.equal(collectionRequestSchemas.news.safeParse({ expectedUpdatedAt: "0", items: [{ id: "news-1", featured: "yes" }] }).success, false);
-  assert.equal(collectionRequestSchemas.facility.safeParse({ expectedUpdatedAt: "0", items: [{ id: "facility-1", category: "quadrupeds", title: { en: "x".repeat(20_001) } }] }).success, false);
+  assert.equal(collectionRequestSchemas.facility.safeParse({ expectedUpdatedAt: "0", items: [{ id: "1", category: "quadrupeds", title: { en: "x".repeat(20_001) } }] }).success, false);
 });
 
 test("team collections use the public group allowlist and preserve legacy member fields", () => {
@@ -68,7 +89,7 @@ test("team collections use the public group allowlist and preserve legacy member
 
 test("collection identifiers and team slugs must be unique", () => {
   for (const key of ["research", "news", "facility"] as const) {
-    const item = key === "facility" ? { id: "same", category: "quadrupeds" } : { id: "same" };
+    const item = key === "facility" ? { id: "1", category: "quadrupeds" } : { id: "same" };
     const parsed = collectionRequestSchemas[key].safeParse({ expectedUpdatedAt: "0", items: [item, item] });
     assert.equal(parsed.success, false, key);
     if (!parsed.success) {
@@ -89,7 +110,7 @@ test("collection identifiers and team slugs must be unique", () => {
 test("unsupported child IDs are rejected consistently", () => {
   assert.equal(collectionRequestSchemas.research.safeParse({ expectedUpdatedAt: "0", items: [{ id: "paper-1", keywords: [{ id: "keyword-1", en: "Navigation" }] }] }).success, false);
   assert.equal(collectionRequestSchemas.team.safeParse({ expectedUpdatedAt: "0", items: [{ slug: "alice", group: "phd", links: [{ id: "link-1", href: "/alice" }] }] }).success, false);
-  assert.equal(collectionRequestSchemas.facility.safeParse({ expectedUpdatedAt: "0", items: [{ id: "facility-1", category: "quadrupeds", specs: [{ id: "spec-1", value: { en: "Fast" } }] }] }).success, false);
+  assert.equal(collectionRequestSchemas.facility.safeParse({ expectedUpdatedAt: "0", items: [{ id: "1", category: "quadrupeds", specs: [{ id: "spec-1", value: { en: "Fast" } }] }] }).success, false);
 });
 
 test("collections reject unknown top-level fields and oversized lists", () => {

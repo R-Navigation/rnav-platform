@@ -79,9 +79,23 @@ test("getMigrationFiles returns SQL migrations in lexical order", async () => {
       "005_procurement_constraints.sql",
       "006_public_site_legacy.sql",
       "007_public_site_compatibility.sql",
-      "008_site_admin_revisions.sql"
+      "008_site_admin_revisions.sql",
+      "009_site_admin_roundtrip.sql"
     ]
   );
+});
+
+test("site-admin round-trip migration is additive, idempotent, and revision guarded", async () => {
+  const migration = await import("node:fs/promises").then(({ readFile }) =>
+    readFile(new URL("./migrations/009_site_admin_roundtrip.sql", import.meta.url), "utf8")
+  );
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS variant text/i);
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS value_zh text/i);
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS value_en text/i);
+  assert.match(migration, /revision_type IS DISTINCT FROM 'int8'/i);
+  assert.match(migration, /revision < 0/i);
+  assert.match(migration, /NOT EXISTS/i);
+  assert.doesNotMatch(migration, /DROP (?:TABLE|COLUMN|CONSTRAINT)/i);
 });
 
 test("site-admin revision migration defines and initializes repository revision state", async () => {

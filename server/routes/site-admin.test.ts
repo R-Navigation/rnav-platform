@@ -3,26 +3,27 @@ import type { AddressInfo } from "node:net";
 import test from "node:test";
 import express, { type RequestHandler } from "express";
 import type { AuthenticatedUser } from "../middleware/auth.js";
+import { AssetReferenceError } from "../services/site-admin/postgres-repository.js";
 import { createSiteAdminRouter } from "./site-admin.js";
 
 function auth(user?: AuthenticatedUser): RequestHandler {
   return (request, _response, next) => { request.authUser = user; next(); };
 }
 
-async function request(method: string, path: string, options: { user?: AuthenticatedUser; body?: unknown; origin?: string } = {}) {
+async function request(method: string, path: string, options: { user?: AuthenticatedUser; body?: unknown; origin?: string; trustProxy?: boolean; forwardedHost?: string; forwardedProto?: string; mutationError?: Error } = {}) {
   const calls: string[] = [];
   const service = {
     getSnapshot: async () => ({ pages: {}, researchItems: { items: [], updatedAt: "0" }, newsItems: { items: [], updatedAt: "0" }, teamMembers: { items: [], updatedAt: "0" }, facilityItems: { items: [], updatedAt: "0" }, contactItems: { items: {}, updatedAt: "0" } }),
     replacePage: async () => { calls.push("page"); return "1"; },
     replaceResearchItems: async () => { calls.push("research"); return "1"; },
-    replaceNewsItems: async () => { calls.push("news"); return "1"; },
+    replaceNewsItems: async () => { calls.push("news"); if (options.mutationError) throw options.mutationError; return "1"; },
     replaceTeamMembers: async () => { calls.push("team"); return "1"; },
     replaceFacilityItems: async () => { calls.push("facility"); return "1"; },
     replaceContactItems: async () => { calls.push("contact"); return "1"; }
   };
   const app = express();
   app.use(express.json());
-  app.use(createSiteAdminRouter({ authMiddleware: auth(options.user), service: service as never }));
+  app.use(createSiteAdminRouter({ authMiddleware: auth(options.user), service: service as never, trustProxy: options.trustProxy ?? false }));
   const server = await new Promise<ReturnType<typeof app.listen>>((resolve, reject) => {
     const listener = app.listen(0, "127.0.0.1", () => resolve(listener));
     listener.once("error", reject);
@@ -35,6 +36,8 @@ async function request(method: string, path: string, options: { user?: Authentic
       method,
       headers: {
         ...(options.origin ? { origin: options.origin === "same-origin" ? requestOrigin : options.origin } : {}),
+        ...(options.forwardedHost ? { "x-forwarded-host": options.forwardedHost } : {}),
+        ...(options.forwardedProto ? { "x-forwarded-proto": options.forwardedProto } : {}),
         ...(options.body === undefined ? {} : { "content-type": "application/json" })
       },
       body: options.body === undefined ? undefined : JSON.stringify(options.body)
@@ -60,6 +63,24 @@ test("content mutations require content permission and same origin", async () =>
   assert.equal((await request("PUT", "/api/site-admin/news-items", { user: user(["site.content.write"]), body })).statusCode, 403);
   assert.equal((await request("PUT", "/api/site-admin/news-items", { user: user(["site.content.write"]), body, origin: "https://evil.example" })).statusCode, 403);
   assert.equal((await request("PUT", "/api/site-admin/news-items", { user: user(["site.content.write"]), body, origin: "same-origin" })).statusCode, 200);
+});
+
+test("route factory passes explicit trusted proxy origin configuration", async () => {
+  const body = { items: [], expectedUpdatedAt: "0" };
+  const response = await request("PUT", "/api/site-admin/news-items", {
+    user: user(["site.content.write"]), body, origin: "https://admin.example.com",
+    trustProxy: true, forwardedHost: "admin.example.com", forwardedProto: "https"
+  });
+  assert.equal(response.statusCode, 200);
+});
+
+test("asset reference domain errors return 400", async () => {
+  const response = await request("PUT", "/api/site-admin/news-items", {
+    user: user(["site.content.write"]), body: { items: [], expectedUpdatedAt: "0" },
+    origin: "same-origin", mutationError: new AssetReferenceError()
+  });
+  assert.equal(response.statusCode, 400);
+  assert.deepEqual(response.body, { error: "Invalid asset reference" });
 });
 
 test("team mutations require members permission", async () => {
