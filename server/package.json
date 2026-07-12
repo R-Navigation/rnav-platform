@@ -6,9 +6,9 @@
   "scripts": {
     "dev": "tsx watch index.ts",
     "start": "node dist/index.js",
-    "build": "tsc --outDir dist --noEmit false",
+    "build": "tsc --project tsconfig.json",
     "test": "tsx --test \"**/*.test.ts\"",
-    "lint": "tsc --noEmit",
+    "lint": "tsc --project tsconfig.json --noEmit",
     "db:migrate": "tsx db/runMigrations.ts"
   },
   "dependencies": {
@@ -24,7 +24,6 @@
     "zod": "^3.25.56"
   },
   "devDependencies": {
-    "@types/bcryptjs": "^2.4.6",
     "@types/cookie": "^0.6.0",
     "@types/cors": "^2.8.18",
     "@types/express": "^5.0.3",
