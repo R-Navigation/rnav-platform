@@ -72,9 +72,10 @@ const positiveBigint = z.string().regex(/^[1-9]\d*$/).refine(
 const text = z.string().max(MAX_STRING);
 const identifier = z.string().trim().min(1).max(200);
 const optionalText = text.optional();
+const optionalNullableText = text.nullable().optional();
 const localized = z.object({ zh: optionalText, en: optionalText }).strict();
 const nullableUuid = z.preprocess((value) => value === "" ? null : value, z.string().uuid().nullable()).optional();
-const image = z.object({ assetId: nullableUuid, src: optionalText, alt: optionalText, dataAlt: optionalText }).strict().nullable().optional();
+const image = z.object({ assetId: nullableUuid, src: optionalNullableText, alt: optionalText, dataAlt: optionalText }).strict().nullable().optional();
 const link = z.object({ label: localized.optional(), href: optionalText, icon: optionalText, variant: optionalText }).strict();
 const links = z.array(link).max(MAX_LIST).optional();
 const sortOrder = z.number().int().min(-1_000_000).max(1_000_000).optional();
@@ -97,7 +98,7 @@ function uniqueField<T extends z.ZodRawShape>(item: z.ZodObject<T>, field: strin
 const researchItem = z.object({
   id: identifier, sortOrder, title: localized.optional(), year: z.union([z.number().int().min(0).max(9999), z.literal("")]).optional(),
   venue: localized.optional(), type: optionalText, topic: optionalText, image,
-  pdf: z.object({ assetId: nullableUuid, src: optionalText, label: localized.optional() }).strict().nullable().optional(),
+  pdf: z.object({ assetId: nullableUuid, src: optionalNullableText, label: localized.optional() }).strict().nullable().optional(),
   keywords: z.array(localized).max(MAX_LIST).optional(),
   authors: z.array(z.object({ name: localized.optional(), highlight: z.boolean().optional() }).strict()).max(MAX_LIST).optional(),
   links

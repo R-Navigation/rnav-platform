@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { AssetReferenceError, RevisionConflictError, createPostgresSiteAdminRepository } from "./postgres-repository.js";
+import { collectionRequestSchemas } from "./schemas.js";
 
 type Call = { sql: string; values?: readonly unknown[] };
 
@@ -89,6 +90,83 @@ test("multi-table replacement and audit commit in one transaction", async () => 
   assert.equal(sql.some((value) => value.includes("INSERT INTO audit_logs")), true);
   assert.equal(sql.at(-1), "COMMIT");
   assert.equal(client.released, true);
+});
+
+test("snapshot-style media parse and reach repository mapping without loss", async () => {
+  const assetIds = {
+    researchImage: "11111111-1111-4111-8111-111111111111",
+    researchPdf: "22222222-2222-4222-8222-222222222222",
+    newsImage: "33333333-3333-4333-8333-333333333333",
+    teamImage: "44444444-4444-4444-8444-444444444444",
+    facilityImage: "55555555-5555-4555-8555-555555555555"
+  };
+  const cases = [
+    {
+      schema: collectionRequestSchemas.research,
+      method: "replaceResearchItems",
+      items: [
+        { id: "asset-paper", image: { assetId: assetIds.researchImage, src: null }, pdf: { assetId: assetIds.researchPdf, src: null } },
+        { id: "src-paper", image: { assetId: null, src: "/paper.jpg" }, pdf: { assetId: null, src: "/paper.pdf" } },
+        { id: "no-media-paper", image: null, pdf: null }
+      ],
+      assetId: assetIds.researchImage,
+      src: "/paper.jpg",
+      inserts: ["INSERT INTO research_items"]
+    },
+    {
+      schema: collectionRequestSchemas.news,
+      method: "replaceNewsItems",
+      items: [
+        { id: "asset-news", image: { assetId: assetIds.newsImage, src: null } },
+        { id: "src-news", image: { assetId: null, src: "/news.jpg" } },
+        { id: "no-media-news", image: null }
+      ],
+      assetId: assetIds.newsImage,
+      src: "/news.jpg",
+      inserts: ["INSERT INTO news_items"]
+    },
+    {
+      schema: collectionRequestSchemas.team,
+      method: "replaceTeamMembers",
+      items: [
+        { slug: "asset-member", group: "phd", image: { assetId: assetIds.teamImage, src: null } },
+        { slug: "src-member", group: "phd", image: { assetId: null, src: "/member.jpg" } },
+        { slug: "no-media-member", group: "phd", image: null }
+      ],
+      assetId: assetIds.teamImage,
+      src: "/member.jpg",
+      inserts: ["INSERT INTO team_members"]
+    },
+    {
+      schema: collectionRequestSchemas.facility,
+      method: "replaceFacilityItems",
+      items: [
+        { id: "1", category: "quadrupeds", image: { assetId: assetIds.facilityImage, src: null } },
+        { id: "2", category: "quadrupeds", image: { assetId: null, src: "/facility.jpg" } },
+        { id: "3", category: "quadrupeds", image: null }
+      ],
+      assetId: assetIds.facilityImage,
+      src: "/facility.jpg",
+      inserts: ["INSERT INTO facility_items"]
+    }
+  ] as const;
+
+  for (const contract of cases) {
+    const parsed = contract.schema.parse({ expectedUpdatedAt: "7", items: contract.items });
+    assert.deepEqual(parsed.items, contract.items, contract.method);
+
+    const client = new FakeClient();
+    const repository = createPostgresSiteAdminRepository({ connect: async () => client } as never);
+    await (repository[contract.method] as (items: any[], expected: string, actor: string) => Promise<string>)(parsed.items, "7", "user-1");
+
+    const inserts = client.calls.filter(({ sql }) => contract.inserts.some((fragment) => sql.includes(fragment)));
+    assert.equal(inserts.length, 3, contract.method);
+    assert.ok(inserts[0]?.values && inserts[1]?.values && inserts[2]?.values, contract.method);
+    assert.equal(inserts[0].values?.includes(contract.assetId), true, contract.method);
+    assert.equal(inserts[0].values?.filter((value) => value === null).length >= 1, true, contract.method);
+    assert.equal(inserts[1].values?.includes(contract.src), true, contract.method);
+    assert.equal(inserts[2].values?.filter((value) => value === null).length >= 2, true, contract.method);
+  }
 });
 
 test("team contacts persist localized values", async () => {

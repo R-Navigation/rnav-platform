@@ -68,6 +68,8 @@ test("collection fields validate UUIDs, core types, and bounded localized values
   assert.equal(collectionRequestSchemas.research.safeParse({ expectedUpdatedAt: "0", items: [{ id: "paper-1", image: { assetId: "not-a-uuid", src: "/paper.jpg" } }] }).success, false);
   assert.equal(collectionRequestSchemas.news.safeParse({ expectedUpdatedAt: "0", items: [{ id: "news-1", featured: "yes" }] }).success, false);
   assert.equal(collectionRequestSchemas.facility.safeParse({ expectedUpdatedAt: "0", items: [{ id: "1", category: "quadrupeds", title: { en: "x".repeat(20_001) } }] }).success, false);
+  assert.equal(collectionRequestSchemas.research.safeParse({ expectedUpdatedAt: "0", items: [{ id: "paper-1", image: { src: 42 } }] }).success, false);
+  assert.equal(collectionRequestSchemas.research.safeParse({ expectedUpdatedAt: "0", items: [{ id: "paper-1", pdf: { src: false } }] }).success, false);
 });
 
 test("research, team, and news schemas preserve link variants", () => {
