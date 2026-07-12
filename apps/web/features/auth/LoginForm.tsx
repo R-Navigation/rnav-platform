@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
+import { normalizePostLoginPath } from "@/features/auth/redirect";
 
 type LoginFormProps = {
   nextPath: string;
@@ -33,7 +34,7 @@ export function LoginForm({ nextPath }: LoginFormProps) {
         return;
       }
 
-      router.replace(nextPath);
+      router.replace(normalizePostLoginPath(nextPath));
       router.refresh();
     } catch {
       setError("无法连接登录服务，请稍后重试。");

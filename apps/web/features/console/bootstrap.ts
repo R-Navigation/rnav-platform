@@ -2,18 +2,13 @@ import "server-only";
 
 import { cookies } from "next/headers";
 import { cache } from "react";
+import type { ConsoleNavigationModule } from "@/features/console/navigation";
 import { getInternalApiUrl } from "@/lib/server/api";
 
 export type ConsoleTier = "normal" | "plus" | "super";
 
-export type ConsoleModule = {
-  href: string;
-  key: string;
-  label: string;
-};
-
 export type ConsoleBootstrap = {
-  consoleModules: ConsoleModule[];
+  consoleModules: ConsoleNavigationModule[];
   permissions: string[];
   user: {
     displayName: string;

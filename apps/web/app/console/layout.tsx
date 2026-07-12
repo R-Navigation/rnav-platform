@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
+import { ConsoleSidebarNav } from "@/features/console/ConsoleSidebarNav";
 import { ConsoleState } from "@/features/console/ConsoleState";
 import { getConsoleBootstrap } from "@/features/console/bootstrap";
 import { TierBadge } from "@/features/console/TierBadge";
@@ -36,23 +37,7 @@ export default async function ConsoleLayout({ children }: Readonly<{ children: R
             <TierBadge tier={user.tier} />
           </div>
         </div>
-        <nav aria-label="控制台模块" className="flex gap-1 overflow-x-auto px-3 py-3 lg:block lg:space-y-1 lg:overflow-visible">
-          <Link
-            className="block whitespace-nowrap px-3 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-100 hover:text-cyan-800"
-            href="/console"
-          >
-            控制台首页
-          </Link>
-          {consoleModules.map((module) => (
-            <Link
-              className="block whitespace-nowrap px-3 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-100 hover:text-cyan-800"
-              href={module.href}
-              key={module.key}
-            >
-              {module.label}
-            </Link>
-          ))}
-        </nav>
+        <ConsoleSidebarNav modules={consoleModules} />
         <div className="hidden border-t border-slate-200 px-5 py-5 text-sm text-slate-500 lg:block">
           <p className="font-semibold text-slate-800">{user.displayName || user.username}</p>
           <p className="mt-1">@{user.username}</p>

@@ -1,21 +1,15 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { LoginForm } from "@/features/auth/LoginForm";
+import { normalizePostLoginPath } from "@/features/auth/redirect";
 
 type LoginPageProps = {
   searchParams: Promise<{ next?: string | string[] }>;
 };
 
-function normalizeNextPath(value: string | string[] | undefined) {
-  const candidate = Array.isArray(value) ? value[0] : value;
-  return candidate?.startsWith("/") && !candidate.startsWith("//")
-    ? candidate
-    : "/console";
-}
-
 async function LoginContent({ searchParams }: LoginPageProps) {
   const params = await searchParams;
-  const nextPath = normalizeNextPath(params.next);
+  const nextPath = normalizePostLoginPath(params.next);
 
   return (
     <main className="grid min-h-screen place-items-center bg-surface px-5 py-12">
