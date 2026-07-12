@@ -6,7 +6,9 @@ import {
   applySavedModule,
   createSaveRequest,
   getAvailableSiteModules,
+  getEditorInteractionState,
   isModuleDirty,
+  isJsonEditorDirty,
   normalizeSiteAdminSnapshot,
   parseJsonEditorValue,
   retainConflictAfterRefreshFailure,
@@ -120,4 +122,16 @@ test("JSON editor parsing reports invalid input without replacing the current va
     value: { title: { zh: "主页", en: "Home" } },
   });
   assert.equal(parseJsonEditorValue("{").ok, false);
+});
+
+test("invalid JSON remains dirty when its source differs from the baseline serialization", () => {
+  const baseline = { title: "Old" };
+
+  assert.equal(isJsonEditorDirty(baseline, JSON.stringify(baseline, null, 2)), false);
+  assert.equal(isJsonEditorDirty(baseline, "{"), true);
+});
+
+test("conflict refresh disables editor interactions until success or failure completes", () => {
+  assert.deepEqual(getEditorInteractionState(true), { busy: true, disabled: true });
+  assert.deepEqual(getEditorInteractionState(false), { busy: false, disabled: false });
 });

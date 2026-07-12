@@ -95,6 +95,14 @@ export function isModuleDirty(module: SiteModule, draftValue: unknown) {
   return stableJson(module.value) !== stableJson(draftValue);
 }
 
+export function isJsonEditorDirty(baselineValue: unknown, source: string) {
+  return source !== JSON.stringify(baselineValue, null, 2);
+}
+
+export function getEditorInteractionState(conflictRefreshing: boolean) {
+  return { busy: conflictRefreshing, disabled: conflictRefreshing };
+}
+
 export function applySavedModule(module: SiteModule, revision: string): SiteModule {
   return { ...module, revision };
 }

@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { DiscardDialog } from "./DiscardDialog";
 import { PageEditor } from "./PageEditor";
 import { TeamEditor } from "./TeamEditor";
 import { readSiteAdminError } from "./api";
@@ -9,7 +10,9 @@ import {
   applySavedModule,
   createSaveRequest,
   getAvailableSiteModules,
+  getEditorInteractionState,
   isModuleDirty,
+  isJsonEditorDirty,
   normalizeSiteAdminSnapshot,
   parseJsonEditorValue,
   retainConflictAfterRefreshFailure,
@@ -35,10 +38,15 @@ export function SiteContentConsole({ permissions }: Props) {
   const [jsonSource, setJsonSource] = useState("");
   const [jsonError, setJsonError] = useState("");
   const [pendingKey, setPendingKey] = useState<string | null>(null);
+  const moduleButtonRefs = useRef(new Map<string, HTMLButtonElement>());
+  const pendingTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   const availableModules = useMemo(() => getAvailableSiteModules(modules, permissions), [modules, permissions]);
   const selectedModule = availableModules.find((module) => module.key === selectedKey) ?? availableModules[0];
-  const dirty = selectedModule ? isModuleDirty(selectedModule, draftValue) : false;
+  const dirty = selectedModule
+    ? isModuleDirty(selectedModule, draftValue) || isJsonEditorDirty(selectedModule.value, jsonSource)
+    : false;
+  const editorInteraction = getEditorInteractionState(conflictRefreshing);
 
   const selectModule = useCallback((module: SiteModule) => {
     setSelectedKey(module.key);
@@ -81,7 +89,10 @@ export function SiteContentConsole({ permissions }: Props) {
   function requestModuleSwitch(key: string) {
     const next = availableModules.find((module) => module.key === key);
     if (!next || next.key === selectedModule?.key) return;
-    if (dirty) setPendingKey(key);
+    if (dirty) {
+      pendingTriggerRef.current = moduleButtonRefs.current.get(key) ?? null;
+      setPendingKey(key);
+    }
     else selectModule(next);
   }
 
@@ -145,6 +156,7 @@ export function SiteContentConsole({ permissions }: Props) {
       }
       const saved = applySavedModule({ ...selectedModule, value: draftValue }, payload.updatedAt);
       setModules((current) => current.map((module) => module.key === saved.key ? saved : module));
+      setJsonSource(JSON.stringify(draftValue, null, 2));
       setSaveState("saved");
       setMessage("已保存当前模块。");
     } catch (error) {
@@ -206,14 +218,15 @@ export function SiteContentConsole({ permissions }: Props) {
         </div>
         <div className="flex items-center gap-3">
           <span aria-live="polite" className="text-sm font-semibold text-slate-600">{saveState === "saving" ? "保存中..." : saveState === "saved" ? "已保存" : dirty ? "有未保存更改" : "无未保存更改"}</span>
-          <button className="bg-blue-950 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-400" disabled={!dirty || saveState === "saving" || Boolean(jsonError)} onClick={() => void saveCurrentModule()} type="button">保存当前模块</button>
+          <button className="bg-blue-950 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-400" disabled={!dirty || saveState === "saving" || conflictRefreshing || Boolean(jsonError)} onClick={() => void saveCurrentModule()} type="button">保存当前模块</button>
         </div>
       </div>
 
+      <fieldset aria-busy={editorInteraction.busy} className="min-w-0" disabled={editorInteraction.disabled}>
       <nav aria-label="官网内容模块" className="mt-5 overflow-x-auto border-b border-slate-300">
         <div className="flex min-w-max gap-1" role="tablist">
           {availableModules.map((module) => (
-            <button aria-selected={module.key === selectedModule.key} className={`border-b-2 px-3 py-2.5 text-sm font-semibold ${module.key === selectedModule.key ? "border-cyan-700 text-cyan-800" : "border-transparent text-slate-600 hover:text-slate-950"}`} key={module.key} onClick={() => requestModuleSwitch(module.key)} role="tab" type="button">{module.label}</button>
+            <button aria-selected={module.key === selectedModule.key} className={`border-b-2 px-3 py-2.5 text-sm font-semibold ${module.key === selectedModule.key ? "border-cyan-700 text-cyan-800" : "border-transparent text-slate-600 hover:text-slate-950"}`} data-module-key={module.key} key={module.key} onClick={() => requestModuleSwitch(module.key)} ref={(node) => { if (node) moduleButtonRefs.current.set(module.key, node); else moduleButtonRefs.current.delete(module.key); }} role="tab" type="button">{module.label}</button>
           ))}
         </div>
       </nav>
@@ -236,8 +249,9 @@ export function SiteContentConsole({ permissions }: Props) {
       <p aria-live="polite" className={`mt-6 border-l-2 px-4 py-3 text-sm ${conflict ? "border-amber-500 bg-amber-50 text-amber-950" : message ? "border-cyan-600 bg-white text-slate-700" : "sr-only"}`} role={conflict ? "alert" : "status"}>{message || "编辑器已就绪"}</p>
       {conflict ? <div className="mt-3 flex flex-wrap gap-3"><button className="bg-blue-950 px-4 py-2 text-sm font-bold text-white disabled:bg-slate-400" disabled={conflictRefreshing} onClick={() => void resolveConflict("reload")} type="button">重新加载最新版本</button><button className="border border-slate-400 bg-white px-4 py-2 text-sm font-bold text-slate-800 disabled:text-slate-400" disabled={conflictRefreshing} onClick={() => void resolveConflict("keep-local")} type="button">保留本地更改</button></div> : null}
       <p className="mt-6 text-xs leading-5 text-slate-500">媒体上传尚未开放。图片、PDF 等字段只能填写已有 URL 或资产引用。</p>
+      </fieldset>
 
-      {pendingKey ? <div aria-labelledby="discard-title" aria-modal="true" className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-5" role="dialog"><div className="w-full max-w-md bg-white p-6 shadow-xl"><h2 className="text-xl font-bold text-slate-950" id="discard-title">放弃未保存更改？</h2><p className="mt-3 leading-6 text-slate-600">切换模块会丢失当前模块的本地更改。</p><div className="mt-6 flex justify-end gap-3"><button autoFocus className="border border-slate-400 px-4 py-2 text-sm font-bold text-slate-800" onClick={() => setPendingKey(null)} type="button">继续编辑</button><button className="bg-red-700 px-4 py-2 text-sm font-bold text-white" onClick={discardAndSwitch} type="button">放弃并切换</button></div></div></div> : null}
+      {pendingKey ? <DiscardDialog onCancel={() => setPendingKey(null)} onDiscard={discardAndSwitch} restoreFocusTo={pendingTriggerRef.current} /> : null}
     </section>
   );
 }

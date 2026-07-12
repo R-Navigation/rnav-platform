@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import { getInternalApiUrl } from "@/lib/server/api";
-import { createUpstreamHeaders } from "./proxy";
+import { createUpstreamHeaders, validateIncomingOrigin } from "./proxy";
 
 async function proxy(request: Request, context: { params: Promise<{ path?: string[] }> }) {
+  const originRejection = validateIncomingOrigin(request);
+  if (originRejection) return originRejection;
+
   const { path = [] } = await context.params;
   const incomingUrl = new URL(request.url);
   const upstreamUrl = getInternalApiUrl(`/api/site-admin/${path.join("/")}${incomingUrl.search}`);
@@ -12,7 +15,7 @@ async function proxy(request: Request, context: { params: Promise<{ path?: strin
     const upstream = await fetch(upstreamUrl, {
       method: request.method,
       headers,
-      body: ["GET", "HEAD"].includes(request.method) ? undefined : await request.arrayBuffer(),
+      body: ["GET", "HEAD"].includes(request.method.toUpperCase()) ? undefined : await request.arrayBuffer(),
       cache: "no-store"
     });
     return new NextResponse(await upstream.arrayBuffer(), {
