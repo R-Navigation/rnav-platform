@@ -46,6 +46,8 @@ const itemFields: Allowlist = {
   pdf: { assetId: true, src: true, label: localized }, links: [linkFields], contacts: [{ label: localized, value: localized }],
   keywords: [localized], authors: [{ name: localized, highlight: true }], specs: [{ label: localized, value: localized }]
 };
+const facilityVideoFields: Allowlist = { title: localized, description: localized, url: true, embedUrl: true, poster: imageFields };
+const facilitySectionFields: Allowlist = { ...itemFields, subtitle: localized, items: [itemFields], video: facilityVideoFields };
 const pageAllowlists: Record<string, Allowlist> = {
   site: { brandName: localized, footerDescription: localized, footerCopyright: localized, footerLinks: [linkFields] },
   home: {
@@ -58,11 +60,12 @@ const pageAllowlists: Record<string, Allowlist> = {
   news_page: { header: headerFields },
   team_page: { header: headerFields, sectionTitles: itemFields, recruitment: { title: localized, description: localized, buttonLabel: localized, buttonHref: true } },
   facilities_page: {
-    header: headerFields, categoryOrder: [true], sectionTitles: itemFields,
+    header: headerFields, categoryOrder: [true],
+    sectionTitles: { quadrupeds: localized, groundVehicles: localized, aerialPlatforms: localized, handheldSensors: localized },
     sectionConfig: {
-      quadrupeds: itemFields, groundVehicles: itemFields, aerialPlatforms: itemFields, handheldSensors: itemFields
+      quadrupeds: facilitySectionFields, groundVehicles: facilitySectionFields, aerialPlatforms: facilitySectionFields, handheldSensors: facilitySectionFields
     },
-    facilitySections: [{ ...itemFields, subtitle: localized, items: [itemFields], video: { title: localized, description: localized, url: true, embedUrl: true, poster: imageFields } }],
+    facilitySections: [facilitySectionFields],
     cta: { title: localized, description: localized, buttonLabel: localized, buttonHref: true }
   },
   contact_page: { header: headerFields, sectionTitles: itemFields, introText: localized, heroImage: imageFields }
@@ -117,7 +120,7 @@ export const defaults = {
 
 function mergeLocalized(base: PublicRecord, stored: unknown): PublicRecord {
   const source = object(stored);
-  const result: PublicRecord = { ...base };
+  const result: PublicRecord = { ...base, ...source };
   for (const [key, fallback] of Object.entries(base)) {
     const value = source[key];
     if (fallback && typeof fallback === "object" && !Array.isArray(fallback) && ("zh" in fallback || "en" in fallback)) result[key] = text(value, fallback as LocaleText);
@@ -145,6 +148,19 @@ function normalizeItem(item: PublicRecord): PublicRecord {
 function normalizeImage(value: unknown) {
   const source = object(value), src = sanitizePublicUrl(source.src);
   return src ? { assetId: clean(source.assetId), src, alt: clean(source.alt), dataAlt: clean(source.dataAlt) } : null;
+}
+
+function normalizeFacilitySection(item: PublicRecord): PublicRecord {
+  const normalized = normalizeItem(item);
+  normalized.items = array(item.items).map(normalizeItem);
+  if ("video" in item) {
+    const video = object(item.video);
+    normalized.video = {
+      title: text(video.title), description: text(video.description),
+      url: sanitizePublicUrl(video.url), embedUrl: sanitizeEmbedUrl(video.embedUrl), poster: normalizeImage(video.poster)
+    };
+  }
+  return normalized;
 }
 
 function sanitizeConfig(value: unknown): unknown {
@@ -238,7 +254,7 @@ export function createPublicSiteService(repository: PublicSiteRepository) {
       const config = sanitizeConfig(mergeLocalized(defaults.facilities, projected)) as PublicRecord;
       const legacyItems = rawItems.map(normalizeItem);
       const hasExplicitSections = Object.prototype.hasOwnProperty.call(object(raw), "facilitySections");
-      return { ...config, facilitySections: hasExplicitSections ? array(config.facilitySections).map(normalizeItem) : buildFacilitySections(config, legacyItems) };
+      return { ...config, facilitySections: hasExplicitSections ? array(config.facilitySections).map(normalizeFacilitySection) : buildFacilitySections(config, legacyItems) };
     },
     async getContact(): Promise<PublicRecord> { const [config, contacts] = await Promise.all([page("contact_page", defaults.contact), repository.getContactItems()]); return { ...config, primaryChannels: contacts.primaryChannels.map(normalizeItem), socialLinks: contacts.socialLinks.map(normalizeItem), extraCards: contacts.extraCards.map(normalizeItem) }; }
   };

@@ -76,7 +76,7 @@ test("facilities groups flat legacy items by configured category order and metad
     sectionConfig: {
       aerialPlatforms: {
         subtitle: { zh: "无人机系统", en: "UAV Systems" },
-        video: { title: { zh: "飞行演示", en: "Flight Demo" }, embedUrl: "https://video.example/embed" }
+        video: { title: { zh: "飞行演示", en: "Flight Demo" }, embedUrl: "https://www.youtube.com/embed/flight-demo" }
       }
     }
   });
@@ -88,7 +88,7 @@ test("facilities groups flat legacy items by configured category order and metad
   const facilities = await createPublicSiteService(repository).getFacilities();
   assert.deepEqual(facilities.facilitySections.map((section: Record<string, unknown>) => section.category), ["aerialPlatforms", "quadrupeds"]);
   assert.deepEqual(facilities.facilitySections[0].subtitle, { zh: "无人机系统", en: "UAV Systems" });
-  assert.equal(facilities.facilitySections[0].video.embedUrl, "https://video.example/embed");
+  assert.equal(facilities.facilitySections[0].video.embedUrl, "https://www.youtube.com/embed/flight-demo");
   assert.deepEqual(facilities.facilitySections[0].items[0].specs[0].value, { zh: "", en: "5 km" });
   assert.deepEqual(facilities.facilitySections[1].subtitle, { zh: "四足平台", en: "Quadruped Platforms" });
 });
@@ -203,9 +203,12 @@ test("public payloads sanitize hostile media, document, link, and embed URLs", a
   assert.equal(research.publications[0].image.src, "https://cdn.example.org/paper.png");
   assert.equal(research.publications[0].pdf, null);
   assert.deepEqual(research.publications[0].links.map((link: Record<string, unknown>) => link.href), ["http://example.org/code", ""]);
-  assert.deepEqual(facilities.facilitySections.map((section: Record<string, any>) => section.video.embedUrl), [
-    "https://www.youtube.com/embed/demo",
-    "",
-    ""
+  assert.deepEqual(facilities.facilitySections.map((section: Record<string, any>) => ({
+    category: section.category,
+    embedUrl: section.video?.embedUrl
+  })), [
+    { category: "safe", embedUrl: "https://www.youtube.com/embed/demo" },
+    { category: "http", embedUrl: "" },
+    { category: "host", embedUrl: "" }
   ]);
 });
