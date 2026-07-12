@@ -15,6 +15,10 @@ export interface MigrationClient {
   end(): Promise<void>;
 }
 
+export type MigrationErrorWithCleanupFailures = Error & {
+  migrationCleanupFailures?: unknown[];
+};
+
 type MigrationOptions = {
   clientFactory?: (databaseUrl: string) => MigrationClient;
   migrationDirectoryUrl?: URL;
@@ -22,6 +26,16 @@ type MigrationOptions = {
 
 // Stable application-specific key used to serialize all RNAV schema migrations.
 export const MIGRATION_ADVISORY_LOCK_KEY = 724866120001;
+
+function attachCleanupFailure(primaryError: unknown, cleanupError: unknown) {
+  if (!(primaryError instanceof Error)) {
+    return;
+  }
+
+  const error = primaryError as MigrationErrorWithCleanupFailures;
+  error.migrationCleanupFailures ??= [];
+  error.migrationCleanupFailures.push(cleanupError);
+}
 
 function createPgClient(databaseUrl: string): MigrationClient {
   const client = new pg.Client({ connectionString: databaseUrl });
@@ -58,6 +72,8 @@ export async function runMigrations(
 
   const client = (options.clientFactory ?? createPgClient)(databaseUrl);
   let transactionStarted = false;
+  let primaryError: unknown;
+  let hasPrimaryError = false;
 
   try {
     await client.connect();
@@ -131,12 +147,28 @@ export async function runMigrations(
     await client.query("COMMIT");
     transactionStarted = false;
   } catch (error) {
+    primaryError = error;
+    hasPrimaryError = true;
     if (transactionStarted) {
-      await client.query("ROLLBACK");
+      try {
+        await client.query("ROLLBACK");
+      } catch (rollbackError) {
+        attachCleanupFailure(primaryError, rollbackError);
+      }
     }
-    throw error;
-  } finally {
+  }
+
+  try {
     await client.end();
+  } catch (endError) {
+    if (!hasPrimaryError) {
+      throw endError;
+    }
+    attachCleanupFailure(primaryError, endError);
+  }
+
+  if (hasPrimaryError) {
+    throw primaryError;
   }
 }
 

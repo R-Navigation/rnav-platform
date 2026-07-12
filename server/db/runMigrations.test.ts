@@ -8,6 +8,7 @@ import test from "node:test";
 import {
   getMigrationFiles,
   runMigrations,
+  type MigrationErrorWithCleanupFailures,
   type MigrationClient,
   type MigrationQueryResult
 } from "./runMigrations.js";
@@ -25,6 +26,7 @@ class RecordingClient implements MigrationClient {
   readonly calls: QueryCall[] = [];
   connectCount = 0;
   endCount = 0;
+  endError?: Error;
 
   constructor(
     private readonly respond: (call: QueryCall) => MigrationQueryResult = () => ({
@@ -45,16 +47,19 @@ class RecordingClient implements MigrationClient {
 
   async end() {
     this.endCount += 1;
+    if (this.endError) {
+      throw this.endError;
+    }
   }
 }
 
-async function withMigrationDirectory(
-  callback: (directoryUrl: URL) => Promise<void>
+async function withMigrationDirectory<Result>(
+  callback: (directoryUrl: URL) => Promise<Result>
 ) {
   const directory = await mkdtemp(join(tmpdir(), "rnav-migrations-"));
   try {
     await writeFile(join(directory, migrationName), migrationSql);
-    await callback(pathToFileURL(`${directory}/`));
+    return await callback(pathToFileURL(`${directory}/`));
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -68,7 +73,11 @@ test("getMigrationFiles returns SQL migrations in lexical order", async () => {
   const files = await getMigrationFiles(new URL("./migrations/", import.meta.url));
   assert.deepEqual(
     files.map((file) => file.name),
-    ["001_core_auth.sql", "004_procurement.sql"]
+    [
+      "001_core_auth.sql",
+      "004_procurement.sql",
+      "005_procurement_constraints.sql"
+    ]
   );
 });
 
@@ -200,5 +209,67 @@ test("runMigrations rolls back and ends the client when migration SQL fails", as
 
   assert.equal(client.calls.some(({ sql }) => sql === "COMMIT"), false);
   assert.equal(client.calls.at(-1)?.sql, "ROLLBACK");
+  assert.equal(client.endCount, 1);
+});
+
+test("runMigrations preserves the primary error when rollback fails", async () => {
+  const migrationError = new Error("primary migration failure");
+  const rollbackError = new Error("rollback failure");
+  const client = new RecordingClient(({ sql }) => {
+    if (sql === migrationSql) {
+      throw migrationError;
+    }
+    if (sql === "ROLLBACK") {
+      throw rollbackError;
+    }
+    return { rowCount: 0, rows: [] };
+  });
+
+  const thrown = await withMigrationDirectory(async (migrationDirectoryUrl) => {
+    try {
+      await runMigrations("postgres://test", {
+        clientFactory: () => client,
+        migrationDirectoryUrl
+      });
+      assert.fail("expected migration failure");
+    } catch (error) {
+      return error as MigrationErrorWithCleanupFailures;
+    }
+  });
+
+  assert.equal(thrown, migrationError);
+  assert.deepEqual(thrown.migrationCleanupFailures, [rollbackError]);
+  assert.equal(client.endCount, 1);
+});
+
+test("runMigrations retains rollback and end failures on the primary error", async () => {
+  const migrationError = new Error("primary migration failure");
+  const rollbackError = new Error("rollback failure");
+  const endError = new Error("end failure");
+  const client = new RecordingClient(({ sql }) => {
+    if (sql === migrationSql) {
+      throw migrationError;
+    }
+    if (sql === "ROLLBACK") {
+      throw rollbackError;
+    }
+    return { rowCount: 0, rows: [] };
+  });
+  client.endError = endError;
+
+  const thrown = await withMigrationDirectory(async (migrationDirectoryUrl) => {
+    try {
+      await runMigrations("postgres://test", {
+        clientFactory: () => client,
+        migrationDirectoryUrl
+      });
+      assert.fail("expected migration failure");
+    } catch (error) {
+      return error as MigrationErrorWithCleanupFailures;
+    }
+  });
+
+  assert.equal(thrown, migrationError);
+  assert.deepEqual(thrown.migrationCleanupFailures, [rollbackError, endError]);
   assert.equal(client.endCount, 1);
 });
