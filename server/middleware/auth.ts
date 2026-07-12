@@ -70,7 +70,12 @@ export function getSessionToken(request: Request) {
     return null;
   }
 
-  return parse(cookieHeader)[sessionCookieName] ?? null;
+  try {
+    const token = parse(cookieHeader)[sessionCookieName];
+    return typeof token === "string" && token.trim().length > 0 ? token : null;
+  } catch {
+    return null;
+  }
 }
 
 export function createPostgresAuthRepository(pool: Pool): AuthRepository {
@@ -164,13 +169,13 @@ export function createAuthMiddleware(repository: AuthRepository): RequestHandler
       }
 
       const tokenHash = hashSessionToken(token);
+      request.sessionTokenHash = tokenHash;
       const identity = await repository.findIdentityBySessionTokenHash(
         tokenHash,
         new Date()
       );
       if (identity) {
         request.authUser = identity;
-        request.sessionTokenHash = tokenHash;
       }
       next();
     } catch (error) {

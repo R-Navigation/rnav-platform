@@ -19,6 +19,7 @@ class MemoryAuthRepository implements AuthRepository {
   sessions = new Map<string, { userId: string; expiresAt: Date }>();
   permissions = new Map<string, string[]>();
   lastLoginAt = new Map<string, Date>();
+  revokedTokenHashes: string[] = [];
 
   async findUserForLogin(username: string) {
     return this.users.get(username) ?? null;
@@ -62,6 +63,7 @@ class MemoryAuthRepository implements AuthRepository {
   }
 
   async revokeSession(tokenHash: string) {
+    this.revokedTokenHashes.push(tokenHash);
     this.sessions.delete(tokenHash);
   }
 }
@@ -376,4 +378,47 @@ test("POST /api/auth/logout revokes the current session and clears the cookie", 
   assert.equal(response.status, 204);
   assert.equal(repository.sessions.has(tokenHash), false);
   assert.match(response.headers.get("set-cookie") ?? "", /Max-Age=0/i);
+});
+
+test("POST /api/auth/logout revokes a disabled user's presented session", async () => {
+  const repository = new MemoryAuthRepository();
+  const user = addUser(repository, { status: "disabled" });
+  const tokenHash = createHash("sha256").update("disabled-token").digest("hex");
+  repository.sessions.set(tokenHash, {
+    userId: user.id,
+    expiresAt: new Date(Date.now() + 60_000)
+  });
+
+  const response = await requestApp(repository, "/api/auth/logout", {
+    method: "POST",
+    headers: { cookie: sessionCookie("disabled-token") }
+  });
+
+  assert.equal(response.status, 204);
+  assert.deepEqual(repository.revokedTokenHashes, [tokenHash]);
+  assert.equal(repository.sessions.has(tokenHash), false);
+  assert.match(response.headers.get("set-cookie") ?? "", /Max-Age=0/i);
+});
+
+test("POST /api/auth/logout idempotently revokes an expired presented session", async () => {
+  const repository = new MemoryAuthRepository();
+  const user = addUser(repository);
+  const tokenHash = createHash("sha256").update("expired-logout-token").digest("hex");
+  repository.sessions.set(tokenHash, {
+    userId: user.id,
+    expiresAt: new Date(Date.now() - 1)
+  });
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const response = await requestApp(repository, "/api/auth/logout", {
+      method: "POST",
+      headers: { cookie: sessionCookie("expired-logout-token") }
+    });
+
+    assert.equal(response.status, 204);
+    assert.match(response.headers.get("set-cookie") ?? "", /Max-Age=0/i);
+  }
+
+  assert.deepEqual(repository.revokedTokenHashes, [tokenHash, tokenHash]);
+  assert.equal(repository.sessions.has(tokenHash), false);
 });
