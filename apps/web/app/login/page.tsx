@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { LoginForm } from "@/features/auth/LoginForm";
 
 type LoginPageProps = {
@@ -12,7 +13,7 @@ function normalizeNextPath(value: string | string[] | undefined) {
     : "/console";
 }
 
-export default async function LoginPage({ searchParams }: LoginPageProps) {
+async function LoginContent({ searchParams }: LoginPageProps) {
   const params = await searchParams;
   const nextPath = normalizeNextPath(params.next);
 
@@ -27,5 +28,25 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         <LoginForm nextPath={nextPath} />
       </section>
     </main>
+  );
+}
+
+function LoginFallback() {
+  return (
+    <main
+      aria-busy="true"
+      aria-live="polite"
+      className="grid min-h-screen place-items-center bg-surface px-5 py-12"
+    >
+      <p className="text-sm font-semibold text-slate-600">登录页面加载中</p>
+    </main>
+  );
+}
+
+export default function LoginPage({ searchParams }: LoginPageProps) {
+  return (
+    <Suspense fallback={<LoginFallback />}>
+      <LoginContent searchParams={searchParams} />
+    </Suspense>
   );
 }
