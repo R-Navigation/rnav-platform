@@ -1,0 +1,26 @@
+{
+  "name": "rnav-platform",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/web",
+    "server"
+  ],
+  "scripts": {
+    "dev:web": "npm --workspace apps/web run dev",
+    "dev:server": "npm --workspace server run dev",
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspaces",
+    "lint": "npm run lint --workspaces",
+    "db:migrate": "npm --workspace server run db:migrate",
+    "db:export-legacy": "tsx scripts/db/export-legacy.ts",
+    "db:migrate-legacy": "tsx scripts/db/migrate-legacy.ts",
+    "db:import-legacy": "tsx scripts/db/import-legacy.ts",
+    "db:verify-migration": "tsx scripts/db/verify-migration.ts"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.0",
+    "typescript": "^5.8.3"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "description": "Map legacy website admin usernames and monitor usernames to unified users.",
+  "users": [
+    {
+      "unifiedUsername": "aaron",
+      "websiteAdminUsername": "admin",
+      "monitorUsername": "aaron",
+      "displayName": "Aaron",
+      "baseTier": "super"
+    }
+  ]
+}

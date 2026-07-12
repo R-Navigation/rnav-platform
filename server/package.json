@@ -1,0 +1,38 @@
+{
+  "name": "@rnav/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch index.ts",
+    "start": "node dist/index.js",
+    "build": "tsc --outDir dist --noEmit false",
+    "test": "tsx --test \"**/*.test.ts\"",
+    "lint": "tsc --noEmit",
+    "db:migrate": "tsx db/runMigrations.ts"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "cookie": "^1.0.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.16.3",
+    "uuid": "^11.1.0",
+    "ws": "^8.18.3",
+    "zod": "^3.25.56"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cookie": "^0.6.0",
+    "@types/cors": "^2.8.18",
+    "@types/express": "^5.0.3",
+    "@types/jsonwebtoken": "^9.0.9",
+    "@types/node": "^22.15.29",
+    "@types/pg": "^8.15.4",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.20.0",
+    "typescript": "^5.8.3"
+  }
+}
