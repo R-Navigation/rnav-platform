@@ -1,15 +1,18 @@
 import { HomePage } from "@/features/public-site/HomePage";
 import { PublicPage } from "@/features/public-site/PublicPage";
-import { getOptionalPublicData, getPublicData } from "@/features/public-site/data";
+import { fallbackBootstrap, getOptionalPublicData, getPublicData } from "@/features/public-site/data";
 import { homeFallback, newsFallback, researchFallback } from "@/features/public-site/fallbacks";
 import { sanitizeMonitorPreview } from "@/features/public-site/monitor-preview";
 
 export default async function Page() {
-  const [home, research, news, rawMonitorPreview] = await Promise.all([
+  const bootstrapPromise = getPublicData("bootstrap", fallbackBootstrap);
+  const [bootstrap, home, research, news, rawMonitorPreview] = await Promise.all([
+    bootstrapPromise,
     getPublicData("home", homeFallback),
     getPublicData("research", researchFallback),
     getPublicData("news", newsFallback),
     getOptionalPublicData("/monitor/api/public/homepage-snapshot?limit=6")
   ]);
-  return <PublicPage><HomePage data={{ home, research, news, monitorPreview: sanitizeMonitorPreview(rawMonitorPreview) }}/></PublicPage>;
+  const degraded = home.degraded || research.degraded || news.degraded;
+  return <PublicPage bootstrap={bootstrap} degraded={degraded}><HomePage data={{ home: home.data, research: research.data, news: news.data, monitorPreview: sanitizeMonitorPreview(rawMonitorPreview) }}/></PublicPage>;
 }

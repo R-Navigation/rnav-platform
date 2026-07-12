@@ -1,13 +1,20 @@
 import "server-only";
 import { getInternalApiUrl } from "@/lib/server/api";
 
-export async function getPublicData<T>(path: string, fallback: T): Promise<T> {
+export type PublicDataResult<T> = { data: T; degraded: boolean };
+
+export async function getPublicData<T>(path: string, fallback: T): Promise<PublicDataResult<T>> {
+  const endpoint = `/api/public/${path}`;
   try {
-    const response = await fetch(getInternalApiUrl(`/api/public/${path}`), { next: { revalidate: 60 } });
-    if (!response.ok) return fallback;
-    return await response.json() as T;
-  } catch {
-    return fallback;
+    const response = await fetch(getInternalApiUrl(endpoint), { next: { revalidate: 60 } });
+    if (!response.ok) {
+      console.error(`[public-site] ${endpoint} returned ${response.status}`);
+      return { data: fallback, degraded: true };
+    }
+    return { data: await response.json() as T, degraded: false };
+  } catch (error) {
+    console.error(`[public-site] ${endpoint} request failed`, error instanceof Error ? error.name : "UnknownError");
+    return { data: fallback, degraded: true };
   }
 }
 
@@ -16,7 +23,8 @@ export async function getOptionalPublicData(path: string): Promise<unknown | nul
     const response = await fetch(getInternalApiUrl(path), { next: { revalidate: 30 } });
     if (!response.ok) return null;
     return await response.json() as unknown;
-  } catch {
+  } catch (error) {
+    console.error(`[public-site] ${path} optional request failed`, error instanceof Error ? error.name : "UnknownError");
     return null;
   }
 }

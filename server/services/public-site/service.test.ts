@@ -101,3 +101,111 @@ test("facilities preserves an explicitly empty facilitySections array", async ()
   const facilities = await createPublicSiteService(repository).getFacilities();
   assert.deepEqual(facilities.facilitySections, []);
 });
+
+test("public page projections recursively strip unknown and internal JSON fields", async () => {
+  const repository = new MemoryPublicSiteRepository();
+  const secret = {
+    internalNotes: "do not publish",
+    draftMetadata: { approvedBy: "admin", secret: "nested" }
+  };
+  repository.pages.set("site", {
+    brandName: { zh: "公开品牌", en: "Public Brand", secret: "hidden" },
+    footerLinks: [{ label: { en: "Lab" }, href: "/lab", ...secret }],
+    ...secret
+  });
+  repository.pages.set("home", {
+    hero: { title: { en: "Public Home", secret: "hidden" }, actions: [{ label: { en: "Read" }, href: "/research", ...secret }], ...secret },
+    researchAreas: [{ title: { en: "Area" }, description: { en: "Description" }, ...secret }],
+    ...secret
+  });
+  repository.pages.set("research_page", { header: { title: { en: "Research", secret: "hidden" }, ...secret }, ...secret });
+  repository.pages.set("news_page", { header: { title: { en: "News", secret: "hidden" }, ...secret }, ...secret });
+  repository.pages.set("team_page", { recruitment: { title: { en: "Join", secret: "hidden" }, ...secret }, ...secret });
+  repository.pages.set("facilities_page", {
+    facilitySections: [{
+      category: "quadrupeds",
+      title: { en: "Robot" },
+      video: { title: { en: "Demo" }, embedUrl: "https://www.youtube.com/embed/demo", ...secret },
+      ...secret
+    }],
+    ...secret
+  });
+  repository.pages.set("contact_page", { header: { title: { en: "Contact", secret: "hidden" }, ...secret }, ...secret });
+
+  const service = createPublicSiteService(repository);
+  const payloads = await Promise.all([
+    service.getBootstrap(),
+    service.getHome(),
+    service.getResearch(),
+    service.getNews(),
+    service.getTeam(),
+    service.getFacilities(),
+    service.getContact()
+  ]);
+
+  for (const payload of payloads) {
+    const json = JSON.stringify(payload);
+    assert.equal(json.includes("internalNotes"), false);
+    assert.equal(json.includes("draftMetadata"), false);
+    assert.equal(json.includes("approvedBy"), false);
+    assert.equal(json.includes('"secret"'), false);
+  }
+  assert.deepEqual(payloads[1].hero.title, { zh: "R-Nav：面向复杂环境的韧性导航与", en: "Public Home" });
+});
+
+test("public payloads sanitize hostile media, document, link, and embed URLs", async () => {
+  const repository = new MemoryPublicSiteRepository();
+  repository.pages.set("home", {
+    hero: {
+      image: { src: "data:image/svg+xml,<svg onload=alert(1)>", alt: "unsafe" },
+      actions: [
+        { label: { en: "Relative" }, href: "/research" },
+        { label: { en: "HTTPS" }, href: "https://example.org/paper" },
+        { label: { en: "Script" }, href: "java\u0000script:alert(1)" },
+        { label: { en: "Protocol relative" }, href: "//evil.example/path" },
+        { label: { en: "Backslash" }, href: "https:\\evil.example/path" }
+      ]
+    }
+  });
+  repository.research = [{
+    id: "paper-1",
+    title: { en: "Paper" },
+    image: { src: "https://cdn.example.org/paper.png", alt: "Paper" },
+    pdf: { src: "file:///etc/passwd", label: { en: "PDF" } },
+    links: [
+      { label: { en: "Code" }, href: "http://example.org/code" },
+      { label: { en: "Bad" }, href: "data:text/html,pwned" }
+    ]
+  }];
+  repository.pages.set("facilities_page", {
+    facilitySections: [
+      { category: "safe", video: { embedUrl: "https://www.youtube.com/embed/demo" } },
+      { category: "http", video: { embedUrl: "http://www.youtube.com/embed/demo" } },
+      { category: "host", video: { embedUrl: "https://evil.example/embed/demo" } }
+    ]
+  });
+
+  const service = createPublicSiteService(repository);
+  const [home, research, facilities] = await Promise.all([
+    service.getHome(),
+    service.getResearch(),
+    service.getFacilities()
+  ]);
+
+  assert.equal(home.hero.image, null);
+  assert.deepEqual(home.hero.actions.map((action: Record<string, unknown>) => action.href), [
+    "/research",
+    "https://example.org/paper",
+    "",
+    "",
+    ""
+  ]);
+  assert.equal(research.publications[0].image.src, "https://cdn.example.org/paper.png");
+  assert.equal(research.publications[0].pdf, null);
+  assert.deepEqual(research.publications[0].links.map((link: Record<string, unknown>) => link.href), ["http://example.org/code", ""]);
+  assert.deepEqual(facilities.facilitySections.map((section: Record<string, any>) => section.video.embedUrl), [
+    "https://www.youtube.com/embed/demo",
+    "",
+    ""
+  ]);
+});

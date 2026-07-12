@@ -77,9 +77,29 @@ test("getMigrationFiles returns SQL migrations in lexical order", async () => {
       "001_core_auth.sql",
       "004_procurement.sql",
       "005_procurement_constraints.sql",
-      "006_public_site_legacy.sql"
+      "006_public_site_legacy.sql",
+      "007_public_site_compatibility.sql"
     ]
   );
+});
+
+test("public-site compatibility migration is guarded, typed, and idempotent", async () => {
+  const migration = await import("node:fs/promises").then(({ readFile }) =>
+    readFile(new URL("./migrations/007_public_site_compatibility.sql", import.meta.url), "utf8")
+  );
+
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS content_json jsonb/i);
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS publication_year integer/i);
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS image_asset_id uuid/i);
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS highlight boolean/i);
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS team_member_id bigint/i);
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS facility_item_id bigint/i);
+  assert.match(migration, /DO \$compatibility\$/i);
+  assert.match(migration, /information_schema\.columns/i);
+  assert.match(migration, /incompatible type/i);
+  assert.match(migration, /CREATE INDEX IF NOT EXISTS idx_research_items_sort/i);
+  assert.match(migration, /duplicate_object/i);
+  assert.doesNotMatch(migration, /DROP (?:TABLE|COLUMN|CONSTRAINT)/i);
 });
 
 test("runMigrations acquires the transaction lock before inspecting migration state", async () => {

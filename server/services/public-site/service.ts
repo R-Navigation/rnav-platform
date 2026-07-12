@@ -1,3 +1,5 @@
+import { sanitizeEmbedUrl, sanitizePublicUrl } from "./url-sanitizer.js";
+
 export type LocaleText = { zh: string; en: string };
 export type PublicRecord = Record<string, any>;
 
@@ -28,6 +30,51 @@ const text = (value: unknown, fallback: Partial<LocaleText> = {}): LocaleText =>
 const object = (value: unknown): PublicRecord => value && typeof value === "object" && !Array.isArray(value) ? value as PublicRecord : {};
 const array = (value: unknown): PublicRecord[] => Array.isArray(value) ? value.map(object) : [];
 const clean = (value: unknown) => String(value ?? "").trim();
+type Allowlist = true | { [key: string]: Allowlist } | readonly [Allowlist];
+const localized: Allowlist = { zh: true, en: true };
+const imageFields: Allowlist = { assetId: true, src: true, alt: true, dataAlt: true };
+const linkFields: Allowlist = { label: localized, href: true, icon: true, variant: true };
+const headerFields: Allowlist = { eyebrow: localized, title: localized, description: localized };
+const itemFields: Allowlist = {
+  id: true, slug: true, group: true, groupKey: true, category: true, sortOrder: true,
+  title: localized, description: localized, excerpt: localized, date: localized, badge: localized,
+  venue: localized, name: localized, subtitle: localized, bio: localized, role: localized,
+  focus: localized, degree: localized, enrollmentYear: true, major: localized, research: localized,
+  graduation: localized, thesis: localized, destination: localized, tag: localized, specLine: localized,
+  label: localized, value: localized, handle: localized, year: true, type: true, topic: true,
+  icon: true, featured: true, badgeTone: true, highlight: true, href: true, image: imageFields,
+  pdf: { assetId: true, src: true, label: localized }, links: [linkFields], contacts: [{ label: localized, value: localized }],
+  keywords: [localized], authors: [{ name: localized, highlight: true }], specs: [{ label: localized, value: localized }]
+};
+const pageAllowlists: Record<string, Allowlist> = {
+  site: { brandName: localized, footerDescription: localized, footerCopyright: localized, footerLinks: [linkFields] },
+  home: {
+    hero: { eyebrow: localized, title: localized, highlight: localized, description: localized, actions: [linkFields], image: imageFields, status: localized },
+    sections: { researchAreasTitle: localized, researchAreasCta: localized, featuredEyebrow: localized, featuredTitle: localized, archiveLabel: localized, newsEyebrow: localized, newsTitle: localized },
+    researchAreas: [itemFields], featuredPublicationId: true,
+    featuredPublication: { badge: localized, authors: localized, links: [linkFields], archiveHref: true }, newsPreviewIds: [true]
+  },
+  research_page: { header: headerFields, ui: itemFields, filters: [itemFields], topicLabels: [itemFields], typeLabels: [itemFields], topicOrder: [true], typeOrder: [true], footerGraphicText: localized },
+  news_page: { header: headerFields },
+  team_page: { header: headerFields, sectionTitles: itemFields, recruitment: { title: localized, description: localized, buttonLabel: localized, buttonHref: true } },
+  facilities_page: {
+    header: headerFields, categoryOrder: [true], sectionTitles: itemFields,
+    sectionConfig: {
+      quadrupeds: itemFields, groundVehicles: itemFields, aerialPlatforms: itemFields, handheldSensors: itemFields
+    },
+    facilitySections: [{ ...itemFields, subtitle: localized, items: [itemFields], video: { title: localized, description: localized, url: true, embedUrl: true, poster: imageFields } }],
+    cta: { title: localized, description: localized, buttonLabel: localized, buttonHref: true }
+  },
+  contact_page: { header: headerFields, sectionTitles: itemFields, introText: localized, heroImage: imageFields }
+};
+
+function project(value: unknown, allowlist: Allowlist): unknown {
+  if (allowlist === true) return value;
+  if (Array.isArray(allowlist)) return Array.isArray(value) ? value.map((item) => project(item, allowlist[0])) : [];
+  const source = object(value), result: PublicRecord = {};
+  for (const [key, nested] of Object.entries(allowlist)) if (key in source) result[key] = project(source[key], nested);
+  return result;
+}
 
 export const publicNavigation = [
   { key: "home", label: { zh: "首页", en: "Home" }, href: "/" },
@@ -70,22 +117,47 @@ export const defaults = {
 
 function mergeLocalized(base: PublicRecord, stored: unknown): PublicRecord {
   const source = object(stored);
-  const result: PublicRecord = { ...base, ...source };
+  const result: PublicRecord = { ...base };
   for (const [key, fallback] of Object.entries(base)) {
     const value = source[key];
     if (fallback && typeof fallback === "object" && !Array.isArray(fallback) && ("zh" in fallback || "en" in fallback)) result[key] = text(value, fallback as LocaleText);
     else if (fallback && typeof fallback === "object" && !Array.isArray(fallback)) result[key] = mergeLocalized(fallback, value);
+    else if (value !== undefined) result[key] = value;
   }
   return result;
 }
 
 function normalizeItem(item: PublicRecord): PublicRecord {
-  const normalized: PublicRecord = { ...item };
+  const normalized = object(project(item, itemFields));
   for (const key of ["title", "description", "excerpt", "date", "badge", "venue", "name", "subtitle", "bio", "role", "focus", "degree", "major", "research", "graduation", "thesis", "destination", "tag", "specLine", "label", "value", "handle"]) {
     if (key in item) normalized[key] = text(item[key]);
   }
   for (const key of ["authors", "links", "contacts", "keywords", "specs"]) if (key in item) normalized[key] = array(item[key]).map(normalizeItem);
+  if (normalized.href !== undefined) normalized.href = sanitizePublicUrl(normalized.href);
+  if (normalized.image) normalized.image = normalizeImage(normalized.image);
+  if (normalized.pdf) {
+    const pdf = object(normalized.pdf), src = sanitizePublicUrl(pdf.src);
+    normalized.pdf = src ? { assetId: clean(pdf.assetId), src, label: text(pdf.label) } : null;
+  }
   return normalized;
+}
+
+function normalizeImage(value: unknown) {
+  const source = object(value), src = sanitizePublicUrl(source.src);
+  return src ? { assetId: clean(source.assetId), src, alt: clean(source.alt), dataAlt: clean(source.dataAlt) } : null;
+}
+
+function sanitizeConfig(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sanitizeConfig);
+  if (!value || typeof value !== "object") return value;
+  const result: PublicRecord = {};
+  for (const [key, nested] of Object.entries(value as PublicRecord)) {
+    if (key === "embedUrl") result[key] = sanitizeEmbedUrl(nested);
+    else if (["href", "url", "buttonHref", "archiveHref"].includes(key)) result[key] = sanitizePublicUrl(nested);
+    else if (key === "image" || key === "heroImage" || key === "poster") result[key] = normalizeImage(nested);
+    else result[key] = sanitizeConfig(nested);
+  }
+  return result;
 }
 
 function slugify(value: unknown) { return clean(value).normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""); }
@@ -126,14 +198,14 @@ function buildFacilitySections(config: PublicRecord, items: PublicRecord[]) {
       tag: text(metadata.tag),
       title: text(metadata.title),
       description: text(metadata.description),
-      image: metadata.image ?? null,
+      image: normalizeImage(metadata.image),
       specs: array(metadata.specs).map(normalizeItem),
       video: {
         title: text(metadata.video?.title), description: text(metadata.video?.description),
-        url: clean(metadata.video?.url), embedUrl: clean(metadata.video?.embedUrl), poster: metadata.video?.poster ?? null
+        url: sanitizePublicUrl(metadata.video?.url), embedUrl: sanitizeEmbedUrl(metadata.video?.embedUrl), poster: normalizeImage(metadata.video?.poster)
       },
       items: categoryItems,
-      ...categoryItems[0]
+      ...(categoryItems[0] ?? {})
     }];
   });
 }
@@ -141,29 +213,33 @@ function buildFacilitySections(config: PublicRecord, items: PublicRecord[]) {
 export type PublicSiteService = ReturnType<typeof createPublicSiteService>;
 
 export function createPublicSiteService(repository: PublicSiteRepository) {
-  const page = async (key: string, fallback: PublicRecord): Promise<PublicRecord> => mergeLocalized(fallback, await repository.getPageContent(key));
+  const page = async (key: string, fallback: PublicRecord): Promise<PublicRecord> => {
+    const stored = project(await repository.getPageContent(key), pageAllowlists[key]);
+    return sanitizeConfig(mergeLocalized(fallback, stored)) as PublicRecord;
+  };
   return {
     async getBootstrap() {
       const site = await page("site", defaults.site);
       return { brand: { name: site.brandName }, navigation: publicNavigation, header: { searchPlaceholder: { zh: "搜索论文...", en: "Search publications..." }, cta: { label: { zh: "查看论文", en: "Publications" }, href: "/research" } }, footer: { description: site.footerDescription, copyright: site.footerCopyright, links: array(site.footerLinks).map(normalizeItem) } };
     },
     getHome: () => page("home", defaults.home),
-    async getResearch(): Promise<PublicRecord> { return { ...(await page("research_page", defaults.research)), publications: (await repository.getResearchItems()).map(normalizeItem) }; },
-    async getNews(): Promise<PublicRecord> { return { ...(await page("news_page", defaults.news)), items: (await repository.getNewsItems()).map(normalizeItem) }; },
+    async getResearch(): Promise<PublicRecord> { const [config, items] = await Promise.all([page("research_page", defaults.research), repository.getResearchItems()]); return { ...config, publications: items.map(normalizeItem) }; },
+    async getNews(): Promise<PublicRecord> { const [config, items] = await Promise.all([page("news_page", defaults.news), repository.getNewsItems()]); return { ...config, items: items.map(normalizeItem) }; },
     async getTeam(): Promise<PublicRecord> {
-      const config = await page("team_page", defaults.team);
-      const members = (await repository.getTeamMembers()).map(normalizeMember);
+      const [config, rawMembers] = await Promise.all([page("team_page", defaults.team), repository.getTeamMembers()]);
+      const members = rawMembers.map(normalizeMember);
       const group = (key: string) => members.filter((member) => member.group === key).sort((a, b) => clean(a.enrollmentYear).localeCompare(clean(b.enrollmentYear)) || Number(a.sortOrder || 0) - Number(b.sortOrder || 0));
       const advisors = group("advisor");
       return { header: config.header, sectionTitles: config.sectionTitles, facultyLead: advisors[0] ?? null, advisors, postdocs: group("postdoc"), phdStudents: group("phd"), masterStudents: group("master"), undergraduateStudents: group("undergrad"), alumni: group("alumni"), recruitment: config.recruitment };
     },
     async getFacilities(): Promise<PublicRecord> {
-      const raw = await repository.getPageContent("facilities_page");
-      const config = mergeLocalized(defaults.facilities, raw);
-      const legacyItems = (await repository.getFacilityItems()).map(normalizeItem);
+      const [raw, rawItems] = await Promise.all([repository.getPageContent("facilities_page"), repository.getFacilityItems()]);
+      const projected = project(raw, pageAllowlists.facilities_page);
+      const config = sanitizeConfig(mergeLocalized(defaults.facilities, projected)) as PublicRecord;
+      const legacyItems = rawItems.map(normalizeItem);
       const hasExplicitSections = Object.prototype.hasOwnProperty.call(object(raw), "facilitySections");
       return { ...config, facilitySections: hasExplicitSections ? array(config.facilitySections).map(normalizeItem) : buildFacilitySections(config, legacyItems) };
     },
-    async getContact(): Promise<PublicRecord> { return { ...(await page("contact_page", defaults.contact)), ...(await repository.getContactItems()) }; }
+    async getContact(): Promise<PublicRecord> { const [config, contacts] = await Promise.all([page("contact_page", defaults.contact), repository.getContactItems()]); return { ...config, primaryChannels: contacts.primaryChannels.map(normalizeItem), socialLinks: contacts.socialLinks.map(normalizeItem), extraCards: contacts.extraCards.map(normalizeItem) }; }
   };
 }

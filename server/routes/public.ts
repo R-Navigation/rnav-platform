@@ -14,7 +14,10 @@ export function createPublicRouter({ service }: { service: PublicSiteService }) 
   };
   for (const [path, load] of Object.entries(routes)) {
     router.get(`/api/public/${path}`, async (_request, response, next) => {
-      try { response.json(await load()); } catch (error) { next(error); }
+      try { response.json(await load()); } catch (error) {
+        console.error(`[public-site] GET /api/public/${path} failed`, error);
+        next(error);
+      }
     });
   }
   return router;

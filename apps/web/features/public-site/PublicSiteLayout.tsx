@@ -5,8 +5,9 @@ import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { LanguageProvider, useLanguage } from "./LanguageProvider";
 import { getLocalizedText, normalizeInternalHref, type Locale } from "./i18n";
+import { sanitizePublicUrl } from "./url-sanitizer";
 
-function Chrome({ site, children }: { site: any; children: ReactNode }) {
+function Chrome({ site, degraded, children }: { site: any; degraded: boolean; children: ReactNode }) {
   const pathname = usePathname();
   const { locale, setLocale } = useLanguage();
   const [open, setOpen] = useState(false);
@@ -28,11 +29,12 @@ function Chrome({ site, children }: { site: any; children: ReactNode }) {
       </div>
       {open ? <nav className="border-t border-slate-200 bg-white px-5 py-3 lg:hidden">{navigation.map((item: any) => <Link onClick={() => setOpen(false)} className="block px-3 py-3 text-sm font-medium text-slate-700" key={item.key} href={normalizeInternalHref(item.href)}>{getLocalizedText(item.label, locale)}</Link>)}</nav> : null}
     </header>
+    {degraded ? <div className="border-y border-amber-300 bg-amber-50 px-5 py-3 text-center text-sm text-amber-950" role="status">{locale === "zh" ? "部分公开数据暂时不可用，当前显示备用内容。" : "Some public data is temporarily unavailable. Fallback content is shown."}</div> : null}
     {children}
-    <footer className="mt-20 border-t border-slate-200 bg-slate-50"><div className="mx-auto flex max-w-7xl flex-col justify-between gap-6 px-5 py-12 sm:px-6 md:flex-row lg:px-8"><div><div className="font-serif text-lg font-semibold text-primary">{getLocalizedText(site.brand?.name, locale)}</div><p className="mt-2 text-sm text-slate-500">{getLocalizedText(site.footer?.copyright, locale)}</p><p className="mt-1 text-sm text-slate-500">{getLocalizedText(site.footer?.description, locale)}</p></div><div className="flex gap-6">{(site.footer?.links ?? []).map((link: any, index: number) => <a className="text-sm text-slate-500 underline" key={index} href={normalizeInternalHref(link.href)}>{getLocalizedText(link.label, locale)}</a>)}</div></div></footer>
+    <footer className="mt-20 border-t border-slate-200 bg-slate-50"><div className="mx-auto flex max-w-7xl flex-col justify-between gap-6 px-5 py-12 sm:px-6 md:flex-row lg:px-8"><div><div className="font-serif text-lg font-semibold text-primary">{getLocalizedText(site.brand?.name, locale)}</div><p className="mt-2 text-sm text-slate-500">{getLocalizedText(site.footer?.copyright, locale)}</p><p className="mt-1 text-sm text-slate-500">{getLocalizedText(site.footer?.description, locale)}</p></div><div className="flex gap-6">{(site.footer?.links ?? []).map((link: any, index: number) => { const href = sanitizePublicUrl(link.href); return href ? <a className="text-sm text-slate-500 underline" key={index} href={href} rel={href.startsWith("http") ? "noopener noreferrer" : undefined} target={href.startsWith("http") ? "_blank" : undefined}>{getLocalizedText(link.label, locale)}</a> : null; })}</div></div></footer>
   </div>;
 }
 
-export function PublicSiteLayout({ site, initialLocale, hasLocaleCookie, children }: { site: any; initialLocale: Locale; hasLocaleCookie: boolean; children: ReactNode }) {
-  return <LanguageProvider initialLocale={initialLocale} hasLocaleCookie={hasLocaleCookie}><Chrome site={site}>{children}</Chrome></LanguageProvider>;
+export function PublicSiteLayout({ site, initialLocale, hasLocaleCookie, degraded, children }: { site: any; initialLocale: Locale; hasLocaleCookie: boolean; degraded: boolean; children: ReactNode }) {
+  return <LanguageProvider initialLocale={initialLocale} hasLocaleCookie={hasLocaleCookie}><Chrome site={site} degraded={degraded}>{children}</Chrome></LanguageProvider>;
 }
