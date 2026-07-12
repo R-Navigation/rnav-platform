@@ -1,11 +1,9 @@
-import { PublicRouteShell } from "@/features/public/PublicRouteShell";
+import { HomePage } from "@/features/public-site/HomePage";
+import { PublicPage } from "@/features/public-site/PublicPage";
+import { getPublicData } from "@/features/public-site/data";
+import { homeFallback } from "@/features/public-site/fallbacks";
 
-export default function HomePage() {
-  return (
-    <PublicRouteShell
-      description="面向机器人导航、感知与自主系统研究的实验室网站。"
-      eyebrow="RESEARCH · NAVIGATION · AUTONOMY"
-      title="RNAV 实验室"
-    />
-  );
+export default async function Page() {
+  const data = await getPublicData("home", homeFallback);
+  return <PublicPage><HomePage data={data}/></PublicPage>;
 }

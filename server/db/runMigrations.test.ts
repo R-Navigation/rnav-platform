@@ -76,7 +76,8 @@ test("getMigrationFiles returns SQL migrations in lexical order", async () => {
     [
       "001_core_auth.sql",
       "004_procurement.sql",
-      "005_procurement_constraints.sql"
+      "005_procurement_constraints.sql",
+      "006_public_site_legacy.sql"
     ]
   );
 });

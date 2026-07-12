@@ -1,5 +1,9 @@
-import { PublicRouteShell } from "@/features/public/PublicRouteShell";
+import { PublicPage } from "@/features/public-site/PublicPage";
+import { TeamPage } from "@/features/public-site/TeamPage";
+import { getPublicData } from "@/features/public-site/data";
+import { teamFallback } from "@/features/public-site/fallbacks";
 
-export default function TeamPage() {
-  return <PublicRouteShell description="介绍实验室教师、学生与合作成员。" title="团队成员" />;
+export default async function Page() {
+  const data = await getPublicData("team", teamFallback);
+  return <PublicPage><TeamPage data={data}/></PublicPage>;
 }

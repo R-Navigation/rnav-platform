@@ -1,5 +1,9 @@
-import { PublicRouteShell } from "@/features/public/PublicRouteShell";
+import { FacilitiesPage } from "@/features/public-site/FacilitiesPage";
+import { PublicPage } from "@/features/public-site/PublicPage";
+import { getPublicData } from "@/features/public-site/data";
+import { facilitiesFallback } from "@/features/public-site/fallbacks";
 
-export default function FacilitiesPage() {
-  return <PublicRouteShell description="展示支撑科研工作的实验空间、设备与平台。" title="实验设施" />;
+export default async function Page() {
+  const data = await getPublicData("facilities", facilitiesFallback);
+  return <PublicPage><FacilitiesPage data={data}/></PublicPage>;
 }

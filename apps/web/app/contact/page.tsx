@@ -1,5 +1,9 @@
-import { PublicRouteShell } from "@/features/public/PublicRouteShell";
+import { ContactPage } from "@/features/public-site/ContactPage";
+import { PublicPage } from "@/features/public-site/PublicPage";
+import { getPublicData } from "@/features/public-site/data";
+import { contactFallback } from "@/features/public-site/fallbacks";
 
-export default function ContactPage() {
-  return <PublicRouteShell description="提供访问、合作与招生相关的联系信息。" title="联系我们" />;
+export default async function Page() {
+  const data = await getPublicData("contact", contactFallback);
+  return <PublicPage><ContactPage data={data}/></PublicPage>;
 }

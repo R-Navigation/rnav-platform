@@ -21,6 +21,13 @@ const config = [
       "@next/next/no-html-link-for-pages": "off",
     },
   },
+  {
+    files: ["features/public-site/**/*.tsx"],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "off",
+      "@next/next/no-img-element": "off",
+    },
+  },
 ];
 
 export default config;

@@ -1,5 +1,9 @@
-import { PublicRouteShell } from "@/features/public/PublicRouteShell";
+import { PublicPage } from "@/features/public-site/PublicPage";
+import { ResearchPage } from "@/features/public-site/ResearchPage";
+import { getPublicData } from "@/features/public-site/data";
+import { researchFallback } from "@/features/public-site/fallbacks";
 
-export default function ResearchPage() {
-  return <PublicRouteShell description="汇集实验室当前研究课题与技术方向。" title="研究方向" />;
+export default async function Page() {
+  const data = await getPublicData("research", researchFallback);
+  return <PublicPage><ResearchPage data={data}/></PublicPage>;
 }

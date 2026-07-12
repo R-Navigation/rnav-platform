@@ -1,0 +1,14 @@
+"use client";
+
+import Link from "next/link";
+import { useLanguage } from "./LanguageProvider";
+import { getLocalizedText, isExternalHref, normalizeInternalHref } from "./i18n";
+
+export function HomePage({ data }: { data: any }) {
+  const { locale } = useLanguage();
+  const hero = data.hero ?? {}, sections = data.sections ?? {};
+  return <main>
+    <section className="border-b border-slate-200 bg-white"><div className="mx-auto grid max-w-7xl gap-10 px-5 py-16 sm:px-6 lg:grid-cols-[1.05fr_.95fr] lg:px-8 lg:py-24"><div className="self-center"><span className="public-kicker mb-5 block">{getLocalizedText(hero.eyebrow, locale)}</span><h1 className="font-serif text-4xl font-semibold leading-tight text-primary sm:text-6xl">{getLocalizedText(hero.title, locale)} <span className="text-secondary">{getLocalizedText(hero.highlight, locale)}</span></h1><p className="public-copy mt-7 max-w-2xl">{getLocalizedText(hero.description, locale)}</p><div className="mt-8 flex flex-wrap gap-3">{(hero.actions ?? []).map((action: any, index: number) => { const href = normalizeInternalHref(action.href); const cls = action.variant === "secondary" ? "border border-primary px-5 py-3 font-semibold text-primary" : "bg-primary px-5 py-3 font-semibold text-white"; return isExternalHref(href) ? <a className={cls} key={index} href={href}>{getLocalizedText(action.label, locale)}</a> : <Link className={cls} key={index} href={href}>{getLocalizedText(action.label, locale)}</Link>; })}</div></div><div className="min-h-[320px] overflow-hidden bg-slate-100">{hero.image?.src ? <img className="h-full w-full object-cover" src={hero.image.src} alt={hero.image.alt || getLocalizedText(hero.title, locale)} /> : <div className="flex h-full min-h-[320px] items-end bg-primary p-8 text-white"><div><div className="public-kicker !text-cyan-300">R-NAV</div><p className="mt-3 max-w-sm font-serif text-2xl">Resilient navigation and embodied intelligence</p></div></div>}</div></div></section>
+    <section className="mx-auto max-w-7xl px-5 py-20 sm:px-6 lg:px-8"><div className="mb-10 flex items-end justify-between"><h2 className="font-serif text-3xl font-semibold text-primary">{getLocalizedText(sections.researchAreasTitle, locale)}</h2><Link className="text-sm font-semibold text-secondary" href="/research">{getLocalizedText(sections.researchAreasCta, locale)}</Link></div><div className="grid gap-6 md:grid-cols-3">{(data.researchAreas ?? []).map((item: any, index: number) => <article className="border-t-4 border-cyan-600 bg-white p-7 shadow-sm" key={index}><span className="public-kicker">{getLocalizedText(item.tag, locale)}</span><h3 className="mt-4 font-serif text-2xl font-semibold text-primary">{getLocalizedText(item.title, locale)}</h3><p className="mt-3 leading-7 text-on-surface-variant">{getLocalizedText(item.description, locale)}</p></article>)}</div></section>
+  </main>;
+}

@@ -37,3 +37,9 @@
     outline-offset: 3px;
   }
 }
+
+@layer utilities {
+  .public-kicker { @apply text-xs font-bold uppercase text-secondary; letter-spacing: 0.1em; }
+  .public-title { @apply font-serif text-4xl font-semibold leading-tight text-primary sm:text-5xl; }
+  .public-copy { @apply text-base leading-7 text-on-surface-variant sm:text-lg; }
+}

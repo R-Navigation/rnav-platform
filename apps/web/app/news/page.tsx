@@ -1,5 +1,9 @@
-import { PublicRouteShell } from "@/features/public/PublicRouteShell";
+import { NewsPage } from "@/features/public-site/NewsPage";
+import { PublicPage } from "@/features/public-site/PublicPage";
+import { getPublicData } from "@/features/public-site/data";
+import { newsFallback } from "@/features/public-site/fallbacks";
 
-export default function NewsPage() {
-  return <PublicRouteShell description="发布实验室新闻、成果与活动记录。" title="新闻动态" />;
+export default async function Page() {
+  const data = await getPublicData("news", newsFallback);
+  return <PublicPage><NewsPage data={data}/></PublicPage>;
 }

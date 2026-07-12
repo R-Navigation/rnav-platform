@@ -1,0 +1,14 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { PageHeader } from "./PageHeader";
+import { useLanguage } from "./LanguageProvider";
+import { getLocalizedText, normalizeInternalHref } from "./i18n";
+
+export function ResearchPage({ data }: { data: any }) {
+  const { locale } = useLanguage();
+  const [mode, setMode] = useState("chronological");
+  const publications = useMemo(() => [...(data.publications ?? [])].sort((a, b) => Number(b.year) - Number(a.year)), [data.publications]);
+  const groups = useMemo(() => { const map = new Map<string, any[]>(); for (const item of publications) { const key = mode === "topic" ? item.topic : mode === "type" ? item.type : String(item.year || ""); map.set(key, [...(map.get(key) ?? []), item]); } return [...map.entries()]; }, [mode, publications]);
+  return <main className="mx-auto max-w-7xl px-5 pb-20 pt-12 sm:px-6 lg:px-8"><PageHeader header={data.header}/><div className="mb-14 flex flex-wrap gap-2 border-b border-slate-300 pb-5">{(data.filters?.length ? data.filters : [{ mode: "chronological", label: { zh: "按年份", en: "Year" } }, { mode: "topic", label: { zh: "按主题", en: "Topic" } }, { mode: "type", label: { zh: "按类型", en: "Type" } }]).map((filter: any) => <button className={mode === filter.mode ? "bg-primary px-4 py-2 text-xs font-bold uppercase text-white" : "px-4 py-2 text-xs font-bold uppercase text-slate-600"} key={filter.mode} onClick={() => setMode(filter.mode)} type="button">{getLocalizedText(filter.label, locale)}</button>)}</div><div className="space-y-14">{groups.map(([title, items]) => <section key={title}><h2 className="mb-7 border-l-4 border-cyan-600 pl-5 font-serif text-3xl text-primary">{title}</h2><div className="space-y-8">{items.map((item) => <article className="grid gap-6 border-b border-slate-200 pb-8 md:grid-cols-[160px_1fr]" key={item.id}>{item.image?.src ? <img className="aspect-[4/3] w-full object-cover" src={item.image.src} alt={item.image.alt || getLocalizedText(item.title, locale)} /> : <div className="aspect-[4/3] bg-slate-200"/>}<div><h3 className="text-xl font-semibold text-primary">{getLocalizedText(item.title, locale)}</h3><p className="mt-2 text-on-surface-variant">{(item.authors ?? []).map((author: any) => getLocalizedText(author.name, locale)).join(", ")}</p><p className="mt-2 text-sm italic text-secondary">{getLocalizedText(item.venue, locale)}{item.year ? `, ${item.year}` : ""}</p><div className="mt-4 flex flex-wrap gap-4 text-sm font-semibold">{item.pdf?.src ? <a href={item.pdf.src}>PDF</a> : null}{(item.links ?? []).map((link: any, index: number) => <a key={index} href={normalizeInternalHref(link.href)}>{getLocalizedText(link.label, locale)}</a>)}</div></div></article>)}</div></section>)}{groups.length === 0 ? <p className="border border-slate-200 bg-white p-8">{getLocalizedText(data.ui?.emptyTitle, locale) || (locale === "zh" ? "暂无论文" : "No publications")}</p> : null}</div></main>;
+}
