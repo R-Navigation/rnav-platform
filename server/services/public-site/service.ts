@@ -102,6 +102,42 @@ function normalizeMember(item: PublicRecord) {
   return member;
 }
 
+const facilityCategories = [
+  ["quadrupeds", { zh: "四足机器人", en: "Quadruped Robots" }],
+  ["groundVehicles", { zh: "轮式机器人", en: "Wheeled Robots" }],
+  ["aerialPlatforms", { zh: "空中平台", en: "Aerial Platforms" }],
+  ["handheldSensors", { zh: "手持与穿戴式传感器", en: "Handheld & Wearable Sensors" }]
+] as const;
+
+function buildFacilitySections(config: PublicRecord, items: PublicRecord[]) {
+  const defaultOrder = facilityCategories.map(([key]) => key);
+  const configuredOrder = Array.isArray(config.categoryOrder) ? config.categoryOrder.map((item: unknown) => clean(item)).filter(Boolean) : [];
+  const order = [...configuredOrder, ...defaultOrder.filter((key) => !configuredOrder.includes(key))];
+  const titleMap = object(config.sectionTitles);
+  const sectionConfig = object(config.sectionConfig);
+  const fallbackTitle = new Map<string, LocaleText>(facilityCategories);
+  return order.flatMap((category) => {
+    const categoryItems = items.filter((item) => item.category === category).map(normalizeItem);
+    if (!categoryItems.length) return [];
+    const metadata = object(sectionConfig[category]);
+    return [{
+      category,
+      subtitle: text(metadata.subtitle ?? titleMap[category], fallbackTitle.get(category)),
+      tag: text(metadata.tag),
+      title: text(metadata.title),
+      description: text(metadata.description),
+      image: metadata.image ?? null,
+      specs: array(metadata.specs).map(normalizeItem),
+      video: {
+        title: text(metadata.video?.title), description: text(metadata.video?.description),
+        url: clean(metadata.video?.url), embedUrl: clean(metadata.video?.embedUrl), poster: metadata.video?.poster ?? null
+      },
+      items: categoryItems,
+      ...categoryItems[0]
+    }];
+  });
+}
+
 export type PublicSiteService = ReturnType<typeof createPublicSiteService>;
 
 export function createPublicSiteService(repository: PublicSiteRepository) {
@@ -122,9 +158,11 @@ export function createPublicSiteService(repository: PublicSiteRepository) {
       return { header: config.header, sectionTitles: config.sectionTitles, facultyLead: advisors[0] ?? null, advisors, postdocs: group("postdoc"), phdStudents: group("phd"), masterStudents: group("master"), undergraduateStudents: group("undergrad"), alumni: group("alumni"), recruitment: config.recruitment };
     },
     async getFacilities(): Promise<PublicRecord> {
-      const config = await page("facilities_page", defaults.facilities);
+      const raw = await repository.getPageContent("facilities_page");
+      const config = mergeLocalized(defaults.facilities, raw);
       const legacyItems = (await repository.getFacilityItems()).map(normalizeItem);
-      return { ...config, facilitySections: Array.isArray(config.facilitySections) && config.facilitySections.length ? config.facilitySections : legacyItems };
+      const hasExplicitSections = Object.prototype.hasOwnProperty.call(object(raw), "facilitySections");
+      return { ...config, facilitySections: hasExplicitSections ? array(config.facilitySections).map(normalizeItem) : buildFacilitySections(config, legacyItems) };
     },
     async getContact(): Promise<PublicRecord> { return { ...(await page("contact_page", defaults.contact)), ...(await repository.getContactItems()) }; }
   };

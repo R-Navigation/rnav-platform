@@ -5,6 +5,7 @@ import type { Locale } from "./i18n";
 
 export async function PublicPage({ children }: { children: React.ReactNode }) {
   const [site, cookieStore] = await Promise.all([getPublicData("bootstrap", fallbackBootstrap), cookies()]);
-  const initialLocale: Locale = cookieStore.get("rnav_locale")?.value === "en" ? "en" : "zh";
-  return <PublicSiteLayout site={site} initialLocale={initialLocale}>{children}</PublicSiteLayout>;
+  const localeCookie = cookieStore.get("rnav_locale")?.value;
+  const initialLocale: Locale = localeCookie === "en" ? "en" : "zh";
+  return <PublicSiteLayout site={site} initialLocale={initialLocale} hasLocaleCookie={localeCookie === "zh" || localeCookie === "en"}>{children}</PublicSiteLayout>;
 }

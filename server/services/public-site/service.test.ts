@@ -64,3 +64,40 @@ test("team groups members and derives a stable fallback slug", async () => {
   assert.equal(team.phdStudents[0].slug, "phd-zhang-san");
   assert.deepEqual(team.phdStudents[0].degree, { zh: "博士", en: "PhD" });
 });
+
+test("facilities groups flat legacy items by configured category order and metadata", async () => {
+  const repository = new MemoryPublicSiteRepository();
+  repository.pages.set("facilities_page", {
+    categoryOrder: ["aerialPlatforms", "quadrupeds"],
+    sectionTitles: {
+      quadrupeds: { zh: "四足平台", en: "Quadruped Platforms" },
+      aerialPlatforms: { zh: "空中平台", en: "Aerial Platforms" }
+    },
+    sectionConfig: {
+      aerialPlatforms: {
+        subtitle: { zh: "无人机系统", en: "UAV Systems" },
+        video: { title: { zh: "飞行演示", en: "Flight Demo" }, embedUrl: "https://video.example/embed" }
+      }
+    }
+  });
+  repository.facilities = [
+    { category: "quadrupeds", title: { zh: "机器狗", en: "Robot Dog" }, specs: [{ label: { zh: "重量", en: "Weight" }, value: "12 kg" }] },
+    { category: "aerialPlatforms", title: { zh: "无人机", en: "Drone" }, specs: [{ label: "Range", value: "5 km" }] }
+  ];
+
+  const facilities = await createPublicSiteService(repository).getFacilities();
+  assert.deepEqual(facilities.facilitySections.map((section: Record<string, unknown>) => section.category), ["aerialPlatforms", "quadrupeds"]);
+  assert.deepEqual(facilities.facilitySections[0].subtitle, { zh: "无人机系统", en: "UAV Systems" });
+  assert.equal(facilities.facilitySections[0].video.embedUrl, "https://video.example/embed");
+  assert.deepEqual(facilities.facilitySections[0].items[0].specs[0].value, { zh: "", en: "5 km" });
+  assert.deepEqual(facilities.facilitySections[1].subtitle, { zh: "四足平台", en: "Quadruped Platforms" });
+});
+
+test("facilities preserves an explicitly empty facilitySections array", async () => {
+  const repository = new MemoryPublicSiteRepository();
+  repository.pages.set("facilities_page", { facilitySections: [] });
+  repository.facilities = [{ category: "quadrupeds", title: { en: "Robot Dog" } }];
+
+  const facilities = await createPublicSiteService(repository).getFacilities();
+  assert.deepEqual(facilities.facilitySections, []);
+});

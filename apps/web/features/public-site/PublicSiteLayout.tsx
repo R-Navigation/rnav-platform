@@ -33,6 +33,6 @@ function Chrome({ site, children }: { site: any; children: ReactNode }) {
   </div>;
 }
 
-export function PublicSiteLayout({ site, initialLocale, children }: { site: any; initialLocale: Locale; children: ReactNode }) {
-  return <LanguageProvider initialLocale={initialLocale}><Chrome site={site}>{children}</Chrome></LanguageProvider>;
+export function PublicSiteLayout({ site, initialLocale, hasLocaleCookie, children }: { site: any; initialLocale: Locale; hasLocaleCookie: boolean; children: ReactNode }) {
+  return <LanguageProvider initialLocale={initialLocale} hasLocaleCookie={hasLocaleCookie}><Chrome site={site}>{children}</Chrome></LanguageProvider>;
 }

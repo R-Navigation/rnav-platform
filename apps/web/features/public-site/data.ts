@@ -11,6 +11,16 @@ export async function getPublicData<T>(path: string, fallback: T): Promise<T> {
   }
 }
 
+export async function getOptionalPublicData(path: string): Promise<unknown | null> {
+  try {
+    const response = await fetch(getInternalApiUrl(path), { next: { revalidate: 30 } });
+    if (!response.ok) return null;
+    return await response.json() as unknown;
+  } catch {
+    return null;
+  }
+}
+
 export const fallbackBootstrap = {
   brand: { name: { zh: "R-Nav 研究组", en: "R-Nav Research Group" } },
   navigation: [
