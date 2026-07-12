@@ -10,6 +10,13 @@ export type SiteModule = {
 
 export type SitePermission = "site.content.write" | "site.members.write";
 
+export type SiteModuleConflict = {
+  moduleKey: string;
+  draftValue: unknown;
+  baselineValue: unknown;
+  previousRevision: string | null;
+};
+
 export const adminRedirects = [
   { source: "/admin", destination: "/console/site", permanent: true },
   { source: "/admin/dashboard", destination: "/console/site", permanent: true }
@@ -90,6 +97,25 @@ export function isModuleDirty(module: SiteModule, draftValue: unknown) {
 
 export function applySavedModule(module: SiteModule, revision: string): SiteModule {
   return { ...module, revision };
+}
+
+export function applyConflictSnapshot(
+  modules: SiteModule[],
+  conflict: SiteModuleConflict,
+  choice: "reload" | "keep-local",
+) {
+  const latestModule = modules.find((item) => item.key === conflict.moduleKey);
+  if (!latestModule) throw new Error("最新快照中缺少当前模块。");
+  return {
+    modules,
+    module: latestModule,
+    draftValue: choice === "reload" ? latestModule.value : conflict.draftValue,
+    serverValueChanged: isModuleDirty(latestModule, conflict.baselineValue),
+  };
+}
+
+export function retainConflictAfterRefreshFailure(conflict: SiteModuleConflict, error: string) {
+  return { conflict, error };
 }
 
 export type JsonParseResult = { ok: true; value: unknown } | { error: string; ok: false };

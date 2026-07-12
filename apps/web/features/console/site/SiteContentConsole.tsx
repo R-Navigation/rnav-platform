@@ -5,12 +5,15 @@ import { PageEditor } from "./PageEditor";
 import { TeamEditor } from "./TeamEditor";
 import { readSiteAdminError } from "./api";
 import {
+  applyConflictSnapshot,
   applySavedModule,
   createSaveRequest,
   getAvailableSiteModules,
   isModuleDirty,
   normalizeSiteAdminSnapshot,
   parseJsonEditorValue,
+  retainConflictAfterRefreshFailure,
+  type SiteModuleConflict,
   type SiteModule,
 } from "./model";
 
@@ -26,7 +29,8 @@ export function SiteContentConsole({ permissions }: Props) {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [message, setMessage] = useState("");
-  const [conflict, setConflict] = useState(false);
+  const [conflict, setConflict] = useState<SiteModuleConflict | null>(null);
+  const [conflictRefreshing, setConflictRefreshing] = useState(false);
   const [mode, setMode] = useState<EditorMode>("form");
   const [jsonSource, setJsonSource] = useState("");
   const [jsonError, setJsonError] = useState("");
@@ -42,7 +46,7 @@ export function SiteContentConsole({ permissions }: Props) {
     setJsonSource(JSON.stringify(module.value, null, 2));
     setJsonError("");
     setMessage("");
-    setConflict(false);
+    setConflict(null);
     setSaveState("idle");
     setMode("form");
   }, []);
@@ -92,7 +96,7 @@ export function SiteContentConsole({ permissions }: Props) {
     setJsonSource(JSON.stringify(value, null, 2));
     setJsonError("");
     setMessage("");
-    setConflict(false);
+    setConflict(null);
     setSaveState("idle");
   }
 
@@ -106,7 +110,7 @@ export function SiteContentConsole({ permissions }: Props) {
     setJsonError("");
     setDraftValue(result.value);
     setMessage("");
-    setConflict(false);
+    setConflict(null);
     setSaveState("idle");
   }
 
@@ -114,7 +118,7 @@ export function SiteContentConsole({ permissions }: Props) {
     if (!selectedModule || jsonError || !dirty) return;
     setSaveState("saving");
     setMessage("");
-    setConflict(false);
+    setConflict(null);
     const request = createSaveRequest({ ...selectedModule, value: draftValue });
     try {
       const response = await fetch(`/api/site-admin${request.endpoint}`, {
@@ -123,7 +127,12 @@ export function SiteContentConsole({ permissions }: Props) {
         body: JSON.stringify(request.body),
       });
       if (response.status === 409) {
-        setConflict(true);
+        setConflict({
+          moduleKey: selectedModule.key,
+          draftValue,
+          baselineValue: selectedModule.value,
+          previousRevision: selectedModule.revision,
+        });
         setMessage(await readSiteAdminError(response));
         setSaveState("idle");
         return;
@@ -141,6 +150,40 @@ export function SiteContentConsole({ permissions }: Props) {
     } catch (error) {
       setSaveState("idle");
       setMessage(error instanceof Error ? error.message : "保存失败，请稍后重试。");
+    }
+  }
+
+  async function resolveConflict(choice: "reload" | "keep-local") {
+    if (!conflict) return;
+    setConflictRefreshing(true);
+    try {
+      const response = await fetch("/api/site-admin/snapshot", { cache: "no-store" });
+      if (!response.ok) throw new Error(await readSiteAdminError(response));
+      const latest = normalizeSiteAdminSnapshot(await response.json());
+      const resolved = applyConflictSnapshot(latest, conflict, choice);
+      setModules(resolved.modules);
+      setSelectedKey(resolved.module.key);
+      setDraftValue(resolved.draftValue);
+      setJsonSource(JSON.stringify(resolved.draftValue, null, 2));
+      setJsonError("");
+      setConflict(null);
+      setSaveState("idle");
+      const revision = resolved.module.revision ?? "未提供";
+      if (choice === "reload") {
+        setMessage(`已重新加载最新版本 ${revision}，本地草稿已替换。`);
+      } else {
+        const compareHint = resolved.serverValueChanged ? "服务器内容也有变化；" : "";
+        setMessage(`本地草稿已基于最新版本 ${revision} 重新建立基线；${compareHint}请核对后再次保存。`);
+      }
+    } catch (error) {
+      const retained = retainConflictAfterRefreshFailure(
+        conflict,
+        error instanceof Error ? `刷新最新版本失败：${error.message}` : "刷新最新版本失败，请稍后重试。",
+      );
+      setConflict(retained.conflict);
+      setMessage(retained.error);
+    } finally {
+      setConflictRefreshing(false);
     }
   }
 
@@ -191,7 +234,7 @@ export function SiteContentConsole({ permissions }: Props) {
       </div>
 
       <p aria-live="polite" className={`mt-6 border-l-2 px-4 py-3 text-sm ${conflict ? "border-amber-500 bg-amber-50 text-amber-950" : message ? "border-cyan-600 bg-white text-slate-700" : "sr-only"}`} role={conflict ? "alert" : "status"}>{message || "编辑器已就绪"}</p>
-      {conflict ? <div className="mt-3 flex flex-wrap gap-3"><button className="bg-blue-950 px-4 py-2 text-sm font-bold text-white" onClick={() => void loadSnapshot(selectedModule.key)} type="button">重新加载最新版本</button><button className="border border-slate-400 bg-white px-4 py-2 text-sm font-bold text-slate-800" onClick={() => { setConflict(false); setMessage("已保留本地更改，保存前请先核对最新内容。"); }} type="button">保留本地更改</button></div> : null}
+      {conflict ? <div className="mt-3 flex flex-wrap gap-3"><button className="bg-blue-950 px-4 py-2 text-sm font-bold text-white disabled:bg-slate-400" disabled={conflictRefreshing} onClick={() => void resolveConflict("reload")} type="button">重新加载最新版本</button><button className="border border-slate-400 bg-white px-4 py-2 text-sm font-bold text-slate-800 disabled:text-slate-400" disabled={conflictRefreshing} onClick={() => void resolveConflict("keep-local")} type="button">保留本地更改</button></div> : null}
       <p className="mt-6 text-xs leading-5 text-slate-500">媒体上传尚未开放。图片、PDF 等字段只能填写已有 URL 或资产引用。</p>
 
       {pendingKey ? <div aria-labelledby="discard-title" aria-modal="true" className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-5" role="dialog"><div className="w-full max-w-md bg-white p-6 shadow-xl"><h2 className="text-xl font-bold text-slate-950" id="discard-title">放弃未保存更改？</h2><p className="mt-3 leading-6 text-slate-600">切换模块会丢失当前模块的本地更改。</p><div className="mt-6 flex justify-end gap-3"><button autoFocus className="border border-slate-400 px-4 py-2 text-sm font-bold text-slate-800" onClick={() => setPendingKey(null)} type="button">继续编辑</button><button className="bg-red-700 px-4 py-2 text-sm font-bold text-white" onClick={discardAndSwitch} type="button">放弃并切换</button></div></div></div> : null}

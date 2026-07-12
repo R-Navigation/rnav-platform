@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   adminRedirects,
+  applyConflictSnapshot,
   applySavedModule,
   createSaveRequest,
   getAvailableSiteModules,
   isModuleDirty,
   normalizeSiteAdminSnapshot,
   parseJsonEditorValue,
+  retainConflictAfterRefreshFailure,
 } from "./model.ts";
 
 test("legacy admin routes permanently redirect to console site", () => {
@@ -53,6 +55,63 @@ test("dirty and successful-save helpers compare values and advance revisions", (
   const saved = applySavedModule(draft, "5");
   assert.equal(saved.revision, "5");
   assert.equal(isModuleDirty(saved, draft.value), false);
+});
+
+test("reloading after a conflict adopts the latest module and keeps the snapshot coherent", () => {
+  const latest = normalizeSiteAdminSnapshot({
+    pages: {
+      home: { content: { title: "Server" }, updatedAt: "r2" },
+      site: { content: { name: "Latest site" }, updatedAt: "s2" },
+    },
+  });
+
+  const resolved = applyConflictSnapshot(latest, {
+    moduleKey: "home",
+    draftValue: { title: "Local" },
+    baselineValue: { title: "Old server" },
+    previousRevision: "r1",
+  }, "reload");
+
+  assert.deepEqual(resolved.draftValue, { title: "Server" });
+  assert.equal(resolved.module.revision, "r2");
+  assert.equal(isModuleDirty(resolved.module, resolved.draftValue), false);
+  assert.equal(resolved.serverValueChanged, true);
+  assert.equal(resolved.modules.find((module) => module.key === "site")?.revision, "s2");
+});
+
+test("keeping local changes rebases the captured draft onto the latest revision", () => {
+  const latest = normalizeSiteAdminSnapshot({
+    pages: { home: { content: { title: "Server" }, updatedAt: "r2" } },
+  });
+
+  const resolved = applyConflictSnapshot(latest, {
+    moduleKey: "home",
+    draftValue: { title: "Local" },
+    baselineValue: { title: "Old server" },
+    previousRevision: "r1",
+  }, "keep-local");
+
+  assert.deepEqual(resolved.draftValue, { title: "Local" });
+  assert.equal(resolved.module.revision, "r2");
+  assert.equal(isModuleDirty(resolved.module, resolved.draftValue), true);
+  assert.deepEqual(createSaveRequest({ ...resolved.module, value: resolved.draftValue }).body, {
+    content: { title: "Local" },
+    expectedUpdatedAt: "r2",
+  });
+});
+
+test("failed conflict refresh retains the captured draft and conflict revision", () => {
+  const conflict = {
+    moduleKey: "home",
+    draftValue: { title: "Local" },
+    baselineValue: { title: "Old server" },
+    previousRevision: "r1",
+  };
+
+  assert.deepEqual(retainConflictAfterRefreshFailure(conflict, "Refresh failed"), {
+    conflict,
+    error: "Refresh failed",
+  });
 });
 
 test("JSON editor parsing reports invalid input without replacing the current value", () => {
