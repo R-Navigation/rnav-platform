@@ -78,9 +78,41 @@ test("getMigrationFiles returns SQL migrations in lexical order", async () => {
       "004_procurement.sql",
       "005_procurement_constraints.sql",
       "006_public_site_legacy.sql",
-      "007_public_site_compatibility.sql"
+      "007_public_site_compatibility.sql",
+      "008_site_admin_revisions.sql"
     ]
   );
+});
+
+test("site-admin revision migration defines and initializes repository revision state", async () => {
+  const migration = await import("node:fs/promises").then(({ readFile }) =>
+    readFile(new URL("./migrations/008_site_admin_revisions.sql", import.meta.url), "utf8")
+  );
+
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS site_content_revisions/i);
+  assert.match(migration, /module_key text PRIMARY KEY/i);
+  assert.match(migration, /revision bigint NOT NULL DEFAULT 0 CHECK \(revision >= 0\)/i);
+  assert.match(migration, /updated_at timestamptz NOT NULL DEFAULT now\(\)/i);
+  assert.match(migration, /INSERT INTO site_content_revisions \(module_key\)/i);
+
+  for (const moduleKey of [
+    "page:site",
+    "page:home",
+    "page:research_page",
+    "page:news_page",
+    "page:team_page",
+    "page:facilities_page",
+    "page:contact_page",
+    "research-items",
+    "news-items",
+    "team-members",
+    "facility-items",
+    "contact-items"
+  ]) {
+    assert.match(migration, new RegExp(`'${moduleKey}'`));
+  }
+
+  assert.match(migration, /ON CONFLICT \(module_key\) DO NOTHING/i);
 });
 
 test("public-site compatibility migration is guarded, typed, and idempotent", async () => {
