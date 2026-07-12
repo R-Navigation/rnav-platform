@@ -1,5 +1,7 @@
-import { ConsolePlaceholder } from "@/features/console/ConsolePlaceholder";
+import { getConsoleBootstrap } from "@/features/console/bootstrap";
+import { SiteContentConsole } from "@/features/console/site/SiteContentConsole";
 
-export default function SitePage() {
-  return <ConsolePlaceholder description="官网内容编辑功能将在后续任务中接入。" title="官网内容" />;
+export default async function SitePage() {
+  const result = await getConsoleBootstrap();
+  return <SiteContentConsole permissions={result.status === "authenticated" ? result.data.permissions : []} />;
 }
