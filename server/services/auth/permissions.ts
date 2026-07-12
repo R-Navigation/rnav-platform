@@ -1,0 +1,139 @@
+export type BaseTier = "normal" | "super";
+export type DisplayTier = "normal" | "plus" | "super";
+
+export type ConsoleModule = {
+  key: string;
+  href: string;
+  label: string;
+  requiredAny: string[];
+};
+
+export const knownPermissionKeys = [
+  "console.access",
+  "profile.read_own",
+  "profile.write_own",
+  "lab_assets.read",
+  "procurements.create",
+  "procurements.read_own",
+  "site.content.write",
+  "site.members.write",
+  "site.media.write",
+  "monitor.devices.read",
+  "monitor.devices.write",
+  "monitor.settings.write",
+  "lab_assets.write",
+  "procurements.read_all",
+  "procurements.review",
+  "procurements.purchase",
+  "procurements.close",
+  "users.read",
+  "users.write",
+  "permissions.write",
+  "system.settings.write"
+] as const;
+
+const basePermissions = new Set([
+  "console.access",
+  "profile.read_own",
+  "profile.write_own",
+  "lab_assets.read",
+  "procurements.create",
+  "procurements.read_own"
+]);
+
+const moduleDefinitions: ConsoleModule[] = [
+  {
+    key: "profile",
+    href: "/console/profile",
+    label: "个人资料",
+    requiredAny: ["console.access"]
+  },
+  {
+    key: "lab-assets",
+    href: "/console/lab-assets",
+    label: "实验室资产",
+    requiredAny: ["lab_assets.read", "lab_assets.write"]
+  },
+  {
+    key: "procurements",
+    href: "/console/procurements",
+    label: "采购申请",
+    requiredAny: ["procurements.create", "procurements.read_all"]
+  },
+  {
+    key: "monitor",
+    href: "/console/monitor",
+    label: "监控管理",
+    requiredAny: [
+      "monitor.devices.read",
+      "monitor.devices.write",
+      "monitor.settings.write"
+    ]
+  },
+  {
+    key: "site",
+    href: "/console/site",
+    label: "官网内容",
+    requiredAny: ["site.content.write", "site.members.write"]
+  },
+  {
+    key: "media",
+    href: "/console/media",
+    label: "媒体资源",
+    requiredAny: ["site.media.write"]
+  },
+  {
+    key: "users",
+    href: "/console/users",
+    label: "用户管理",
+    requiredAny: ["users.read", "users.write"]
+  },
+  {
+    key: "permissions",
+    href: "/console/permissions",
+    label: "权限管理",
+    requiredAny: ["permissions.write"]
+  },
+  {
+    key: "settings",
+    href: "/console/settings",
+    label: "系统设置",
+    requiredAny: ["system.settings.write"]
+  }
+];
+
+export function deriveDisplayTier(
+  baseTier: BaseTier,
+  permissions: string[]
+): DisplayTier {
+  if (baseTier === "super") {
+    return "super";
+  }
+
+  return permissions.some((permission) => !basePermissions.has(permission))
+    ? "plus"
+    : "normal";
+}
+
+export function getEffectivePermissions(
+  permissions: string[],
+  baseTier: BaseTier = "normal"
+) {
+  return baseTier === "super" ? [...knownPermissionKeys] : [...permissions];
+}
+
+export function getConsoleModules(
+  permissions: string[],
+  baseTier: BaseTier = "normal"
+) {
+  if (baseTier === "super") {
+    return moduleDefinitions.map(({ requiredAny: _requiredAny, ...module }) => module);
+  }
+
+  const permissionSet = new Set(permissions);
+  return moduleDefinitions
+    .filter((module) =>
+      module.requiredAny.some((permission) => permissionSet.has(permission))
+    )
+    .map(({ requiredAny: _requiredAny, ...module }) => module);
+}

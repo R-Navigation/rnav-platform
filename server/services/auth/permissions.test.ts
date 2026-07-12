@@ -1,0 +1,33 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { deriveDisplayTier, getConsoleModules } from "./permissions.js";
+
+test("deriveDisplayTier returns super for super users", () => {
+  assert.equal(deriveDisplayTier("super", []), "super");
+});
+
+test("deriveDisplayTier returns plus when a normal user has an advanced permission", () => {
+  assert.equal(deriveDisplayTier("normal", ["site.content.write"]), "plus");
+});
+
+test("deriveDisplayTier returns normal when a normal user has only base permissions", () => {
+  assert.equal(
+    deriveDisplayTier("normal", ["console.access", "procurements.create"]),
+    "normal"
+  );
+});
+
+test("getConsoleModules returns procurement for normal members", () => {
+  const modules = getConsoleModules([
+    "console.access",
+    "procurements.create",
+    "procurements.read_own"
+  ]);
+  assert.ok(modules.some((module) => module.key === "procurements"));
+});
+
+test("getConsoleModules returns users for permission managers", () => {
+  const modules = getConsoleModules(["users.read", "permissions.write"]);
+  assert.ok(modules.some((module) => module.key === "users"));
+  assert.ok(modules.some((module) => module.key === "permissions"));
+});
