@@ -14,19 +14,23 @@ export function sanitizeMonitorPreview(value: unknown): PublicMonitorPreview {
   const source = record(value);
   const summary = record(source.summary);
   const devices = Array.isArray(source.devices) ? source.devices : [];
+  const onlineCount = summary.onlineCount ?? summary.onlineDeviceCount;
+  const totalCount = summary.totalCount ?? summary.totalDeviceCount;
   return {
     summary: {
       statusText: String(summary.statusText ?? "").trim(),
-      onlineCount: Number.isFinite(Number(summary.onlineCount)) ? Number(summary.onlineCount) : 0,
-      totalCount: Number.isFinite(Number(summary.totalCount)) ? Number(summary.totalCount) : devices.length
+      onlineCount: Number.isFinite(Number(onlineCount)) ? Number(onlineCount) : 0,
+      totalCount: Number.isFinite(Number(totalCount)) ? Number(totalCount) : devices.length
     },
     devices: devices.slice(0, 6).map((value) => {
       const device = record(value);
+      const currentState = record(device.currentState);
+      const heartbeatIntegrity = record(currentState.heartbeatIntegrity);
       return {
         code: String(device.code ?? "").trim(),
         displayName: String(device.displayName ?? device.name ?? "").trim(),
-        isOnline: Boolean(device.isOnline),
-        statusLabel: String(device.statusLabel ?? "").trim()
+        isOnline: Boolean(device.isOnline ?? currentState.isOnline),
+        statusLabel: String(device.statusLabel ?? heartbeatIntegrity.label ?? "").trim()
       };
     }).filter((device) => device.code || device.displayName)
   };
