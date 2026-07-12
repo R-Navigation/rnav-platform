@@ -1,4 +1,4 @@
-import { sanitizeEmbedUrl, sanitizePublicUrl } from "./url-sanitizer.js";
+import { sanitizeActionUrl, sanitizeEmbedUrl, sanitizePublicUrl } from "./url-sanitizer.js";
 
 export type LocaleText = { zh: string; en: string };
 export type PublicRecord = Record<string, any>;
@@ -136,7 +136,7 @@ function normalizeItem(item: PublicRecord): PublicRecord {
     if (key in item) normalized[key] = text(item[key]);
   }
   for (const key of ["authors", "links", "contacts", "keywords", "specs"]) if (key in item) normalized[key] = array(item[key]).map(normalizeItem);
-  if (normalized.href !== undefined) normalized.href = sanitizePublicUrl(normalized.href);
+  if (normalized.href !== undefined) normalized.href = sanitizeActionUrl(normalized.href);
   if (normalized.image) normalized.image = normalizeImage(normalized.image);
   if (normalized.pdf) {
     const pdf = object(normalized.pdf), src = sanitizePublicUrl(pdf.src);
@@ -169,7 +169,8 @@ function sanitizeConfig(value: unknown): unknown {
   const result: PublicRecord = {};
   for (const [key, nested] of Object.entries(value as PublicRecord)) {
     if (key === "embedUrl") result[key] = sanitizeEmbedUrl(nested);
-    else if (["href", "url", "buttonHref", "archiveHref"].includes(key)) result[key] = sanitizePublicUrl(nested);
+    else if (["href", "buttonHref", "archiveHref"].includes(key)) result[key] = sanitizeActionUrl(nested);
+    else if (key === "url") result[key] = sanitizePublicUrl(nested);
     else if (key === "image" || key === "heroImage" || key === "poster") result[key] = normalizeImage(nested);
     else result[key] = sanitizeConfig(nested);
   }

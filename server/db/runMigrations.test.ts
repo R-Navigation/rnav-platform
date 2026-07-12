@@ -102,6 +102,26 @@ test("public-site compatibility migration is guarded, typed, and idempotent", as
   assert.doesNotMatch(migration, /DROP (?:TABLE|COLUMN|CONSTRAINT)/i);
 });
 
+test("public-site compatibility validates referenced keys and types before adding foreign keys", async () => {
+  const migration = await import("node:fs/promises").then(({ readFile }) =>
+    readFile(new URL("./migrations/007_public_site_compatibility.sql", import.meta.url), "utf8")
+  );
+
+  const guardIndex = migration.indexOf("DO $key_compatibility$");
+  const foreignKeyIndex = migration.indexOf("FOREIGN KEY");
+
+  assert.ok(guardIndex >= 0, "expected the RNAV key compatibility guard");
+  assert.ok(foreignKeyIndex > guardIndex, "expected key compatibility checks before foreign keys");
+  assert.match(migration, /research_items_id_key_compat/i);
+  assert.match(migration, /team_members_id_key_compat/i);
+  assert.match(migration, /facility_items_id_key_compat/i);
+  assert.match(migration, /research_items.*required cleanup/is);
+  assert.match(migration, /team_members.*required cleanup/is);
+  assert.match(migration, /facility_items.*required cleanup/is);
+  assert.match(migration, /incompatible.*child/is);
+  assert.match(migration, /contype IN \('p', 'u'\)/i);
+});
+
 test("runMigrations acquires the transaction lock before inspecting migration state", async () => {
   const client = new RecordingClient();
 

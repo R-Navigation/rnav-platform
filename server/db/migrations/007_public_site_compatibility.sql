@@ -97,6 +97,87 @@ ALTER TABLE contact_extra_cards
   ADD COLUMN IF NOT EXISTS id bigint, ADD COLUMN IF NOT EXISTS sort_order integer DEFAULT 0,
   ADD COLUMN IF NOT EXISTS title_zh text DEFAULT '', ADD COLUMN IF NOT EXISTS title_en text DEFAULT '', ADD COLUMN IF NOT EXISTS description_zh text DEFAULT '', ADD COLUMN IF NOT EXISTS description_en text DEFAULT '', ADD COLUMN IF NOT EXISTS value_zh text DEFAULT '', ADD COLUMN IF NOT EXISTS value_en text DEFAULT '';
 
+DO $key_compatibility$
+DECLARE
+  relationship record;
+  parent_attnum smallint;
+  parent_type oid;
+  parent_typmod integer;
+  child_type oid;
+  child_typmod integer;
+  has_nulls boolean;
+  has_duplicates boolean;
+BEGIN
+  FOR relationship IN
+    SELECT * FROM (VALUES
+      ('research_items', 'id', 'research_items_id_key_compat', 'research_item_keywords', 'research_item_id'),
+      ('research_items', 'id', 'research_items_id_key_compat', 'research_item_authors', 'research_item_id'),
+      ('research_items', 'id', 'research_items_id_key_compat', 'research_item_links', 'research_item_id'),
+      ('team_members', 'id', 'team_members_id_key_compat', 'team_member_links', 'team_member_id'),
+      ('team_members', 'id', 'team_members_id_key_compat', 'team_member_contacts', 'team_member_id'),
+      ('facility_items', 'id', 'facility_items_id_key_compat', 'facility_item_specs', 'facility_item_id')
+    ) AS required(parent_table, parent_column, key_name, child_table, child_column)
+  LOOP
+    SELECT parent_attribute.attnum, parent_attribute.atttypid, parent_attribute.atttypmod,
+           child_attribute.atttypid, child_attribute.atttypmod
+      INTO parent_attnum, parent_type, parent_typmod, child_type, child_typmod
+    FROM pg_attribute parent_attribute
+    JOIN pg_class parent_class ON parent_class.oid = parent_attribute.attrelid
+    JOIN pg_namespace parent_namespace ON parent_namespace.oid = parent_class.relnamespace
+    JOIN pg_class child_class ON child_class.relname = relationship.child_table
+    JOIN pg_namespace child_namespace ON child_namespace.oid = child_class.relnamespace
+      AND child_namespace.oid = parent_namespace.oid
+    JOIN pg_attribute child_attribute ON child_attribute.attrelid = child_class.oid
+      AND child_attribute.attname = relationship.child_column
+      AND NOT child_attribute.attisdropped
+    WHERE parent_namespace.nspname = current_schema()
+      AND parent_class.relname = relationship.parent_table
+      AND parent_attribute.attname = relationship.parent_column
+      AND NOT parent_attribute.attisdropped;
+
+    IF parent_attnum IS NULL OR child_type IS NULL THEN
+      RAISE EXCEPTION 'RNAV public-site key compatibility: missing %.% or %.% before foreign-key validation',
+        relationship.parent_table, relationship.parent_column, relationship.child_table, relationship.child_column;
+    END IF;
+
+    IF parent_type <> child_type OR parent_typmod <> child_typmod THEN
+      RAISE EXCEPTION 'RNAV public-site key compatibility: incompatible parent %.% type % and child %.% type %; required cleanup must align the column types before adding foreign keys',
+        relationship.parent_table, relationship.parent_column, format_type(parent_type, parent_typmod),
+        relationship.child_table, relationship.child_column, format_type(child_type, child_typmod);
+    END IF;
+
+    IF NOT EXISTS (
+      SELECT 1
+      FROM pg_constraint
+      WHERE conrelid = format('%I.%I', current_schema(), relationship.parent_table)::regclass
+        AND contype IN ('p', 'u')
+        AND conkey = ARRAY[parent_attnum]::smallint[]
+    ) THEN
+      EXECUTE format('SELECT EXISTS (SELECT 1 FROM %I.%I WHERE %I IS NULL)', current_schema(), relationship.parent_table, relationship.parent_column)
+        INTO has_nulls;
+      IF has_nulls THEN
+        RAISE EXCEPTION 'RNAV public-site key compatibility: required cleanup for %.%: NULL values prevent a unique parent key',
+          relationship.parent_table, relationship.parent_column;
+      END IF;
+
+      EXECUTE format('SELECT EXISTS (SELECT 1 FROM %I.%I GROUP BY %I HAVING count(*) > 1)', current_schema(), relationship.parent_table, relationship.parent_column)
+        INTO has_duplicates;
+      IF has_duplicates THEN
+        RAISE EXCEPTION 'RNAV public-site key compatibility: required cleanup for %.%: duplicate values prevent a unique parent key',
+          relationship.parent_table, relationship.parent_column;
+      END IF;
+
+      BEGIN
+        EXECUTE format('ALTER TABLE %I.%I ADD CONSTRAINT %I UNIQUE (%I)', current_schema(), relationship.parent_table, relationship.key_name, relationship.parent_column);
+      EXCEPTION WHEN duplicate_object THEN
+        RAISE EXCEPTION 'RNAV public-site key compatibility: constraint name % already exists but does not uniquely protect %.%; required cleanup must resolve the conflicting constraint',
+          relationship.key_name, relationship.parent_table, relationship.parent_column;
+      END;
+    END IF;
+  END LOOP;
+END
+$key_compatibility$;
+
 DO $constraints$
 BEGIN
   BEGIN ALTER TABLE page_content ADD CONSTRAINT page_content_page_key_key UNIQUE (page_key); EXCEPTION WHEN duplicate_object THEN NULL; END;
