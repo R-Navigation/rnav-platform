@@ -77,3 +77,49 @@ test("invalid requests return 400 before the service runs", async () => {
   assert.equal(response.statusCode, 400);
   assert.deepEqual(response.calls, []);
 });
+
+test("invalid contact entries return 400 before the service runs", async () => {
+  const response = await request("PUT", "/api/site-admin/contact-items", {
+    user: user(["site.content.write"]),
+    body: { items: { primaryChannels: ["email"], socialLinks: [], extraCards: [] }, expectedUpdatedAt: "0" },
+    origin: "same-origin"
+  });
+  assert.equal(response.statusCode, 400);
+  assert.deepEqual(response.calls, []);
+});
+
+test("invalid collection UUIDs and team groups return 400 before the service runs", async () => {
+  const invalidUuid = await request("PUT", "/api/site-admin/research-items", {
+    user: user(["site.content.write"]),
+    body: { items: [{ id: "paper-1", image: { assetId: "nope", src: "/paper.jpg" } }], expectedUpdatedAt: "0" },
+    origin: "same-origin"
+  });
+  assert.equal(invalidUuid.statusCode, 400);
+  assert.deepEqual(invalidUuid.calls, []);
+
+  const invalidGroup = await request("PUT", "/api/site-admin/team-members", {
+    user: user(["site.members.write"]),
+    body: { items: [{ slug: "alice", group: "visitor" }], expectedUpdatedAt: "0" },
+    origin: "same-origin"
+  });
+  assert.equal(invalidGroup.statusCode, 400);
+  assert.deepEqual(invalidGroup.calls, []);
+});
+
+test("duplicate collection IDs and team slugs return 400 before the service runs", async () => {
+  const duplicateId = await request("PUT", "/api/site-admin/news-items", {
+    user: user(["site.content.write"]),
+    body: { items: [{ id: "news-1" }, { id: "news-1" }], expectedUpdatedAt: "0" },
+    origin: "same-origin"
+  });
+  assert.equal(duplicateId.statusCode, 400);
+  assert.deepEqual(duplicateId.calls, []);
+
+  const duplicateSlug = await request("PUT", "/api/site-admin/team-members", {
+    user: user(["site.members.write"]),
+    body: { items: [{ slug: "alice", group: "phd" }, { slug: "alice", group: "alumni" }], expectedUpdatedAt: "0" },
+    origin: "same-origin"
+  });
+  assert.equal(duplicateSlug.statusCode, 400);
+  assert.deepEqual(duplicateSlug.calls, []);
+});

@@ -54,36 +54,76 @@ function inspectJson(value: unknown, context: z.RefinementCtx) {
 
 const safeJson = z.unknown().superRefine(inspectJson);
 const revision = z.string().regex(/^\d+$/).max(30);
+const text = z.string().max(MAX_STRING);
 const identifier = z.string().trim().min(1).max(200);
+const optionalText = text.optional();
+const localized = z.object({ zh: optionalText, en: optionalText }).strict();
+const nullableUuid = z.preprocess((value) => value === "" ? null : value, z.string().uuid().nullable()).optional();
+const image = z.object({ assetId: nullableUuid, src: optionalText, alt: optionalText, dataAlt: optionalText }).strict().nullable().optional();
+const link = z.object({ label: localized.optional(), href: optionalText, icon: optionalText, variant: optionalText }).strict();
+const links = z.array(link).max(MAX_LIST).optional();
+const sortOrder = z.number().int().min(-1_000_000).max(1_000_000).optional();
 
 export const pageRequestSchema = z.object({ content: safeJson, expectedUpdatedAt: revision }).strict();
 
-function collectionSchema(validate: (item: SiteRecord, context: z.RefinementCtx, index: number) => void) {
-  return z.object({ items: z.array(safeJson).max(MAX_LIST).superRefine((items, context) => {
-    items.forEach((item, index) => {
-      if (!item || typeof item !== "object" || Array.isArray(item)) {
-        context.addIssue({ code: z.ZodIssueCode.custom, message: "Item must be an object", path: [index] });
-      } else validate(item as SiteRecord, context, index);
+function uniqueField<T extends z.ZodRawShape>(item: z.ZodObject<T>, field: string, required = true) {
+  return z.object({ items: z.array(item).max(MAX_LIST), expectedUpdatedAt: revision }).strict().superRefine((body, context) => {
+    const seen = new Set<string>();
+    body.items.forEach((entry, index) => {
+      const value = (entry as SiteRecord)[field];
+      if (!required && value === undefined) return;
+      if (seen.has(value)) context.addIssue({ code: z.ZodIssueCode.custom, message: `Duplicate ${field}: ${value}`, path: ["items", index, field] });
+      else seen.add(value);
     });
-  }).transform((items) => items as SiteRecord[]), expectedUpdatedAt: revision }).strict();
+  }).transform((body) => ({ ...body, items: body.items as SiteRecord[] }));
 }
 
-function requireStringField(item: SiteRecord, field: string, context: z.RefinementCtx, index: number) {
-  if (!identifier.safeParse(item[field]).success) context.addIssue({ code: z.ZodIssueCode.custom, message: `${field} is required`, path: [index, field] });
-}
+const researchItem = z.object({
+  id: identifier, sortOrder, title: localized.optional(), year: z.union([z.number().int().min(0).max(9999), z.literal("")]).optional(),
+  venue: localized.optional(), type: optionalText, topic: optionalText, image,
+  pdf: z.object({ assetId: nullableUuid, src: optionalText, label: localized.optional() }).strict().nullable().optional(),
+  keywords: z.array(localized).max(MAX_LIST).optional(),
+  authors: z.array(z.object({ name: localized.optional(), highlight: z.boolean().optional() }).strict()).max(MAX_LIST).optional(),
+  links
+}).strict();
 
-const contactGroup = z.array(safeJson).max(MAX_LIST).transform((items) => items as SiteRecord[]);
+const newsItem = z.object({
+  id: identifier, sortOrder, date: localized.optional(), badge: localized.optional(), badgeTone: optionalText,
+  title: localized.optional(), description: localized.optional(), excerpt: localized.optional(), featured: z.boolean().optional(),
+  image, link: link.nullable().optional()
+}).strict();
+
+const teamGroups = ["advisor", "postdoc", "phd", "master", "undergrad", "alumni"] as const;
+const teamItem = z.object({
+  slug: identifier, group: z.enum(teamGroups), sortOrder,
+  name: localized.optional(), subtitle: localized.optional(), bio: localized.optional(), role: localized.optional(),
+  focus: localized.optional(), degree: localized.optional(), enrollmentYear: optionalText, major: localized.optional(),
+  research: localized.optional(), graduation: localized.optional(), thesis: localized.optional(), destination: localized.optional(),
+  image, links,
+  contacts: z.array(z.object({ label: localized.optional(), value: z.union([text, localized]).optional() }).strict()).max(MAX_LIST).optional()
+}).strict();
+
+const facilityItem = z.object({
+  id: identifier.optional(), category: identifier, sortOrder, icon: optionalText, tag: localized.optional(), title: localized.optional(),
+  description: localized.optional(), specLine: localized.optional(), image,
+  specs: z.array(z.object({ label: localized.optional(), value: localized.optional() }).strict()).max(MAX_LIST).optional()
+}).strict();
+
+const primaryChannel = z.object({ icon: optionalText, title: localized.optional(), value: localized.optional(), href: optionalText }).strict();
+const socialLink = z.object({ icon: optionalText, label: localized.optional(), handle: localized.optional(), href: optionalText }).strict();
+const extraCard = z.object({ title: localized.optional(), description: localized.optional(), value: localized.optional() }).strict();
 
 export const collectionRequestSchemas = {
-  research: collectionSchema((item, context, index) => requireStringField(item, "id", context, index)),
-  news: collectionSchema((item, context, index) => requireStringField(item, "id", context, index)),
-  team: collectionSchema((item, context, index) => {
-    requireStringField(item, "slug", context, index);
-    requireStringField(item, "group", context, index);
-  }),
-  facility: collectionSchema((item, context, index) => requireStringField(item, "category", context, index)),
+  research: uniqueField(researchItem, "id"),
+  news: uniqueField(newsItem, "id"),
+  team: uniqueField(teamItem, "slug"),
+  facility: uniqueField(facilityItem, "id", false),
   contact: z.object({
-    items: z.object({ primaryChannels: contactGroup, socialLinks: contactGroup, extraCards: contactGroup }).strict(),
+    items: z.object({
+      primaryChannels: z.array(primaryChannel).max(MAX_LIST),
+      socialLinks: z.array(socialLink).max(MAX_LIST),
+      extraCards: z.array(extraCard).max(MAX_LIST)
+    }).strict(),
     expectedUpdatedAt: revision
   }).strict()
 };
