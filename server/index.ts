@@ -28,7 +28,7 @@ import { resolveWebDir } from "./webDir.js";
 const env = loadEnv();
 const pool = new pg.Pool({ connectionString: env.databaseUrl });
 const authRepository = createPostgresAuthRepository(pool); const authMiddleware = createAuthMiddleware(authRepository);
-type NextInstance = { prepare(): Promise<void>; getRequestHandler(): import("express").RequestHandler };
+type NextInstance = { prepare(): Promise<void>; getRequestHandler(): (request: import("express").Request, response: import("express").Response) => unknown };
 type CreateNext = (options: NextServerOptions) => NextInstance;
 const createNext = ((nextModule as unknown as { default?: CreateNext }).default ?? nextModule) as unknown as CreateNext;
 const web = createNext({ dev: env.nodeEnv !== "production", dir: resolveWebDir(import.meta.url), hostname: env.host, port: env.port });
