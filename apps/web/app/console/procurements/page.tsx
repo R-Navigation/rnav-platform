@@ -1,5 +1,7 @@
-import { ConsolePlaceholder } from "@/features/console/ConsolePlaceholder";
+import { getConsoleBootstrap } from "@/features/console/bootstrap";
+import { ProcurementConsole } from "@/features/procurement/ProcurementConsole";
 
-export default function ProcurementsPage() {
-  return <ConsolePlaceholder description="采购申请与审批流程将在后续任务中接入。" title="采购申请" />;
+export default async function ProcurementsPage() {
+  const result = await getConsoleBootstrap();
+  return result.status === "authenticated" ? <ProcurementConsole permissions={result.data.permissions} userId={result.data.user.id}/> : null;
 }
