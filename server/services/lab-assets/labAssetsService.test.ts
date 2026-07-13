@@ -290,6 +290,30 @@ test("platform and asset note mutations are scoped to their parent code", async 
   assert.deepEqual(findCall(deleteAssetClient, "DELETE FROM lab_asset_notes")?.values, ["7", "CAM-1"]);
 });
 
+test("missing mutation targets roll back without audit entries", async () => {
+  const operations = [
+    (service: ReturnType<typeof createLabAssetsService>) => service.updateAsset("missing", asset(), "3", "user-1"),
+    (service: ReturnType<typeof createLabAssetsService>) => service.deleteAsset("missing", "3", "user-1"),
+    (service: ReturnType<typeof createLabAssetsService>) => service.updatePlatform("missing", platform(), "3", "user-1"),
+    (service: ReturnType<typeof createLabAssetsService>) => service.updatePlatformType("missing", platformType(), "3", "user-1"),
+    (service: ReturnType<typeof createLabAssetsService>) => service.addAssetNote("missing", { content: { zh: "", en: "" }, sortOrder: 0 }, "3", "user-1"),
+    (service: ReturnType<typeof createLabAssetsService>) => service.addPlatformNote("missing", { content: { zh: "", en: "" }, sortOrder: 0 }, "3", "user-1"),
+    (service: ReturnType<typeof createLabAssetsService>) => service.deleteAssetNote("CAM-1", "999", "3", "user-1"),
+    (service: ReturnType<typeof createLabAssetsService>) => service.deletePlatformNote("DOG-2", "999", "3", "user-1"),
+  ];
+
+  for (const operation of operations) {
+    const client = new FakeClient((call) => {
+      if (/^(UPDATE lab_|DELETE FROM lab_|INSERT INTO lab_(?:asset|platform)_notes)/.test(call.sql.trim())) return { rowCount: 0, rows: [] };
+      return defaultResponse(call);
+    });
+    await assert.rejects(operation(serviceWith(client)),
+      (error: unknown) => error instanceof ConflictError && error.message.includes("not found"));
+    assert.equal(Boolean(findCall(client, "INSERT INTO audit_logs")), false);
+    assert.equal(client.calls.at(-1)?.sql, "ROLLBACK");
+  }
+});
+
 test("page updates use a parameterized JSON upsert inside mutate", async () => {
   const client = new FakeClient();
   const page = { header: { title: { zh: "资产", en: "Assets" } } };

@@ -82,9 +82,24 @@ test("getMigrationFiles returns SQL migrations in lexical order", async () => {
       "008_site_admin_revisions.sql",
       "009_site_admin_roundtrip.sql",
       "010_site_admin_link_variants.sql",
+      "010a_lab_assets_legacy_compat.sql",
       "011_lab_assets_admin.sql"
     ]
   );
+});
+
+test("lab assets compatibility migration fills safe legacy columns before indexes are created", async () => {
+  const migration = await import("node:fs/promises").then(({ readFile }) =>
+    readFile(new URL("./migrations/010a_lab_assets_legacy_compat.sql", import.meta.url), "utf8")
+  );
+
+  assert.match(migration, /ALTER TABLE IF EXISTS lab_platform_types[\s\S]*ADD COLUMN IF NOT EXISTS sort_order integer/i);
+  assert.match(migration, /ALTER TABLE IF EXISTS lab_platforms[\s\S]*ADD COLUMN IF NOT EXISTS type_id bigint/i);
+  assert.match(migration, /ALTER TABLE IF EXISTS lab_assets[\s\S]*ADD COLUMN IF NOT EXISTS share_scope varchar\(32\)/i);
+  assert.match(migration, /ALTER TABLE IF EXISTS lab_platform_notes[\s\S]*ADD COLUMN IF NOT EXISTS content_en text/i);
+  assert.match(migration, /ALTER TABLE IF EXISTS lab_asset_notes[\s\S]*ADD COLUMN IF NOT EXISTS content_en text/i);
+  assert.match(migration, /missing required legacy column/i);
+  assert.doesNotMatch(migration, /DROP (?:TABLE|COLUMN|CONSTRAINT)/i);
 });
 
 test("lab assets migration preserves legacy tables and adds revision state", async () => {

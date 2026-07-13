@@ -259,6 +259,10 @@ export function createLabAssetsService(pool: TransactionPool, dependencies: Depe
     return Boolean(result.rowCount);
   };
 
+  const requireAffected = (result: { rowCount: number | null }, target: string) => {
+    if (!result.rowCount) throw new ConflictError(`${target} not found`);
+  };
+
   return {
     getSnapshot: dependencies.getSnapshot ?? getSnapshot,
     createAsset: (asset: LabAsset, expectedRevision: string, actorId: string) => mutate(
@@ -277,19 +281,20 @@ export function createLabAssetsService(pool: TransactionPool, dependencies: Depe
       async (client) => {
         if (await duplicateCode(client, "lab_assets", asset.code, code)) throw new ConflictError("Asset code already exists");
         const platformId = await findPlatformId(client, asset.currentPlatformCode);
-        await client.query(`UPDATE lab_assets SET code = $1, device_type_zh = $2, device_type_en = $3, model = $4, name_zh = $5,
+        const result = await client.query(`UPDATE lab_assets SET code = $1, device_type_zh = $2, device_type_en = $3, model = $4, name_zh = $5,
           name_en = $6, description_zh = $7, description_en = $8, vendor_serial = $9, current_platform_id = $10,
           status = $11, share_scope = $12, sort_order = $13, updated_at = now() WHERE code = $14`,
         [asset.code, asset.deviceType.zh, asset.deviceType.en, asset.model, asset.name.zh, asset.name.en, asset.description.zh,
           asset.description.en, asset.vendorSerial, platformId, asset.status, asset.shareScope, asset.sortOrder, code]);
+        requireAffected(result, "Asset");
       }),
     deleteAsset: (code: string, expectedRevision: string, actorId: string) => mutate(
       { expectedRevision, actorId, action: "lab-assets.asset.delete", targetType: "lab_assets", targetId: code },
-      async (client) => { await client.query("DELETE FROM lab_assets WHERE code = $1", [code]); }),
+      async (client) => { requireAffected(await client.query("DELETE FROM lab_assets WHERE code = $1", [code]), "Asset"); }),
     addAssetNote: (code: string, note: LabNote, expectedRevision: string, actorId: string) => mutate(
       { expectedRevision, actorId, action: "lab-assets.asset-note.create", targetType: "lab_asset_notes", targetId: code },
-      async (client) => { await client.query(`INSERT INTO lab_asset_notes (asset_id, sort_order, content_zh, content_en)
-        SELECT id, $1, $2, $3 FROM lab_assets WHERE code = $4`, [note.sortOrder, note.content.zh, note.content.en, code]); }),
+      async (client) => { requireAffected(await client.query(`INSERT INTO lab_asset_notes (asset_id, sort_order, content_zh, content_en)
+        SELECT id, $1, $2, $3 FROM lab_assets WHERE code = $4`, [note.sortOrder, note.content.zh, note.content.en, code]), "Asset"); }),
     createPlatformType: (item: LabPlatformType, expectedRevision: string, actorId: string) => mutate(
       { expectedRevision, actorId, action: "lab-assets.platform-type.create", targetType: "lab_platform_types", targetId: item.code },
       async (client) => {
@@ -301,9 +306,10 @@ export function createLabAssetsService(pool: TransactionPool, dependencies: Depe
       { expectedRevision, actorId, action: "lab-assets.platform-type.update", targetType: "lab_platform_types", targetId: code },
       async (client) => {
         if (await duplicateCode(client, "lab_platform_types", item.code, code)) throw new ConflictError("Platform type code already exists");
-        await client.query(`UPDATE lab_platform_types SET code = $1, sort_order = $2, name_zh = $3, name_en = $4,
+        const result = await client.query(`UPDATE lab_platform_types SET code = $1, sort_order = $2, name_zh = $3, name_en = $4,
           description_zh = $5, description_en = $6, updated_at = now() WHERE code = $7`,
         [item.code, item.sortOrder, item.name.zh, item.name.en, item.description.zh, item.description.en, code]);
+        requireAffected(result, "Platform type");
       }),
     deletePlatformType: (code: string, expectedRevision: string, actorId: string) => mutate(
       { expectedRevision, actorId, action: "lab-assets.platform-type.delete", targetType: "lab_platform_types", targetId: code },
@@ -327,9 +333,10 @@ export function createLabAssetsService(pool: TransactionPool, dependencies: Depe
       async (client) => {
         if (await duplicateCode(client, "lab_platforms", item.code, code)) throw new ConflictError("Platform code already exists");
         const typeId = await findPlatformTypeId(client, item.typeCode);
-        await client.query(`UPDATE lab_platforms SET code = $1, type_id = $2, sort_order = $3, name_zh = $4, name_en = $5,
+        const result = await client.query(`UPDATE lab_platforms SET code = $1, type_id = $2, sort_order = $3, name_zh = $4, name_en = $5,
           description_zh = $6, description_en = $7, status = $8, updated_at = now() WHERE code = $9`,
         [item.code, typeId, item.sortOrder, item.name.zh, item.name.en, item.description.zh, item.description.en, item.status, code]);
+        requireAffected(result, "Platform");
       }),
     deletePlatform: (code: string, expectedRevision: string, actorId: string) => mutate(
       { expectedRevision, actorId, action: "lab-assets.platform.delete", targetType: "lab_platforms", targetId: code },
@@ -341,16 +348,16 @@ export function createLabAssetsService(pool: TransactionPool, dependencies: Depe
       }),
     addPlatformNote: (code: string, note: LabNote, expectedRevision: string, actorId: string) => mutate(
       { expectedRevision, actorId, action: "lab-assets.platform-note.create", targetType: "lab_platform_notes", targetId: code },
-      async (client) => { await client.query(`INSERT INTO lab_platform_notes (platform_id, sort_order, content_zh, content_en)
-        SELECT id, $1, $2, $3 FROM lab_platforms WHERE code = $4`, [note.sortOrder, note.content.zh, note.content.en, code]); }),
+      async (client) => { requireAffected(await client.query(`INSERT INTO lab_platform_notes (platform_id, sort_order, content_zh, content_en)
+        SELECT id, $1, $2, $3 FROM lab_platforms WHERE code = $4`, [note.sortOrder, note.content.zh, note.content.en, code]), "Platform"); }),
     deletePlatformNote: (code: string, noteId: string, expectedRevision: string, actorId: string) => mutate(
       { expectedRevision, actorId, action: "lab-assets.platform-note.delete", targetType: "lab_platform_notes", targetId: noteId },
-      async (client) => { await client.query(`DELETE FROM lab_platform_notes n USING lab_platforms p
-        WHERE n.id = $1::bigint AND n.platform_id = p.id AND p.code = $2`, [noteId, code]); }),
+      async (client) => { requireAffected(await client.query(`DELETE FROM lab_platform_notes n USING lab_platforms p
+        WHERE n.id = $1::bigint AND n.platform_id = p.id AND p.code = $2`, [noteId, code]), "Platform note"); }),
     deleteAssetNote: (code: string, noteId: string, expectedRevision: string, actorId: string) => mutate(
       { expectedRevision, actorId, action: "lab-assets.asset-note.delete", targetType: "lab_asset_notes", targetId: noteId },
-      async (client) => { await client.query(`DELETE FROM lab_asset_notes n USING lab_assets a
-        WHERE n.id = $1::bigint AND n.asset_id = a.id AND a.code = $2`, [noteId, code]); }),
+      async (client) => { requireAffected(await client.query(`DELETE FROM lab_asset_notes n USING lab_assets a
+        WHERE n.id = $1::bigint AND n.asset_id = a.id AND a.code = $2`, [noteId, code]), "Asset note"); }),
     updatePage: (page: unknown, expectedRevision: string, actorId: string) => mutate(
       { expectedRevision, actorId, action: "lab-assets.page.update", targetType: "page_content", targetId: "lab_assets_page" },
       async (client) => { await client.query(`INSERT INTO page_content (page_key, content_json, updated_at) VALUES ($1, $2::jsonb, now())
