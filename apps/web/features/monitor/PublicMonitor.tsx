@@ -1,0 +1,30 @@
+"use client";
+
+import dynamic from "next/dynamic";
+import { useMemo, useState } from "react";
+import { useMonitorData } from "./useMonitorData";
+import type { MonitorDevice } from "./model";
+
+const MonitorMap = dynamic(() => import("./MonitorMap").then((module) => module.MonitorMap), { ssr: false, loading: () => <div className="grid h-full min-h-80 place-items-center bg-slate-900 text-sm text-slate-400">地图加载中</div> });
+const metric = "border-l-2 border-cyan-400 bg-slate-900 px-4 py-3";
+
+function DeviceDetail({ device }: { device: MonitorDevice }) {
+  const state = device.currentState;
+  return <div className="space-y-5"><div><p className="text-xs font-bold uppercase text-cyan-300">Selected device</p><h2 className="mt-2 text-2xl font-bold text-white">{device.displayName}</h2><p className="mt-1 font-mono text-xs text-slate-400">{device.code} · {device.model || "未标注型号"}</p></div>
+    <div className="grid grid-cols-2 gap-px bg-slate-700">{[["电量", state.systemState.batteryPct === null ? "--" : `${state.systemState.batteryPct}%`], ["信号", state.systemState.signalPct === null ? "--" : `${state.systemState.signalPct}%`], ["模式", state.taskState.mode || "--"], ["任务", state.taskState.missionStatus || "--"], ["速度", state.geoState.speedMps === null ? "--" : `${state.geoState.speedMps} m/s`], ["航向", state.geoState.headingDeg === null ? "--" : `${state.geoState.headingDeg}°`]].map(([label, value]) => <div className="bg-slate-900 p-3" key={label}><span className="text-xs text-slate-500">{label}</span><strong className="mt-1 block text-sm text-slate-100">{value}</strong></div>)}</div>
+    <p className="text-sm leading-6 text-slate-400">{device.descriptionZh || "暂无设备说明。"}</p></div>;
+}
+
+export function PublicMonitor() {
+  const { connection, error, refresh, snapshot, status } = useMonitorData("public");
+  const [query, setQuery] = useState(""); const [category, setCategory] = useState("all"); const [selectedKey, setSelectedKey] = useState("");
+  const devices = useMemo(() => snapshot?.devices.filter((device) => (category === "all" || device.category?.code === category) && `${device.code} ${device.displayName} ${device.model}`.toLowerCase().includes(query.toLowerCase())) ?? [], [category, query, snapshot]);
+  const selected = devices.find((device) => (device.id || device.code) === selectedKey) ?? devices[0];
+  if (status === "loading" && !snapshot) return <section className="grid min-h-[60vh] place-items-center bg-slate-950 text-slate-300">正在连接监控服务...</section>;
+  if (!snapshot) return <section className="grid min-h-[60vh] place-items-center bg-slate-950 px-5 text-center text-slate-300"><div><h1 className="text-2xl font-bold text-white">监控服务暂时不可用</h1><p className="mt-3">{error}</p><button className="mt-6 border border-cyan-500 px-4 py-2 text-sm font-bold text-cyan-200" onClick={() => void refresh()} type="button">重试</button></div></section>;
+  return <section className="bg-slate-950 text-slate-200"><div className="mx-auto max-w-[1600px] px-4 py-6 sm:px-6">
+    <header className="flex flex-wrap items-end justify-between gap-5 border-b border-slate-700 pb-5"><div><p className="text-xs font-bold uppercase text-cyan-300">RNAV Live Operations</p><h1 className="mt-2 font-serif text-3xl font-bold text-white sm:text-4xl">机器人运行监控</h1><p className="mt-2 text-sm text-slate-300">公开设备状态、位置与任务概览</p></div><div className="flex items-center gap-3 text-xs"><span className={`h-2.5 w-2.5 ${connection === "connected" ? "bg-emerald-400" : "bg-amber-400"}`} /><span>{connection === "connected" ? "实时连接" : "轮询恢复"}</span><span className="text-slate-300">{snapshot.generatedAt ? new Date(snapshot.generatedAt).toLocaleString("zh-CN") : "--"}</span></div></header>
+    <div className="mt-5 grid gap-px border border-slate-700 bg-slate-700 sm:grid-cols-3"><div className={metric}><strong className="font-mono text-3xl text-white">{snapshot.summary.onlineDeviceCount}</strong><span className="ml-2 text-xs text-slate-400">在线设备</span></div><div className={metric}><strong className="font-mono text-3xl text-white">{snapshot.summary.totalDeviceCount}</strong><span className="ml-2 text-xs text-slate-400">公开设备</span></div><div className={metric}><strong className="font-mono text-3xl text-white">{snapshot.summary.alertCount}</strong><span className="ml-2 text-xs text-slate-400">活动告警</span></div></div>
+    <div className="mt-5 grid min-h-[620px] gap-px bg-slate-700 lg:grid-cols-[300px_minmax(0,1fr)_320px]"><aside className="bg-slate-900 p-4"><div className="grid gap-3"><input aria-label="搜索设备" className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" onChange={(event) => setQuery(event.target.value)} placeholder="搜索设备" value={query}/><select aria-label="设备类别" className="border border-slate-700 bg-slate-950 px-3 py-2 text-sm" onChange={(event) => setCategory(event.target.value)} value={category}><option value="all">全部类别</option>{snapshot.categories.map((item) => <option key={item.code} value={item.code}>{item.nameZh || item.code}</option>)}</select></div><div className="mt-4 space-y-2">{devices.map((device) => { const key = device.id || device.code; return <button className={`w-full border px-3 py-3 text-left ${key === (selected?.id || selected?.code) ? "border-cyan-400 bg-cyan-950/40" : "border-slate-700 bg-slate-950 hover:border-slate-500"}`} key={key} onClick={() => setSelectedKey(key)} type="button"><div className="flex items-center justify-between gap-3"><strong className="text-sm text-white">{device.displayName}</strong><span className={`h-2.5 w-2.5 ${device.currentState.isOnline ? "bg-emerald-400" : "bg-slate-500"}`}/></div><p className="mt-1 font-mono text-xs text-slate-300">{device.code}</p></button>; })}</div></aside><div className="min-h-96 bg-slate-900"> <MonitorMap devices={snapshot.devices} onSelect={setSelectedKey} selectedKey={selected?.id || selected?.code || ""} settings={snapshot.settings}/></div><aside className="bg-slate-900 p-5">{selected ? <DeviceDetail device={selected}/> : <p className="text-sm text-slate-300">暂无公开设备。</p>}</aside></div>
+  </div></section>;
+}

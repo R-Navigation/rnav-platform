@@ -1,5 +1,8 @@
-import { PublicRouteShell } from "@/features/public/PublicRouteShell";
+import { PublicPage } from "@/features/public-site/PublicPage";
+import { fallbackBootstrap, getPublicData } from "@/features/public-site/data";
+import { PublicMonitor } from "@/features/monitor/PublicMonitor";
 
-export default function MonitorPage() {
-  return <PublicRouteShell description="查看公开设备与实验环境运行状态。" title="运行监控" />;
+export default async function MonitorPage() {
+  const bootstrap = await getPublicData("bootstrap", fallbackBootstrap);
+  return <PublicPage bootstrap={bootstrap}><PublicMonitor /></PublicPage>;
 }

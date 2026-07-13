@@ -1,5 +1,7 @@
-import { ConsolePlaceholder } from "@/features/console/ConsolePlaceholder";
+import { getConsoleBootstrap } from "@/features/console/bootstrap";
+import { ConsoleMonitor } from "@/features/monitor/ConsoleMonitor";
 
-export default function ConsoleMonitorPage() {
-  return <ConsolePlaceholder description="设备监控管理功能将在后续任务中接入。" title="监控管理" />;
+export default async function ConsoleMonitorPage() {
+  const result = await getConsoleBootstrap();
+  return <ConsoleMonitor permissions={result.status === "authenticated" ? result.data.permissions : []}/>;
 }

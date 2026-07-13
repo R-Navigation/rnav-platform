@@ -11,7 +11,7 @@ export default async function Page() {
     getPublicData("home", homeFallback),
     getPublicData("research", researchFallback),
     getPublicData("news", newsFallback),
-    getOptionalPublicData("/monitor/api/public/homepage-snapshot?limit=6")
+    getOptionalPublicData("/api/monitor/public/homepage-snapshot?limit=6")
   ]);
   const degraded = home.degraded || research.degraded || news.degraded;
   return <PublicPage bootstrap={bootstrap} degraded={degraded}><HomePage data={{ home: home.data, research: research.data, news: news.data, monitorPreview: sanitizeMonitorPreview(rawMonitorPreview) }}/></PublicPage>;
