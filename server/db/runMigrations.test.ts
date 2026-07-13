@@ -81,9 +81,26 @@ test("getMigrationFiles returns SQL migrations in lexical order", async () => {
       "007_public_site_compatibility.sql",
       "008_site_admin_revisions.sql",
       "009_site_admin_roundtrip.sql",
-      "010_site_admin_link_variants.sql"
+      "010_site_admin_link_variants.sql",
+      "011_lab_assets_admin.sql"
     ]
   );
+});
+
+test("lab assets migration preserves legacy tables and adds revision state", async () => {
+  const migration = await import("node:fs/promises").then(({ readFile }) =>
+    readFile(new URL("./migrations/011_lab_assets_admin.sql", import.meta.url), "utf8")
+  );
+
+  for (const table of ["lab_platform_types", "lab_platforms", "lab_assets", "lab_platform_notes", "lab_asset_notes"]) {
+    assert.match(migration, new RegExp(`CREATE TABLE IF NOT EXISTS ${table}`, "i"));
+  }
+  assert.match(migration, /INSERT INTO site_content_revisions \(module_key\)[\s\S]*'lab-assets'/i);
+  assert.match(migration, /ON CONFLICT \(module_key\) DO NOTHING/i);
+  assert.match(migration, /information_schema\.columns/i);
+  assert.match(migration, /incompatible type/i);
+  assert.match(migration, /CREATE INDEX IF NOT EXISTS idx_lab_assets_platform_sort/i);
+  assert.doesNotMatch(migration, /DROP (?:TABLE|COLUMN|CONSTRAINT)/i);
 });
 
 test("site-admin round-trip migration is additive, idempotent, and revision guarded", async () => {
