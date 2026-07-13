@@ -62,6 +62,22 @@ test("device ingest accepts device credentials without a member session", async 
   assert.deepEqual(response.calls, ["ingestTelemetry"]);
 });
 
+test("legacy monitor ingest paths remain available during device rollout", async () => {
+  const reportedAt = new Date().toISOString();
+  const telemetry = await request("POST", "/monitor/api/ingest/v1/telemetry", {
+    headers: { authorization: "Bearer device-secret" },
+    body: { deviceCode: "DOG-1", reportedAt, taskState: {}, systemState: {}, geoState: { lng: 114.3, lat: 30.5 } }
+  });
+  const heartbeat = await request("POST", "/monitor/api/ingest/v1/heartbeat", {
+    headers: { "x-device-token": "device-secret" },
+    body: { deviceCode: "DOG-1", reportedAt }
+  });
+  assert.equal(telemetry.status, 200);
+  assert.deepEqual(telemetry.calls, ["ingestTelemetry"]);
+  assert.equal(heartbeat.status, 200);
+  assert.deepEqual(heartbeat.calls, ["ingestHeartbeat"]);
+});
+
 test("monitor domain errors map to stable client responses", async () => {
   const app = express(); app.use(express.json());
   const service = {

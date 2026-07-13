@@ -62,4 +62,4 @@ npm run db:verify-migration -- \
   --target-db "$DATABASE_URL"
 ```
 
-See `docs/cutover-runbook.md` for staging rehearsal, nginx switch, and rollback.
+完整的 staging 演练、生产数据导出、账号准备、systemd 部署、nginx 切换、验收与回滚步骤见 [`docs/cutover-runbook.md`](docs/cutover-runbook.md)。

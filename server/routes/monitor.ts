@@ -65,9 +65,14 @@ export function createMonitorRouter({ authMiddleware, service, trustProxy }: { a
   router.put("/api/monitor/console/categories/:id", requirePermission("monitor.devices.write"), sameOrigin, async (request, response, next) => { const id = parsedId(request.params.id, response); if (!id) return; try { response.json(await service.updateCategory(id, categoryRequestSchema.parse(request.body), request.authUser!.id)); } catch (error) { if (error instanceof ZodError) response.status(400).json({ error: "Validation failed", issues: error.issues }); else next(error); } });
   router.put("/api/monitor/console/settings", requirePermission("monitor.settings.write"), sameOrigin, handler(settingsRequestSchema, (body, request) => service.updateSettings(body, request.authUser!.id)));
 
-  router.post("/api/monitor/ingest/v1/heartbeat", handler(ingestHeartbeatSchema, (body, request) => service.ingestHeartbeat(body, deviceToken(request))));
-  router.post("/api/monitor/ingest/v1/telemetry", handler(ingestTelemetrySchema, (body, request) => service.ingestTelemetry(body, deviceToken(request))));
-  router.post("/api/monitor/ingest/v1/event", handler(ingestEventSchema, (body, request) => service.ingestEvent(body, deviceToken(request))));
+  const heartbeat = handler(ingestHeartbeatSchema, (body, request) => service.ingestHeartbeat(body, deviceToken(request)));
+  const telemetry = handler(ingestTelemetrySchema, (body, request) => service.ingestTelemetry(body, deviceToken(request)));
+  const event = handler(ingestEventSchema, (body, request) => service.ingestEvent(body, deviceToken(request)));
+  for (const prefix of ["/api/monitor", "/monitor/api"]) {
+    router.post(`${prefix}/ingest/v1/heartbeat`, heartbeat);
+    router.post(`${prefix}/ingest/v1/telemetry`, telemetry);
+    router.post(`${prefix}/ingest/v1/event`, event);
+  }
   router.use(((error, _request, response, next) => {
     if (error instanceof DeviceAuthenticationError) { response.status(401).json({ error: "Invalid device credentials" }); return; }
     if (error instanceof MonitorValidationError) { response.status(400).json({ error: error.message }); return; }

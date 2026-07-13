@@ -23,6 +23,7 @@ import { createPostgresPublicSiteRepository } from "./services/public-site/postg
 import { createPublicSiteService } from "./services/public-site/service.js";
 import { createPostgresSiteAdminRepository } from "./services/site-admin/postgres-repository.js";
 import { createSiteAdminService } from "./services/site-admin/service.js";
+import { resolveWebDir } from "./webDir.js";
 
 const env = loadEnv();
 const pool = new pg.Pool({ connectionString: env.databaseUrl });
@@ -30,7 +31,7 @@ const authRepository = createPostgresAuthRepository(pool); const authMiddleware 
 type NextInstance = { prepare(): Promise<void>; getRequestHandler(): import("express").RequestHandler };
 type CreateNext = (options: NextServerOptions) => NextInstance;
 const createNext = ((nextModule as unknown as { default?: CreateNext }).default ?? nextModule) as unknown as CreateNext;
-const web = createNext({ dev: env.nodeEnv !== "production", dir: new URL("../apps/web", import.meta.url).pathname, hostname: env.host, port: env.port });
+const web = createNext({ dev: env.nodeEnv !== "production", dir: resolveWebDir(import.meta.url), hostname: env.host, port: env.port });
 await web.prepare();
 
 const publicService = createPublicSiteService(createPostgresPublicSiteRepository(pool));
