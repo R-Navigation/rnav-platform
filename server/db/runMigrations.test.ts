@@ -83,9 +83,31 @@ test("getMigrationFiles returns SQL migrations in lexical order", async () => {
       "009_site_admin_roundtrip.sql",
       "010_site_admin_link_variants.sql",
       "010a_lab_assets_legacy_compat.sql",
+      "010b_lab_assets_constraints.sql",
       "011_lab_assets_admin.sql"
     ]
   );
+});
+
+test("lab assets constraint migration validates complete legacy shapes and repairs relational constraints", async () => {
+  const migration = await import("node:fs/promises").then(({ readFile }) =>
+    readFile(new URL("./migrations/010b_lab_assets_constraints.sql", import.meta.url), "utf8")
+  );
+
+  assert.match(migration, /information_schema\.columns[\s\S]*is_nullable/i);
+  assert.match(migration, /character_maximum_length IS DISTINCT FROM 191/i);
+  assert.match(migration, /column_name IN \('type_id','current_platform_id'\)[\s\S]*is_nullable <> 'YES'/i);
+  assert.match(migration, /column_default[\s\S]*nextval/i);
+  assert.match(migration, /ADD CONSTRAINT lab_platform_types_pkey PRIMARY KEY/i);
+  assert.match(migration, /ADD CONSTRAINT lab_assets_code_key UNIQUE/i);
+  assert.match(migration, /ADD CONSTRAINT lab_assets_current_platform_id_fkey FOREIGN KEY/i);
+  assert.match(migration, /ON DELETE SET NULL/i);
+  assert.match(migration, /ON DELETE CASCADE/i);
+  assert.match(migration, /confrelid[\s\S]*confdeltype/i);
+  assert.match(migration, /contype = 'p'[\s\S]*conkey[\s\S]*attname = 'id'/i);
+  assert.match(migration, /lab_platform_notes[\s\S]*conkey[\s\S]*attname = 'platform_id'/i);
+  assert.match(migration, /lab_asset_notes[\s\S]*conkey[\s\S]*attname = 'asset_id'/i);
+  assert.doesNotMatch(migration, /DROP (?:TABLE|COLUMN|CONSTRAINT)/i);
 });
 
 test("lab assets compatibility migration fills safe legacy columns before indexes are created", async () => {

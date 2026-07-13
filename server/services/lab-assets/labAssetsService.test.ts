@@ -276,6 +276,22 @@ test("unreferenced platform types and platforms delete by resolved id", async ()
   assert.deepEqual(findCall(platformClient, "DELETE FROM lab_platforms")?.values, ["22"]);
 });
 
+test("concurrent platform and type deletion rolls back instead of auditing false success", async () => {
+  for (const kind of ["type", "platform"] as const) {
+    const client = new FakeClient((call) => {
+      if (call.sql.includes("SELECT 1 AS exists")) return { rowCount: 0, rows: [] };
+      if (call.sql.includes("DELETE FROM lab_platform")) return { rowCount: 0, rows: [] };
+      return defaultResponse(call);
+    });
+    const operation = kind === "type"
+      ? serviceWith(client).deletePlatformType("robot", "3", "user-1")
+      : serviceWith(client).deletePlatform("DOG-2", "3", "user-1");
+    await assert.rejects(operation, (error: unknown) => error instanceof ConflictError && error.message.includes("not found"));
+    assert.equal(Boolean(findCall(client, "INSERT INTO audit_logs")), false);
+    assert.equal(client.calls.at(-1)?.sql, "ROLLBACK");
+  }
+});
+
 test("platform and asset note mutations are scoped to their parent code", async () => {
   const platformClient = new FakeClient();
   await serviceWith(platformClient).addPlatformNote("DOG-2", { content: { zh: "维护", en: "Maintenance" }, sortOrder: 0 }, "3", "user-1");

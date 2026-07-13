@@ -317,7 +317,7 @@ export function createLabAssetsService(pool: TransactionPool, dependencies: Depe
         const typeId = await findPlatformTypeId(client, code);
         const referenced = await client.query("SELECT 1 AS exists FROM lab_platforms WHERE type_id = $1 LIMIT 1", [typeId]);
         if (referenced.rowCount) throw new ConflictError("Platform type is still referenced");
-        await client.query("DELETE FROM lab_platform_types WHERE id = $1", [typeId]);
+        requireAffected(await client.query("DELETE FROM lab_platform_types WHERE id = $1", [typeId]), "Platform type");
       }),
     createPlatform: (item: LabPlatform, expectedRevision: string, actorId: string) => mutate(
       { expectedRevision, actorId, action: "lab-assets.platform.create", targetType: "lab_platforms", targetId: item.code },
@@ -344,7 +344,7 @@ export function createLabAssetsService(pool: TransactionPool, dependencies: Depe
         const platformId = await findPlatformId(client, code);
         const referenced = await client.query("SELECT 1 AS exists FROM lab_assets WHERE current_platform_id = $1 LIMIT 1", [platformId]);
         if (referenced.rowCount) throw new ConflictError("Platform is still referenced");
-        await client.query("DELETE FROM lab_platforms WHERE id = $1", [platformId]);
+        requireAffected(await client.query("DELETE FROM lab_platforms WHERE id = $1", [platformId]), "Platform");
       }),
     addPlatformNote: (code: string, note: LabNote, expectedRevision: string, actorId: string) => mutate(
       { expectedRevision, actorId, action: "lab-assets.platform-note.create", targetType: "lab_platform_notes", targetId: code },
