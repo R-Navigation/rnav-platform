@@ -1,0 +1,14 @@
+[
+  {
+    "username": "aaron",
+    "displayName": "Aaron",
+    "passwordHash": "site-hash",
+    "baseTier": "super",
+    "status": "active",
+    "permissions": [],
+    "sources": [
+      "website",
+      "monitor"
+    ]
+  }
+]
