@@ -84,9 +84,28 @@ test("getMigrationFiles returns SQL migrations in lexical order", async () => {
       "010_site_admin_link_variants.sql",
       "010a_lab_assets_legacy_compat.sql",
       "010b_lab_assets_constraints.sql",
-      "011_lab_assets_admin.sql"
+      "011_lab_assets_admin.sql",
+      "012_monitor.sql"
     ]
   );
+});
+
+test("monitor migration preserves the realtime domain without legacy admin accounts", async () => {
+  const migration = await import("node:fs/promises").then(({ readFile }) =>
+    readFile(new URL("./migrations/012_monitor.sql", import.meta.url), "utf8")
+  );
+  for (const table of ["device_categories", "devices", "device_current_state", "device_telemetry", "device_events", "device_alerts", "monitor_service_status", "dashboard_settings"]) {
+    assert.match(migration, new RegExp(`CREATE TABLE IF NOT EXISTS ${table}`, "i"));
+  }
+  assert.match(migration, /is_public boolean NOT NULL DEFAULT true/i);
+  assert.match(migration, /ALTER TABLE IF EXISTS devices[\s\S]*ADD COLUMN IF NOT EXISTS is_public boolean NOT NULL DEFAULT true/i);
+  assert.match(migration, /auth_token_hash text NOT NULL/i);
+  assert.match(migration, /legacy_acknowledged_by/i);
+  assert.match(migration, /FOREIGN KEY \(acknowledged_by\) REFERENCES users\(id\) ON DELETE SET NULL/i);
+  assert.doesNotMatch(migration, /NOT VALID/i);
+  assert.match(migration, /idx_device_telemetry_device_reported_at/i);
+  assert.doesNotMatch(migration, /CREATE TABLE IF NOT EXISTS monitor_users/i);
+  assert.doesNotMatch(migration, /DROP (?:TABLE|COLUMN|CONSTRAINT)/i);
 });
 
 test("lab assets constraint migration validates complete legacy shapes and repairs relational constraints", async () => {
