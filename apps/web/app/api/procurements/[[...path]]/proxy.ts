@@ -23,6 +23,10 @@ export function validateRequestSize(request: Request): Response | null {
   return null;
 }
 
+export function validateBodySize(body: ArrayBuffer): Response | null {
+  return body.byteLength > maximumBodyBytes ? Response.json({ error: "Request body too large" }, { status: 413 }) : null;
+}
+
 export function createUpstreamHeaders(request: Request) {
   const incomingUrl = new URL(request.url); const headers = new Headers();
   const rawCookie = request.headers.get("cookie") ?? "";

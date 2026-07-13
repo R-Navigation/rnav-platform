@@ -9,3 +9,7 @@ export function shouldSyncMarkers(mapReady: boolean) {
 export function shouldClearSnapshot(scope: "public" | "console", status: number | undefined) {
   return scope === "console" && (status === 401 || status === 403);
 }
+
+export function shouldConnectRealtime(scope: "public" | "console", permissions: string[]) {
+  return scope === "public" || permissions.includes("monitor.devices.read") || permissions.includes("monitor.devices.write");
+}

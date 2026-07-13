@@ -12,11 +12,6 @@ export class ProcurementNotFoundError extends Error {}
 export class ProcurementAccessError extends Error {}
 export class ProcurementConflictError extends Error {}
 
-function requestNo(now: Date) {
-  const date = now.toISOString().slice(0, 10).replaceAll("-", "");
-  return `PR-${date}-${Math.floor(Math.random() * 10000).toString().padStart(4, "0")}`;
-}
-
 async function withTransaction<T>(pool: Pick<Pool, "connect">, invoke: (client: PoolClient) => Promise<T>) {
   const client = await pool.connect();
   let started = false;
@@ -63,10 +58,10 @@ export function createProcurementService(pool: Pick<Pool, "connect" | "query">, 
 
     async createRequest(input: CreateInput, actorId: string) {
       return withTransaction(pool, async (client) => {
-        const total = input.items.reduce((sum, item) => sum + item.quantity * (item.estimatedUnitPrice ?? 0), 0);
+        const total = input.items.reduce((sum, item) => sum + Math.round(item.quantity * (item.estimatedUnitPrice ?? 0) * 100), 0) / 100;
         const created = await client.query(`INSERT INTO procurement_requests
           (request_no, requester_id, title, reason, status, total_estimated_amount, submitted_at)
-          VALUES ($1, $2, $3, $4, 'submitted', $5, $6) RETURNING id, request_no`, [requestNo(now()), actorId, input.title, input.reason, total, now()]);
+          VALUES ('PR-' || to_char($1::timestamptz, 'YYYYMMDD') || '-' || lpad(nextval('procurement_request_no_seq')::text, 6, '0'), $2, $3, $4, 'submitted', $5, $1) RETURNING id, request_no`, [now(), actorId, input.title, input.reason, total]);
         const row = created.rows[0];
         for (const [index, item] of input.items.entries()) await client.query(`INSERT INTO procurement_request_items
           (request_id, item_name, spec, quantity, estimated_unit_price, vendor, url, remark, sort_order)
@@ -84,13 +79,19 @@ export function createProcurementService(pool: Pick<Pool, "connect" | "query">, 
         if (!request) throw new ProcurementNotFoundError("Procurement request not found");
         if (input.action === "cancel") {
           if (request.requester_id !== actor.id) throw new ProcurementAccessError("Only the requester can cancel this request");
-        } else if (!actor.permissions.includes(requiredPermissionForTransition(input.action))) throw new ProcurementAccessError("Permission denied");
+        } else {
+          if (request.requester_id === actor.id && (input.action === "approve" || input.action === "reject")) throw new ProcurementAccessError("Requesters cannot review their own request");
+          if (!actor.permissions.includes(requiredPermissionForTransition(input.action))) throw new ProcurementAccessError("Permission denied");
+        }
         let next: ProcurementStatus;
         try { next = validateTransition(request.status as ProcurementStatus, input.action); }
         catch { throw new ProcurementConflictError("Procurement transition is not allowed"); }
-        const timestamps = { approved: "reviewed_at", rejected: "reviewed_at", purchasing: "purchased_at", purchased: "purchased_at", received: "received_at", closed: "closed_at", cancelled: "updated_at" } as const;
+        const timestamps = { approved: "reviewed_at", rejected: "reviewed_at", purchased: "purchased_at", received: "received_at", closed: "closed_at" } as const;
         const timestamp = timestamps[next as keyof typeof timestamps];
-        await client.query(`UPDATE procurement_requests SET status = $2, updated_at = $3${timestamp ? `, ${timestamp} = $3` : ""}${next === "approved" || next === "rejected" ? ", reviewed_by = $4" : ""}${next === "purchasing" || next === "purchased" ? ", purchased_by = $4" : ""} WHERE id = $1`, [id, next, now(), actor.id]);
+        const actorColumn = next === "approved" || next === "rejected" ? "reviewed_by" : next === "purchasing" || next === "purchased" ? "purchased_by" : null;
+        const values: unknown[] = [id, next, now()];
+        if (actorColumn) values.push(actor.id);
+        await client.query(`UPDATE procurement_requests SET status = $2, updated_at = $3${timestamp ? `, ${timestamp} = $3` : ""}${actorColumn ? `, ${actorColumn} = $4` : ""} WHERE id = $1`, values);
         await client.query("INSERT INTO procurement_status_history (request_id, from_status, to_status, actor_id, note) VALUES ($1,$2,$3,$4,$5)", [id, request.status, next, actor.id, input.note || null]);
         await client.query("INSERT INTO audit_logs (actor_id, action, target_type, target_id, detail) VALUES ($1, 'procurement.transition', 'procurement_request', $2, $3)", [actor.id, id, JSON.stringify({ from: request.status, to: next })]);
         return { id, status: next };

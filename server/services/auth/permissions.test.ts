@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   deriveDisplayTier,
   getConsoleModules,
+  getEffectivePermissions,
   knownPermissionKeys
 } from "./permissions.js";
 
@@ -28,6 +29,12 @@ test("getConsoleModules returns procurement for normal members", () => {
     "procurements.read_own"
   ]);
   assert.ok(modules.some((module) => module.key === "procurements"));
+});
+
+test("procurement operators inherit read-all access needed for their workflow", () => {
+  for (const permission of ["procurements.review", "procurements.purchase", "procurements.close"]) {
+    assert.ok(getEffectivePermissions([permission]).includes("procurements.read_all"));
+  }
 });
 
 test("getConsoleModules returns users for permission managers", () => {

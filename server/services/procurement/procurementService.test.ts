@@ -8,7 +8,7 @@ function client(rows: Record<string, unknown>[] = []) {
     queries,
     query: async (sql: string, values?: readonly unknown[]) => {
       queries.push({ sql, values });
-      if (sql.includes("RETURNING id, request_no")) return { rows: [{ id: "00000000-0000-4000-8000-000000000099", request_no: "PR-20260712-0001" }], rowCount: 1 };
+      if (sql.includes("RETURNING id, request_no")) return { rows: [{ id: "00000000-0000-4000-8000-000000000099", request_no: "PR-20260712-000001" }], rowCount: 1 };
       if (sql.includes("FOR UPDATE")) return { rows, rowCount: rows.length };
       return { rows: [], rowCount: 1 };
     },
@@ -21,7 +21,7 @@ test("creating a submitted request persists items, history, and audit atomically
   const db = client();
   const service = createProcurementService({ connect: async () => db } as never, { now: () => new Date("2026-07-12T08:00:00Z") });
   const result = await service.createRequest({ title: "相机", reason: "实验", items: [{ itemName: "D455", spec: "", quantity: 2, estimatedUnitPrice: 1500 }] }, "00000000-0000-4000-8000-000000000001");
-  assert.equal(result.requestNo, "PR-20260712-0001");
+  assert.equal(result.requestNo, "PR-20260712-000001");
   assert.ok(db.queries.some((query) => query.sql.includes("procurement_request_items")));
   assert.ok(db.queries.some((query) => query.sql.includes("procurement_status_history")));
   assert.ok(db.queries.some((query) => query.sql.includes("audit_logs")));
@@ -36,8 +36,25 @@ test("a requester cannot cancel another member's submitted request", async () =>
 });
 
 test("invalid current state rolls back without status history", async () => {
-  const db = client([{ id: "request-1", requester_id: "actor", status: "closed" }]);
+  const db = client([{ id: "request-1", requester_id: "other", status: "closed" }]);
   const service = createProcurementService({ connect: async () => db } as never);
   await assert.rejects(service.transition("00000000-0000-4000-8000-000000000099", { action: "approve", note: "" }, { id: "actor", permissions: ["procurements.review"] }), ProcurementConflictError);
   assert.equal(db.queries.filter((query) => query.sql.includes("procurement_status_history")).length, 0);
+});
+
+test("reviewers cannot approve their own request", async () => {
+  const db = client([{ id: "request-1", requester_id: "actor", status: "submitted" }]);
+  const service = createProcurementService({ connect: async () => db } as never);
+  await assert.rejects(service.transition("00000000-0000-4000-8000-000000000099", { action: "approve", note: "" }, { id: "actor", permissions: ["procurements.review"] }), ProcurementAccessError);
+});
+
+test("transition updates bind exactly the placeholders used by each status", async () => {
+  for (const [status, action] of [["purchased", "mark_received"], ["received", "close"], ["submitted", "cancel"]] as const) {
+    const db = client([{ id: "request-1", requester_id: "actor", status }]);
+    const service = createProcurementService({ connect: async () => db } as never);
+    await service.transition("00000000-0000-4000-8000-000000000099", { action, note: "" }, { id: "actor", permissions: ["procurements.purchase", "procurements.close"] });
+    const update = db.queries.find((query) => query.sql.startsWith("UPDATE procurement_requests"))!;
+    const placeholders = [...update.sql.matchAll(/\$(\d+)/g)].map((match) => Number(match[1]));
+    assert.equal(Math.max(...placeholders), update.values?.length);
+  }
 });

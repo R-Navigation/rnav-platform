@@ -22,7 +22,7 @@ function categoryDraft(category: MonitorCategory): CategoryDraft { return { id: 
 function Metric({ label, value }: { label: string; value: number }) { return <div className="border-l-2 border-cyan-600 bg-white px-4 py-3"><strong className="block font-mono text-2xl text-slate-950">{value}</strong><span className="mt-1 block text-xs font-semibold text-slate-500">{label}</span></div>; }
 
 export function ConsoleMonitor({ permissions }: Props) {
-  const capability = canManageMonitor(permissions); const { connection, error, refresh, snapshot, status } = useMonitorData("console");
+  const capability = canManageMonitor(permissions); const { connection, error, refresh, snapshot, status } = useMonitorData("console", permissions);
   const views = useMemo(() => ["overview", ...(capability.devices ? ["devices", "categories"] : []), ...(capability.settings ? ["settings"] : [])] as View[], [capability.devices, capability.settings]);
   const [view, setView] = useState<View>("overview"); const [device, setDevice] = useState<DeviceDraft | null>(null); const [category, setCategory] = useState<CategoryDraft | null>(null); const [message, setMessage] = useState(""); const [busy, setBusy] = useState(false);
 

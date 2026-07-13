@@ -1,11 +1,13 @@
 import type { NextConfig } from "next";
-import { labAssetsRedirects } from "./features/console/lab-assets/model";
-import { adminRedirects } from "./features/console/site/model";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   async redirects() {
-    return [...adminRedirects, ...labAssetsRedirects];
+    return [
+      { source: "/admin", destination: "/console/site", permanent: true },
+      { source: "/admin/dashboard", destination: "/console/site", permanent: true },
+      { source: "/lab-assets", destination: "/console/lab-assets", permanent: true },
+    ];
   },
 };
 

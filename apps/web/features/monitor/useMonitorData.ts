@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { loadMonitorSnapshot } from "./api";
 import { applyMonitorMessage, type MonitorSnapshot } from "./model";
-import { getLoadFailureState, shouldClearSnapshot } from "./realtime";
+import { getLoadFailureState, shouldClearSnapshot, shouldConnectRealtime } from "./realtime";
 
-export function useMonitorData(scope: "public" | "console") {
+export function useMonitorData(scope: "public" | "console", permissions: string[] = []) {
   const [snapshot, setSnapshot] = useState<MonitorSnapshot | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [connection, setConnection] = useState<"connecting" | "connected" | "polling">("connecting");
@@ -34,7 +34,7 @@ export function useMonitorData(scope: "public" | "console") {
   useEffect(() => { void refresh(); }, [refresh]);
 
   useEffect(() => {
-    if (status !== "ready") return;
+    if (status !== "ready" || !shouldConnectRealtime(scope, permissions)) return;
     let closed = false; let socket: WebSocket | null = null; let reconnectTimer = 0; let pingTimer = 0;
     const connect = () => {
       if (closed) return;
@@ -51,7 +51,7 @@ export function useMonitorData(scope: "public" | "console") {
     const schedulePoll = () => { pollTimer = window.setTimeout(() => { void refresh(true).finally(schedulePoll); }, connectionRef.current === "connected" ? 30_000 : 5_000); };
     schedulePoll();
     return () => { closed = true; window.clearTimeout(reconnectTimer); window.clearInterval(pingTimer); window.clearTimeout(pollTimer); socket?.close(); };
-  }, [refresh, scope, status]);
+  }, [permissions, refresh, scope, status]);
 
   return { connection, error, refresh, snapshot, status };
 }

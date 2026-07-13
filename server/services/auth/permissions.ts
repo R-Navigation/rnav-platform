@@ -126,7 +126,10 @@ export function getEffectivePermissions(
   permissions: string[],
   baseTier: BaseTier = "normal"
 ) {
-  return baseTier === "super" ? [...knownPermissionKeys] : [...permissions];
+  if (baseTier === "super") return [...knownPermissionKeys];
+  const effective = new Set(permissions);
+  if (["procurements.review", "procurements.purchase", "procurements.close"].some((permission) => effective.has(permission))) effective.add("procurements.read_all");
+  return [...effective];
 }
 
 export function getConsoleModules(

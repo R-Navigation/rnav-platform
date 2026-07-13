@@ -1,5 +1,6 @@
 const readMethods = new Set(["GET", "HEAD"]);
 const maximumBodyBytes = 1024 * 1024;
+const sessionCookieName = "rnav_session";
 
 export function isAllowedMonitorPath(path: string[]) {
   return path[0] === "public" || path[0] === "console";
@@ -9,6 +10,10 @@ export function validateRequestSize(request: Request): Response | null {
   const length = request.headers.get("content-length");
   if (length && Number(length) > maximumBodyBytes) return Response.json({ error: "Request body too large" }, { status: 413 });
   return null;
+}
+
+export function validateBodySize(body: ArrayBuffer): Response | null {
+  return body.byteLength > maximumBodyBytes ? Response.json({ error: "Request body too large" }, { status: 413 }) : null;
 }
 
 function normalizedOrigin(value: string) {
@@ -28,8 +33,9 @@ export function validateIncomingOrigin(request: Request): Response | null {
 
 export function createUpstreamHeaders(request: Request) {
   const incomingUrl = new URL(request.url); const headers = new Headers();
-  const cookie = request.headers.get("cookie"); const accept = request.headers.get("accept"); const contentType = request.headers.get("content-type");
-  if (cookie) headers.set("cookie", cookie);
+  const rawCookie = request.headers.get("cookie") ?? ""; const accept = request.headers.get("accept"); const contentType = request.headers.get("content-type");
+  const session = rawCookie.split(";").map((part) => part.trim()).find((part) => part.startsWith(`${sessionCookieName}=`));
+  if (session) headers.set("cookie", session);
   headers.set("accept", accept ?? "application/json");
   if (contentType) headers.set("content-type", contentType);
   headers.set("host", incomingUrl.host); headers.set("origin", incomingUrl.origin); headers.set("x-forwarded-host", incomingUrl.host); headers.set("x-forwarded-proto", incomingUrl.protocol.slice(0, -1));

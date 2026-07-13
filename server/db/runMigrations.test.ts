@@ -85,7 +85,8 @@ test("getMigrationFiles returns SQL migrations in lexical order", async () => {
       "010a_lab_assets_legacy_compat.sql",
       "010b_lab_assets_constraints.sql",
       "011_lab_assets_admin.sql",
-      "012_monitor.sql"
+      "012_monitor.sql",
+      "013_procurement_request_sequence.sql"
     ]
   );
 });

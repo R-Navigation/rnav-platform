@@ -2,12 +2,14 @@ import { z } from "zod";
 import { procurementStatuses } from "./workflow.js";
 
 const text = (maximum: number) => z.string().trim().max(maximum);
+const money = (maximum: number) => z.coerce.number().nonnegative().max(maximum).refine((value) => Number.isInteger(value * 100), "Use at most two decimal places");
+const quantity = z.coerce.number().positive().max(1_000_000).refine((value) => Number.isInteger(value * 100), "Use at most two decimal places");
 
 export const procurementItemSchema = z.object({
   itemName: text(200).min(1),
   spec: text(500).default(""),
-  quantity: z.coerce.number().positive().max(1_000_000),
-  estimatedUnitPrice: z.coerce.number().nonnegative().max(100_000_000).nullable().optional(),
+  quantity,
+  estimatedUnitPrice: money(9_999_999.99).nullable().optional(),
   vendor: text(200).nullable().optional(),
   url: z.string().url().max(2_000).nullable().optional(),
   remark: text(1_000).nullable().optional(),
@@ -17,7 +19,7 @@ export const createProcurementSchema = z.object({
   title: text(200).min(1),
   reason: text(4_000),
   items: z.array(procurementItemSchema).min(1).max(100),
-}).strict();
+}).strict().refine((value) => value.items.reduce((sum, item) => sum + item.quantity * (item.estimatedUnitPrice ?? 0), 0) <= 9_999_999_999.99, { message: "Total estimated amount exceeds database range", path: ["items"] });
 
 export const procurementListQuerySchema = z.object({
   scope: z.enum(["mine", "all"]).default("mine"),
