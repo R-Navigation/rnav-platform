@@ -235,6 +235,7 @@ test("public-site compatibility migration is guarded, typed, and idempotent", as
   assert.match(migration, /incompatible type/i);
   assert.match(migration, /CREATE INDEX IF NOT EXISTS idx_research_items_sort/i);
   assert.match(migration, /duplicate_object/i);
+  assert.match(migration, /duplicate_object OR duplicate_table/i);
   assert.doesNotMatch(migration, /DROP (?:TABLE|COLUMN|CONSTRAINT)/i);
 });
 

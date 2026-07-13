@@ -180,14 +180,14 @@ $key_compatibility$;
 
 DO $constraints$
 BEGIN
-  BEGIN ALTER TABLE page_content ADD CONSTRAINT page_content_page_key_key UNIQUE (page_key); EXCEPTION WHEN duplicate_object THEN NULL; END;
-  BEGIN ALTER TABLE team_members ADD CONSTRAINT team_members_slug_key UNIQUE (slug); EXCEPTION WHEN duplicate_object THEN NULL; END;
-  BEGIN ALTER TABLE research_item_keywords ADD CONSTRAINT research_item_keywords_research_item_fk FOREIGN KEY (research_item_id) REFERENCES research_items(id) ON DELETE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END;
-  BEGIN ALTER TABLE research_item_authors ADD CONSTRAINT research_item_authors_research_item_fk FOREIGN KEY (research_item_id) REFERENCES research_items(id) ON DELETE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END;
-  BEGIN ALTER TABLE research_item_links ADD CONSTRAINT research_item_links_research_item_fk FOREIGN KEY (research_item_id) REFERENCES research_items(id) ON DELETE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END;
-  BEGIN ALTER TABLE team_member_links ADD CONSTRAINT team_member_links_team_member_fk FOREIGN KEY (team_member_id) REFERENCES team_members(id) ON DELETE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END;
-  BEGIN ALTER TABLE team_member_contacts ADD CONSTRAINT team_member_contacts_team_member_fk FOREIGN KEY (team_member_id) REFERENCES team_members(id) ON DELETE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END;
-  BEGIN ALTER TABLE facility_item_specs ADD CONSTRAINT facility_item_specs_facility_item_fk FOREIGN KEY (facility_item_id) REFERENCES facility_items(id) ON DELETE CASCADE; EXCEPTION WHEN duplicate_object THEN NULL; END;
+  BEGIN ALTER TABLE page_content ADD CONSTRAINT page_content_page_key_key UNIQUE (page_key); EXCEPTION WHEN duplicate_object OR duplicate_table THEN NULL; END;
+  BEGIN ALTER TABLE team_members ADD CONSTRAINT team_members_slug_key UNIQUE (slug); EXCEPTION WHEN duplicate_object OR duplicate_table THEN NULL; END;
+  BEGIN ALTER TABLE research_item_keywords ADD CONSTRAINT research_item_keywords_research_item_fk FOREIGN KEY (research_item_id) REFERENCES research_items(id) ON DELETE CASCADE; EXCEPTION WHEN duplicate_object OR duplicate_table THEN NULL; END;
+  BEGIN ALTER TABLE research_item_authors ADD CONSTRAINT research_item_authors_research_item_fk FOREIGN KEY (research_item_id) REFERENCES research_items(id) ON DELETE CASCADE; EXCEPTION WHEN duplicate_object OR duplicate_table THEN NULL; END;
+  BEGIN ALTER TABLE research_item_links ADD CONSTRAINT research_item_links_research_item_fk FOREIGN KEY (research_item_id) REFERENCES research_items(id) ON DELETE CASCADE; EXCEPTION WHEN duplicate_object OR duplicate_table THEN NULL; END;
+  BEGIN ALTER TABLE team_member_links ADD CONSTRAINT team_member_links_team_member_fk FOREIGN KEY (team_member_id) REFERENCES team_members(id) ON DELETE CASCADE; EXCEPTION WHEN duplicate_object OR duplicate_table THEN NULL; END;
+  BEGIN ALTER TABLE team_member_contacts ADD CONSTRAINT team_member_contacts_team_member_fk FOREIGN KEY (team_member_id) REFERENCES team_members(id) ON DELETE CASCADE; EXCEPTION WHEN duplicate_object OR duplicate_table THEN NULL; END;
+  BEGIN ALTER TABLE facility_item_specs ADD CONSTRAINT facility_item_specs_facility_item_fk FOREIGN KEY (facility_item_id) REFERENCES facility_items(id) ON DELETE CASCADE; EXCEPTION WHEN duplicate_object OR duplicate_table THEN NULL; END;
 EXCEPTION WHEN undefined_column OR undefined_table THEN
   RAISE EXCEPTION 'Public-site compatibility migration could not add guarded constraints: %', SQLERRM;
 END
