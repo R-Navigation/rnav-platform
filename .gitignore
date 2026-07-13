@@ -4,6 +4,8 @@ node_modules/
 .env.*
 !.env.example
 .migration.env
+.migration-secrets
+.nginx-backup-path
 scripts/db/username-map.json
 
 .next/
