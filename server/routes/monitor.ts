@@ -49,7 +49,13 @@ export function createMonitorRouter({ authMiddleware, service, trustProxy }: { a
   router.get("/api/monitor/public/homepage-snapshot", async (request, response, next) => { try { response.json(await service.getHomepageSnapshot({ limit: limit(request.query.limit, 12, 50), onlineOnly: ["1", "true", "yes", "on"].includes(String(request.query.onlineOnly ?? "").toLowerCase()) })); } catch (error) { next(error); } });
 
   router.use("/api/monitor/console", authMiddleware, requireLogin);
-  router.get("/api/monitor/console/bootstrap", requireAnyPermission(["monitor.devices.read", "monitor.devices.write", "monitor.settings.write"]), async (_request, response, next) => { try { response.json(await service.getConsoleBootstrap()); } catch (error) { next(error); } });
+  router.get("/api/monitor/console/bootstrap", requireAnyPermission(["monitor.devices.read", "monitor.devices.write", "monitor.settings.write"]), async (request, response, next) => {
+    try {
+      const snapshot = await service.getConsoleBootstrap();
+      const canReadDevices = request.authUser!.permissions.some((permission) => permission === "monitor.devices.read" || permission === "monitor.devices.write");
+      response.json(canReadDevices ? snapshot : { ...(snapshot as Record<string, unknown>), devices: [], alerts: [], events: [] });
+    } catch (error) { next(error); }
+  });
   router.get("/api/monitor/console/devices/:id/track", requirePermission("monitor.devices.read"), async (request, response, next) => { const id = parsedId(request.params.id, response); if (!id) return; try { response.json(await service.getDeviceTrack(id, limit(request.query.limit, 200, 1000))); } catch (error) { next(error); } });
   router.get("/api/monitor/console/devices/:id/events", requirePermission("monitor.devices.read"), async (request, response, next) => { const id = parsedId(request.params.id, response); if (!id) return; try { response.json(await service.getDeviceEvents(id, limit(request.query.limit, 24, 200))); } catch (error) { next(error); } });
   router.post("/api/monitor/console/devices", requirePermission("monitor.devices.write"), sameOrigin, handler(deviceRequestSchema, (body, request) => service.createDevice(body, request.authUser!.id)));

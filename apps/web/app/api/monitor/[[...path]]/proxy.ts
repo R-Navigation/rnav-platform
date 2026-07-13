@@ -1,4 +1,15 @@
 const readMethods = new Set(["GET", "HEAD"]);
+const maximumBodyBytes = 1024 * 1024;
+
+export function isAllowedMonitorPath(path: string[]) {
+  return path[0] === "public" || path[0] === "console";
+}
+
+export function validateRequestSize(request: Request): Response | null {
+  const length = request.headers.get("content-length");
+  if (length && Number(length) > maximumBodyBytes) return Response.json({ error: "Request body too large" }, { status: 413 });
+  return null;
+}
 
 function normalizedOrigin(value: string) {
   const url = new URL(value);

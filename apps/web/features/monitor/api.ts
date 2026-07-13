@@ -2,7 +2,11 @@ import { normalizeMonitorSnapshot, type MonitorSnapshot } from "./model";
 
 export async function loadMonitorSnapshot(scope: "public" | "console"): Promise<MonitorSnapshot> {
   const response = await fetch(`/api/monitor/${scope}/bootstrap`, { cache: "no-store" });
-  if (!response.ok) throw new Error(response.status === 401 ? "登录状态已失效。" : response.status === 403 ? "当前账号没有监控权限。" : "无法加载监控数据。");
+  if (!response.ok) {
+    const error = new Error(response.status === 401 ? "登录状态已失效。" : response.status === 403 ? "当前账号没有监控权限。" : "无法加载监控数据。") as Error & { status?: number };
+    error.status = response.status;
+    throw error;
+  }
   return normalizeMonitorSnapshot(await response.json());
 }
 

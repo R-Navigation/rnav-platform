@@ -65,7 +65,8 @@ export function applyMonitorMessage(snapshot: MonitorSnapshot, message: unknown)
   const envelope = record(message); const payload = record(envelope.payload);
   if (envelope.type === "device.current-state.updated" || envelope.type === "device.offline") {
     const next = normalizeDevice(payload.device); const key = next.id || next.code;
-    return { ...snapshot, generatedAt: new Date().toISOString(), devices: snapshot.devices.map((device) => (device.id || device.code) === key ? next : device) };
+    const devices = snapshot.devices.map((device) => (device.id || device.code) === key ? next : device);
+    return { ...snapshot, generatedAt: new Date().toISOString(), devices, summary: { ...snapshot.summary, onlineDeviceCount: devices.filter((device) => device.currentState.isOnline).length } };
   }
   if (envelope.type === "device.event.received") return { ...snapshot, events: [normalizeEvent(payload.event), ...snapshot.events].slice(0, 50) };
   return snapshot;

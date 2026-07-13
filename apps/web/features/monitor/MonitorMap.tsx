@@ -42,8 +42,11 @@ export function MonitorMap({ devices, onSelect, selectedKey, settings }: { devic
       markersRef.current.forEach((marker) => marker.remove()); markersRef.current = [];
       for (const device of devices) {
         const { lat, lng } = device.currentState.geoState; if (lat === null || lng === null) continue;
-        const key = device.id || device.code; const element = document.createElement("button"); element.type = "button"; element.title = device.displayName; element.setAttribute("aria-label", `选择 ${device.displayName}`);
-        element.className = `h-4 w-4 border-2 border-white shadow ${device.currentState.isOnline ? "bg-emerald-500" : "bg-slate-500"} ${key === selectedKey ? "ring-4 ring-cyan-300" : ""}`;
+        const key = device.id || device.code; const element = document.createElement("button"); element.type = "button"; element.title = device.displayName; element.setAttribute("aria-label", `选择 ${device.displayName}，当前${device.currentState.isOnline ? "在线" : "离线"}`);
+        element.className = `grid h-11 w-11 place-items-center rounded-full bg-transparent ${key === selectedKey ? "ring-2 ring-cyan-300" : ""}`;
+        const dot = document.createElement("span");
+        dot.className = `block h-4 w-4 rounded-full border-2 border-white shadow ${device.currentState.isOnline ? "bg-emerald-500" : "bg-slate-500"}`;
+        element.append(dot);
         element.onclick = () => onSelect(key);
         markersRef.current.push(new maplibregl.Marker({ element }).setLngLat([lng, lat]).addTo(mapRef.current!));
       }

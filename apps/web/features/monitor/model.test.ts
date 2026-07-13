@@ -25,6 +25,7 @@ test("realtime state updates replace devices by internal id or public code", () 
   const snapshot = normalizeMonitorSnapshot(raw);
   const updated = applyMonitorMessage(snapshot, { type: "device.current-state.updated", payload: { device: { ...raw.devices[0], currentState: { ...raw.devices[0].currentState, isOnline: false } } } });
   assert.equal(updated.devices[0].currentState.isOnline, false);
+  assert.equal(updated.summary.onlineDeviceCount, 0);
   assert.notEqual(updated, snapshot);
 });
 

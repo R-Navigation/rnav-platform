@@ -14,7 +14,7 @@ async function request(method: string, path: string, options: { user?: Authentic
   const service = new Proxy({
     getPublicBootstrap: async () => ({ devices: [], settings: {}, summary: {} }),
     getHomepageSnapshot: async () => ({ devices: [], map: {}, summary: {} }),
-    getConsoleBootstrap: async () => ({ devices: [], settings: {}, summary: {} }),
+    getConsoleBootstrap: async () => ({ devices: [{ id: "private-device" }], alerts: [{ id: "private-alert" }], events: [{ id: "private-event" }], settings: {}, summary: {} }),
   }, { get(target, property) { if (property in target) return target[property as keyof typeof target]; return async () => { calls.push(String(property)); return { revision: "1" }; }; } });
   const app = express(); app.use(express.json());
   app.use(createMonitorRouter({ authMiddleware: auth(options.user), service: service as never, trustProxy: false }));
@@ -34,6 +34,17 @@ test("public monitor snapshots require no account while console details require 
   assert.equal((await request("GET", "/api/monitor/console/bootstrap", { user: identity(["monitor.devices.read"]) })).status, 200);
   assert.equal((await request("GET", "/api/monitor/console/bootstrap", { user: identity(["monitor.devices.write"]) })).status, 200);
   assert.equal((await request("GET", "/api/monitor/console/bootstrap", { user: identity(["monitor.settings.write"]) })).status, 200);
+});
+
+test("settings-only users do not receive internal device records", async () => {
+  const response = await request("GET", "/api/monitor/console/bootstrap", {
+    user: identity(["monitor.settings.write"]),
+  });
+  assert.equal(response.status, 200);
+  const body = response.body as { devices: unknown[]; alerts: unknown[]; events: unknown[] };
+  assert.deepEqual(body.devices, []);
+  assert.deepEqual(body.alerts, []);
+  assert.deepEqual(body.events, []);
 });
 
 test("device and setting mutations use separate permissions and require same origin", async () => {

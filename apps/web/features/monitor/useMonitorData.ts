@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { loadMonitorSnapshot } from "./api";
 import { applyMonitorMessage, type MonitorSnapshot } from "./model";
-import { getLoadFailureState } from "./realtime";
+import { getLoadFailureState, shouldClearSnapshot } from "./realtime";
 
 export function useMonitorData(scope: "public" | "console") {
   const [snapshot, setSnapshot] = useState<MonitorSnapshot | null>(null);
@@ -20,6 +20,11 @@ export function useMonitorData(scope: "public" | "console") {
     if (!quiet) setStatus("loading");
     try { const next = await loadMonitorSnapshot(scope); setSnapshot(next); setStatus("ready"); setError(""); return next; }
     catch (caught) {
+      const responseStatus = caught instanceof Error ? (caught as Error & { status?: number }).status : undefined;
+      if (shouldClearSnapshot(scope, responseStatus)) {
+        snapshotRef.current = null;
+        setSnapshot(null);
+      }
       setStatus(getLoadFailureState({ quiet, hasSnapshot: snapshotRef.current !== null }));
       setError(caught instanceof Error ? caught.message : "监控服务暂时不可用。");
       return null;
