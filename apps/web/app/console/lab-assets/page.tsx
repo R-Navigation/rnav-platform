@@ -1,5 +1,7 @@
-import { ConsolePlaceholder } from "@/features/console/ConsolePlaceholder";
+import { getConsoleBootstrap } from "@/features/console/bootstrap";
+import { LabAssetsConsole } from "@/features/console/lab-assets/LabAssetsConsole";
 
-export default function LabAssetsPage() {
-  return <ConsolePlaceholder description="实验室资产台账功能将在后续任务中接入。" title="实验室资产" />;
+export default async function LabAssetsPage() {
+  const result = await getConsoleBootstrap();
+  return <LabAssetsConsole permissions={result.status === "authenticated" ? result.data.permissions : []} />;
 }
