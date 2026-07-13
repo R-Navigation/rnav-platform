@@ -20,12 +20,23 @@ export function transformUsers(websiteUsers: LegacyWebsiteAdminUser[], monitorUs
   return { users, conflicts };
 }
 
+export function normalizeMonitorData(monitorData: TableExport): TableExport {
+  return {
+    ...monitorData,
+    devices: (monitorData.devices ?? []).map((device) => ({
+      ...device,
+      description_zh: device.description_zh ?? "",
+      description_en: device.description_en ?? ""
+    }))
+  };
+}
+
 export async function migrateLegacy(input: string, usernameMapPath: string) {
   const [websiteContent, websiteUsers, mediaAssets, labAssets, monitorData, monitorUsers, usernameMap] = await Promise.all([
     readJson<TableExport>(`${input}/website-content.json`), readJson<TableExport>(`${input}/website-users.json`), readJson<TableExport>(`${input}/media-assets.json`), readJson<TableExport>(`${input}/lab-assets.json`), readJson<TableExport>(`${input}/monitor-data.json`), readJson<TableExport>(`${input}/monitor-users.json`), readJson<UsernameMap>(usernameMapPath),
   ]);
   const transformedUsers = transformUsers(websiteUsers.admin_users as unknown as LegacyWebsiteAdminUser[], monitorUsers.monitor_users as unknown as LegacyMonitorUser[], usernameMap);
-  const transformed: TransformedExport = { users: transformedUsers.users, publicSite: { ...websiteContent, ...mediaAssets }, labAssets, monitor: monitorData, conflicts: transformedUsers.conflicts };
+  const transformed: TransformedExport = { users: transformedUsers.users, publicSite: { ...websiteContent, ...mediaAssets }, labAssets, monitor: normalizeMonitorData(monitorData), conflicts: transformedUsers.conflicts };
   const out = resolve(input, "transformed");
   await Promise.all([writeJson(`${out}/users.json`, transformed.users), writeJson(`${out}/public-site.json`, transformed.publicSite), writeJson(`${out}/lab-assets.json`, transformed.labAssets), writeJson(`${out}/monitor.json`, transformed.monitor), writeJson(`${out}/conflicts.json`, transformed.conflicts)]); return transformed;
 }
