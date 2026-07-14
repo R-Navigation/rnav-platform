@@ -24,6 +24,8 @@ import { createPublicSiteService } from "./services/public-site/service.js";
 import { createPostgresSiteAdminRepository } from "./services/site-admin/postgres-repository.js";
 import { createSiteAdminService } from "./services/site-admin/service.js";
 import { createAccountService } from "./services/account/accountService.js";
+import { createProfileService } from "./services/account/profileService.js";
+import { createProfileRouter } from "./routes/profile.js";
 import { resolveWebDir } from "./webDir.js";
 
 const env = loadEnv();
@@ -49,6 +51,7 @@ const app = createApp({
   health: { database: async () => { await pool.query("SELECT 1"); return true; } },
   routers: [
     createAuthRouter({ repository: authRepository, authMiddleware, cookieSecure: env.cookieSecure, accountService: createAccountService(pool), trustProxy: true }),
+    createProfileRouter({ authMiddleware, service: createProfileService(pool), trustProxy: true }),
     createConsoleRouter({ authMiddleware }), createPublicRouter({ service: publicService }),
     createSiteAdminRouter({ authMiddleware, service: siteAdminService, trustProxy: true }),
     createLabAssetsRouter({ authMiddleware, service: createLabAssetsService(pool), trustProxy: true }),
