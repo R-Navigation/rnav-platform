@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { DiscardDialog } from "./DiscardDialog";
 import { PageEditor } from "./PageEditor";
 import { TeamEditor } from "./TeamEditor";
@@ -248,7 +249,7 @@ export function SiteContentConsole({ permissions }: Props) {
 
       <p aria-live="polite" className={`mt-6 border-l-2 px-4 py-3 text-sm ${conflict ? "border-amber-500 bg-amber-50 text-amber-950" : message ? "border-cyan-600 bg-white text-slate-700" : "sr-only"}`} role={conflict ? "alert" : "status"}>{message || "编辑器已就绪"}</p>
       {conflict ? <div className="mt-3 flex flex-wrap gap-3"><button className="bg-blue-950 px-4 py-2 text-sm font-bold text-white disabled:bg-slate-400" disabled={conflictRefreshing} onClick={() => void resolveConflict("reload")} type="button">重新加载最新版本</button><button className="border border-slate-400 bg-white px-4 py-2 text-sm font-bold text-slate-800 disabled:text-slate-400" disabled={conflictRefreshing} onClick={() => void resolveConflict("keep-local")} type="button">保留本地更改</button></div> : null}
-      <p className="mt-6 text-xs leading-5 text-slate-500">媒体上传尚未开放。图片、PDF 等字段只能填写已有 URL 或资产引用。</p>
+      <p className="mt-6 text-xs leading-5 text-slate-500">需要上传或管理图片、PDF 时，请先使用 <Link className="text-cyan-800 underline" href="/console/media">媒体资源</Link> 获取资源地址，再在内容中引用。</p>
       </fieldset>
 
       {pendingKey ? <DiscardDialog onCancel={() => setPendingKey(null)} onDiscard={discardAndSwitch} restoreFocusTo={pendingTriggerRef.current} /> : null}
