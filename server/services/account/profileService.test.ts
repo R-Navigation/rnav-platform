@@ -29,6 +29,7 @@ test("profile update atomically clears hidden public fields and never publishes 
   assert.equal(JSON.stringify(publicUpdate.values).includes("secret-phone"), false);
   assert.deepEqual(publicUpdate.values?.slice(1, 5), ["课题组成员", "Lab Member", "", ""]);
   assert.equal(result.username, "alice");
+  assert.match(client.calls.find((call) => call.sql.includes("profile.update"))?.sql ?? "", /\$1::text/);
   assert.equal(client.calls.at(-1)?.sql, "COMMIT");
   assert.equal(client.released, true);
 });

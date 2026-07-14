@@ -72,7 +72,7 @@ export function createProfileService(pool: Pick<Pool, "query" | "connect">) {
             "INSERT INTO team_member_links(team_member_id,sort_order,label_zh,label_en,href,icon) VALUES($1,1,'GitHub','GitHub',$2,'github')", [link.team_member_id, body.githubUrl]);
         }
         const user = await client.query<{ username: string }>("UPDATE users SET email=$2,display_name=COALESCE(NULLIF($3,''),NULLIF($4,''),username),updated_at=now() WHERE id=$1 RETURNING username", [userId, body.email || null, body.nameZh, body.nameEn]);
-        await client.query("INSERT INTO audit_logs(actor_id,action,target_type,target_id,detail) VALUES($1,'profile.update','user_profile',$1,$2::jsonb)", [userId, JSON.stringify({ publicFields: body.publicFields })]);
+        await client.query("INSERT INTO audit_logs(actor_id,action,target_type,target_id,detail) VALUES($1,'profile.update','user_profile',$1::text,$2::jsonb)", [userId, JSON.stringify({ publicFields: body.publicFields })]);
         await client.query("COMMIT");
         return output({ ...row, username: user.rows[0]?.username ?? "" });
       } catch (error) { await client.query("ROLLBACK"); throw error; }
