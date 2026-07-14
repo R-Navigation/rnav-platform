@@ -33,6 +33,13 @@ ALTER TABLE user_profiles
   ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now(),
   ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
 
+INSERT INTO user_profiles (user_id, name_zh, name_en, email)
+SELECT users.id, users.display_name, '', COALESCE(users.email, '')
+FROM users
+WHERE NOT EXISTS (
+  SELECT 1 FROM user_profiles WHERE user_profiles.user_id = users.id
+);
+
 UPDATE user_profiles
 SET email = users.email
 FROM users

@@ -52,16 +52,17 @@ export function createProfileService(pool: Pick<Pool, "query" | "connect">) {
         );
         const link = member.rows[0];
         if (link?.team_member_id) {
+          const hideBothNames = !fields.has("name_zh") && !fields.has("name_en");
           await client.query(
             `UPDATE team_members SET name_zh=$2,name_en=$3,role_zh=$4,role_en=$5,bio_zh=$6,bio_en=$7,
                research_zh=$8,research_en=$9,image_asset_id=$10,image_src=$11,updated_at=now() WHERE id=$1`,
-            [link.team_member_id, fields.has("name_zh") ? body.nameZh : "课题组成员",
-              fields.has("name_en") ? body.nameEn : "Lab Member", fields.has("title") ? body.titleZh : "",
+            [link.team_member_id, fields.has("name_zh") ? body.nameZh : hideBothNames ? "课题组成员" : "",
+              fields.has("name_en") ? body.nameEn : hideBothNames ? "Lab Member" : "", fields.has("title") ? body.titleZh : "",
               fields.has("title") ? body.titleEn : "", fields.has("bio") ? body.bioZh : "", fields.has("bio") ? body.bioEn : "",
               fields.has("research_interests") ? body.researchInterestsZh : "", fields.has("research_interests") ? body.researchInterestsEn : "",
               fields.has("avatar") ? body.avatarAssetId : null, asset.rows[0]?.url ?? null]
           );
-          await client.query("DELETE FROM team_member_contacts WHERE team_member_id=$1", [link.team_member_id]);
+          await client.query("DELETE FROM team_member_contacts WHERE team_member_id=$1 AND (lower(label_en)='email' OR label_zh='邮箱')", [link.team_member_id]);
           await client.query("DELETE FROM team_member_links WHERE team_member_id=$1 AND icon IN ('homepage','github')", [link.team_member_id]);
           if (fields.has("email") && body.email) await client.query(
             "INSERT INTO team_member_contacts(team_member_id,sort_order,label_zh,label_en,value_text) VALUES($1,0,'邮箱','Email',$2)", [link.team_member_id, body.email]);

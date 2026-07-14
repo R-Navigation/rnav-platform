@@ -1,5 +1,4 @@
-import { ConsolePlaceholder } from "@/features/console/ConsolePlaceholder";
+import {getConsoleBootstrap}from"@/features/console/bootstrap";import{UserManagement}from"@/features/console/users/UserManagement";
 
-export default function UsersPage() {
-  return <ConsolePlaceholder description="用户账号管理功能将在后续任务中接入。" title="用户管理" />;
+export default async function UsersPage() {const r=await getConsoleBootstrap();return r.status==='authenticated'?<UserManagement actorId={r.data.user.id} actorTier={r.data.user.tier}/>:null;
 }

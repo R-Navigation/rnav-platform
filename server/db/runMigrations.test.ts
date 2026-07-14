@@ -103,6 +103,7 @@ test("account profile permission migration is additive and seeds system template
   assert.match(migration, /ADD COLUMN IF NOT EXISTS team_member_id bigint/i);
   assert.match(migration, /ADD COLUMN IF NOT EXISTS public_fields text\[\]/i);
   assert.match(migration, /ADD COLUMN IF NOT EXISTS version bigint NOT NULL DEFAULT 1/i);
+  assert.match(migration, /INSERT INTO user_profiles[\s\S]*WHERE NOT EXISTS/i);
   assert.match(migration, /CREATE TABLE IF NOT EXISTS permission_templates/i);
   assert.match(migration, /CREATE TABLE IF NOT EXISTS permission_template_permissions/i);
   assert.match(migration, /CREATE TABLE IF NOT EXISTS user_permission_templates/i);

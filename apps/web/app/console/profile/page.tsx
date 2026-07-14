@@ -1,5 +1,7 @@
-import { ConsolePlaceholder } from "@/features/console/ConsolePlaceholder";
+import { getConsoleBootstrap } from "@/features/console/bootstrap";
+import { ProfileConsole } from "@/features/console/profile/ProfileConsole";
 
-export default function ProfilePage() {
-  return <ConsolePlaceholder description="个人资料查看与编辑功能将在后续任务中接入。" title="个人资料" />;
+export default async function ProfilePage() {
+  const result=await getConsoleBootstrap();
+  return result.status==='authenticated'?<ProfileConsole mustChangePassword={result.data.user.mustChangePassword}/>:null;
 }

@@ -5,6 +5,7 @@ import { ConsoleSidebarNav } from "@/features/console/ConsoleSidebarNav";
 import { ConsoleState } from "@/features/console/ConsoleState";
 import { getConsoleBootstrap } from "@/features/console/bootstrap";
 import { TierBadge } from "@/features/console/TierBadge";
+import { ConsolePasswordGate } from "@/features/console/ConsolePasswordGate";
 
 export default async function ConsoleLayout({ children }: Readonly<{ children: ReactNode }>) {
   const result = await getConsoleBootstrap();
@@ -46,7 +47,9 @@ export default async function ConsoleLayout({ children }: Readonly<{ children: R
           </Link>
         </div>
       </aside>
-      <main className="min-w-0 px-5 py-8 sm:px-8 lg:px-10 lg:py-10">{children}</main>
+      <main className="min-w-0 px-5 py-8 sm:px-8 lg:px-10 lg:py-10">
+        <ConsolePasswordGate required={user.mustChangePassword}>{children}</ConsolePasswordGate>
+      </main>
     </div>
   );
 }

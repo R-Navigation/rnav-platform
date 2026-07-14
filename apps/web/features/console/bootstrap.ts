@@ -15,6 +15,7 @@ export type ConsoleBootstrap = {
     id: string;
     tier: ConsoleTier;
     username: string;
+    mustChangePassword: boolean;
   };
 };
 
@@ -35,6 +36,7 @@ function isConsoleBootstrap(value: unknown): value is ConsoleBootstrap {
       typeof candidate.user.id === "string" &&
       typeof candidate.user.username === "string" &&
       typeof candidate.user.displayName === "string" &&
+      typeof candidate.user.mustChangePassword === "boolean" &&
       ["normal", "plus", "super"].includes(candidate.user.tier ?? "") &&
       Array.isArray(candidate.permissions) &&
       Array.isArray(candidate.consoleModules),
