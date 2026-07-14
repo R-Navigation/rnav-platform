@@ -86,9 +86,42 @@ test("getMigrationFiles returns SQL migrations in lexical order", async () => {
       "010b_lab_assets_constraints.sql",
       "011_lab_assets_admin.sql",
       "012_monitor.sql",
-      "013_procurement_request_sequence.sql"
+      "013_procurement_request_sequence.sql",
+      "014_account_profile_permissions.sql"
     ]
   );
+});
+
+test("account profile permission migration is additive and seeds system templates", async () => {
+  const migration = await import("node:fs/promises").then(({ readFile }) =>
+    readFile(new URL("./migrations/014_account_profile_permissions.sql", import.meta.url), "utf8")
+  );
+
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS must_change_password boolean NOT NULL DEFAULT false/i);
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS password_changed_at timestamptz/i);
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS created_source text NOT NULL DEFAULT 'admin'/i);
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS team_member_id bigint/i);
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS public_fields text\[\]/i);
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS version bigint NOT NULL DEFAULT 1/i);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS permission_templates/i);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS permission_template_permissions/i);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS user_permission_templates/i);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS user_permission_overrides/i);
+  assert.match(migration, /decision text NOT NULL CHECK \(decision IN \('grant', 'revoke'\)\)/i);
+  for (const key of [
+    "normal-member",
+    "site-editor",
+    "asset-manager",
+    "monitor-manager",
+    "procurement-reviewer",
+    "procurement-operator",
+    "user-manager"
+  ]) {
+    assert.match(migration, new RegExp(`'${key}'`));
+  }
+  assert.match(migration, /INSERT INTO user_permission_overrides[\s\S]*FROM user_permissions/i);
+  assert.match(migration, /UPDATE user_profiles[\s\S]*team_members/i);
+  assert.doesNotMatch(migration, /DROP (?:TABLE|COLUMN|CONSTRAINT)/i);
 });
 
 test("monitor migration preserves the realtime domain without legacy admin accounts", async () => {
