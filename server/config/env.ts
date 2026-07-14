@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+const optionalUrl = z.preprocess((value) => value === "" ? undefined : value, z.string().url().optional());
+
 const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   HOST: z.string().min(1).default("127.0.0.1"),
@@ -13,7 +15,7 @@ const schema = z.object({
   MONITOR_WS_PATH: z.string().regex(/^\/[a-z0-9/_-]*$/i).default("/ws"),
   MONITOR_OFFLINE_TIMEOUT_SECONDS: z.coerce.number().int().min(10).max(3600).default(60),
   COS_SECRET_ID: z.string().optional(), COS_SECRET_KEY: z.string().optional(), COS_REGION: z.string().optional(),
-  COS_BUCKET: z.string().optional(), COS_PUBLIC_BASE_URL: z.string().url().optional(), COS_PATH_PREFIX: z.string().default("rnav"),
+  COS_BUCKET: z.string().optional(), COS_PUBLIC_BASE_URL: optionalUrl, COS_PATH_PREFIX: z.string().default("rnav"),
   MEDIA_MAX_UPLOAD_BYTES: z.coerce.number().int().min(1).max(100 * 1024 * 1024).default(20 * 1024 * 1024),
 }).passthrough();
 

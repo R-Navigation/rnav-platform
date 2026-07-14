@@ -14,3 +14,8 @@ test("server environment rejects missing secrets and invalid ranges", () => {
   assert.throws(() => loadEnv({ ...valid, PORT: "70000" }), /PORT/);
   assert.throws(() => loadEnv({ ...valid, MONITOR_WS_PATH: "ws" }), /MONITOR_WS_PATH/);
 });
+
+test("server environment treats an empty optional COS URL as unset", () => {
+  const env = loadEnv({ ...valid, COS_PUBLIC_BASE_URL: "" });
+  assert.equal(env.cosPublicBaseUrl, undefined);
+});
