@@ -67,7 +67,8 @@ function safeSessionPayload(identity: SessionIdentity) {
       id: identity.id,
       username: identity.username,
       displayName: identity.displayName,
-      tier: deriveDisplayTier(identity.baseTier, identity.permissions)
+      tier: deriveDisplayTier(identity.baseTier, identity.permissions),
+      mustChangePassword: identity.mustChangePassword ?? false
     },
     permissions: identity.permissions
   };

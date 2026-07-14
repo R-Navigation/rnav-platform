@@ -4,7 +4,8 @@ import {
   deriveDisplayTier,
   getConsoleModules,
   getEffectivePermissions,
-  knownPermissionKeys
+  knownPermissionKeys,
+  resolvePermissions
 } from "./permissions.js";
 
 test("deriveDisplayTier returns super for super users", () => {
@@ -23,12 +24,45 @@ test("deriveDisplayTier returns normal when a normal user has only base permissi
 });
 
 test("getConsoleModules returns procurement for normal members", () => {
-  const modules = getConsoleModules([
-    "console.access",
-    "procurements.create",
-    "procurements.read_own"
-  ]);
+  const modules = getConsoleModules([]);
   assert.ok(modules.some((module) => module.key === "procurements"));
+});
+
+test("normal base permissions are immutable and reported as base sources", () => {
+  const result = resolvePermissions({
+    baseTier: "normal",
+    explicitRevokes: ["console.access", "profile.write_own"]
+  });
+
+  assert.ok(result.permissions.includes("console.access"));
+  assert.deepEqual(result.sources["console.access"], [{ type: "base" }]);
+});
+
+test("templates, grants, and revokes resolve in the approved order", () => {
+  const result = resolvePermissions({
+    baseTier: "normal",
+    templatePermissions: [
+      { permissionKey: "site.content.write", templateKey: "site-editor" },
+      { permissionKey: "site.media.write", templateKey: "site-editor" }
+    ],
+    explicitGrants: ["monitor.devices.read"],
+    explicitRevokes: ["site.media.write"]
+  });
+
+  assert.ok(result.permissions.includes("site.content.write"));
+  assert.ok(result.permissions.includes("monitor.devices.read"));
+  assert.equal(result.permissions.includes("site.media.write"), false);
+  assert.deepEqual(result.sources["site.content.write"], [
+    { type: "template", templateKey: "site-editor" }
+  ]);
+  assert.deepEqual(result.sources["monitor.devices.read"], [{ type: "grant" }]);
+  assert.deepEqual(result.sources["site.media.write"], [{ type: "revoke" }]);
+});
+
+test("super receives every known permission with a super source", () => {
+  const result = resolvePermissions({ baseTier: "super" });
+  assert.deepEqual(result.permissions.sort(), [...knownPermissionKeys].sort());
+  assert.deepEqual(result.sources["system.settings.write"], [{ type: "super" }]);
 });
 
 test("procurement operators inherit read-all access needed for their workflow", () => {

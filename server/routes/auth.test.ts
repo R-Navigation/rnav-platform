@@ -59,6 +59,7 @@ class MemoryAuthRepository implements AuthRepository {
       username: user.username,
       displayName: user.displayName,
       baseTier: user.baseTier,
+      mustChangePassword: user.mustChangePassword,
       permissions: this.permissions.get(user.id) ?? []
     } satisfies SessionIdentity;
   }
@@ -80,6 +81,7 @@ function addUser(
     baseTier: "normal",
     status: "active",
     passwordHash: activePasswordHash,
+    mustChangePassword: false,
     ...overrides
   };
   repository.users.set(user.username, user);
@@ -197,7 +199,7 @@ test("GET /api/console/bootstrap without a session returns 401", async () => {
   assert.equal(response.status, 401);
 });
 
-test("GET /api/console/bootstrap returns 403 without console access", async () => {
+test("GET /api/console/bootstrap injects immutable normal base access", async () => {
   const repository = new MemoryAuthRepository();
   const user = addUser(repository);
   repository.permissions.set(user.id, ["profile.read_own"]);
@@ -209,7 +211,7 @@ test("GET /api/console/bootstrap returns 403 without console access", async () =
   const response = await requestApp(repository, "/api/console/bootstrap", {
     headers: { cookie: sessionCookie("no-console") }
   });
-  assert.equal(response.status, 403);
+  assert.equal(response.status, 200);
 });
 
 test("GET /api/console/bootstrap returns normal member modules", async () => {
@@ -354,7 +356,14 @@ test("POST /api/auth/login creates a hashed database session and secure cookie",
   const body = (await response.json()) as Record<string, unknown>;
   assert.equal("passwordHash" in body, false);
   assert.equal(JSON.stringify(body).includes(activePasswordHash), false);
-  assert.deepEqual(body.permissions, ["console.access"]);
+  assert.deepEqual(body.permissions, [
+    "console.access",
+    "profile.read_own",
+    "profile.write_own",
+    "lab_assets.read",
+    "procurements.create",
+    "procurements.read_own"
+  ]);
 });
 
 test("POST /api/auth/login hides whether credentials or status caused rejection", async () => {
@@ -405,9 +414,18 @@ test("GET /api/auth/session returns safe authenticated identity", async () => {
       id: user.id,
       username: "alice",
       displayName: "Alice",
-      tier: "plus"
+      tier: "plus",
+      mustChangePassword: false
     },
-    permissions: ["console.access", "site.content.write"]
+    permissions: [
+      "console.access",
+      "profile.read_own",
+      "profile.write_own",
+      "lab_assets.read",
+      "procurements.create",
+      "procurements.read_own",
+      "site.content.write"
+    ]
   });
 });
 

@@ -4,6 +4,7 @@ import type { Pool } from "pg";
 import { parse } from "cookie";
 import {
   getEffectivePermissions,
+  resolvePermissions,
   type BaseTier
 } from "../services/auth/permissions.js";
 
@@ -18,9 +19,14 @@ export type UserForLogin = {
   baseTier: BaseTier;
   status: UserStatus;
   passwordHash: string;
+  mustChangePassword: boolean;
 };
 
-export type SessionIdentity = Omit<UserForLogin, "passwordHash" | "status"> & {
+export type SessionIdentity = Omit<
+  UserForLogin,
+  "passwordHash" | "status" | "mustChangePassword"
+> & {
+  mustChangePassword?: boolean;
   permissions: string[];
 };
 
@@ -57,10 +63,13 @@ type UserRow = {
   base_tier: BaseTier;
   status: UserStatus;
   password_hash: string;
+  must_change_password: boolean;
 };
 
 type IdentityRow = Omit<UserRow, "password_hash"> & {
-  permissions: string[] | null;
+  template_permissions: string[] | null;
+  explicit_grants: string[] | null;
+  explicit_revokes: string[] | null;
 };
 
 export function hashSessionToken(token: string) {
@@ -72,6 +81,7 @@ export function normalizeAuthenticatedUser(
 ): AuthenticatedUser {
   return {
     ...identity,
+    mustChangePassword: identity.mustChangePassword ?? false,
     permissions: getEffectivePermissions(identity.permissions, identity.baseTier)
   };
 }
@@ -94,7 +104,8 @@ export function createPostgresAuthRepository(pool: Pool): AuthRepository {
   return {
     async findUserForLogin(username) {
       const result = await pool.query<UserRow>(
-        `SELECT id, username, display_name, base_tier, status, password_hash
+        `SELECT id, username, display_name, base_tier, status, password_hash,
+                must_change_password
          FROM users
          WHERE username = $1`,
         [username]
@@ -107,7 +118,8 @@ export function createPostgresAuthRepository(pool: Pool): AuthRepository {
             displayName: row.display_name,
             baseTier: row.base_tier,
             status: row.status,
-            passwordHash: row.password_hash
+            passwordHash: row.password_hash,
+            mustChangePassword: row.must_change_password
           }
         : null;
     },
@@ -137,28 +149,55 @@ export function createPostgresAuthRepository(pool: Pool): AuthRepository {
            users.display_name,
            users.base_tier,
            users.status,
+           users.must_change_password,
            COALESCE(
-             array_agg(user_permissions.permission_key)
-               FILTER (WHERE user_permissions.permission_key IS NOT NULL),
+             (SELECT array_agg(DISTINCT permission_template_permissions.permission_key)
+              FROM user_permission_templates
+              JOIN permission_template_permissions
+                ON permission_template_permissions.template_key = user_permission_templates.template_key
+              WHERE user_permission_templates.user_id = users.id),
              ARRAY[]::text[]
-           ) AS permissions
+           ) AS template_permissions,
+           COALESCE(
+             (SELECT array_agg(user_permission_overrides.permission_key)
+              FROM user_permission_overrides
+              WHERE user_permission_overrides.user_id = users.id
+                AND user_permission_overrides.decision = 'grant'),
+             ARRAY[]::text[]
+           ) AS explicit_grants,
+           COALESCE(
+             (SELECT array_agg(user_permission_overrides.permission_key)
+              FROM user_permission_overrides
+              WHERE user_permission_overrides.user_id = users.id
+                AND user_permission_overrides.decision = 'revoke'),
+             ARRAY[]::text[]
+           ) AS explicit_revokes
          FROM session_tokens
          JOIN users ON users.id = session_tokens.user_id
-         LEFT JOIN user_permissions ON user_permissions.user_id = users.id
          WHERE session_tokens.token_hash = $1
            AND session_tokens.expires_at > $2
-           AND users.status = 'active'
-         GROUP BY users.id, users.username, users.display_name, users.base_tier, users.status`,
+           AND users.status = 'active'`,
         [tokenHash, now]
       );
       const row = result.rows[0];
+      const resolution = row
+        ? resolvePermissions({
+            baseTier: row.base_tier,
+            templatePermissions: (row.template_permissions ?? []).map(
+              (permissionKey) => ({ permissionKey, templateKey: "assigned" })
+            ),
+            explicitGrants: row.explicit_grants ?? [],
+            explicitRevokes: row.explicit_revokes ?? []
+          })
+        : null;
       return row
         ? {
             id: row.id,
             username: row.username,
             displayName: row.display_name,
             baseTier: row.base_tier,
-            permissions: row.permissions ?? []
+            mustChangePassword: row.must_change_password,
+            permissions: resolution?.permissions ?? []
           }
         : null;
     },

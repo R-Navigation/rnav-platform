@@ -32,14 +32,71 @@ export const knownPermissionKeys = [
   "system.settings.write"
 ] as const;
 
-const basePermissions = new Set([
+export const basePermissionKeys = [
   "console.access",
   "profile.read_own",
   "profile.write_own",
   "lab_assets.read",
   "procurements.create",
   "procurements.read_own"
-]);
+] as const;
+
+const basePermissions = new Set<string>(basePermissionKeys);
+
+export type PermissionSource =
+  | { type: "base" }
+  | { type: "super" }
+  | { type: "template"; templateKey: string }
+  | { type: "grant" }
+  | { type: "revoke" };
+
+export type PermissionResolutionInput = {
+  baseTier?: BaseTier;
+  templatePermissions?: Array<{ permissionKey: string; templateKey: string }>;
+  explicitGrants?: string[];
+  explicitRevokes?: string[];
+};
+
+export function resolvePermissions({
+  baseTier = "normal",
+  templatePermissions = [],
+  explicitGrants = [],
+  explicitRevokes = []
+}: PermissionResolutionInput) {
+  const sources: Record<string, PermissionSource[]> = {};
+  if (baseTier === "super") {
+    for (const key of knownPermissionKeys) sources[key] = [{ type: "super" }];
+    return { permissions: [...knownPermissionKeys], sources };
+  }
+
+  const effective = new Set<string>();
+  for (const key of basePermissionKeys) {
+    effective.add(key);
+    sources[key] = [{ type: "base" }];
+  }
+  for (const item of templatePermissions) {
+    if (!knownPermissionKeys.includes(item.permissionKey as never)) continue;
+    effective.add(item.permissionKey);
+    sources[item.permissionKey] ??= [];
+    sources[item.permissionKey].push({ type: "template", templateKey: item.templateKey });
+  }
+  for (const key of explicitGrants) {
+    if (!knownPermissionKeys.includes(key as never)) continue;
+    effective.add(key);
+    sources[key] ??= [];
+    sources[key].push({ type: "grant" });
+  }
+  for (const key of explicitRevokes) {
+    if (!knownPermissionKeys.includes(key as never) || basePermissions.has(key)) continue;
+    effective.delete(key);
+    sources[key] = [{ type: "revoke" }];
+  }
+  if (["procurements.review", "procurements.purchase", "procurements.close"].some((key) => effective.has(key))) {
+    effective.add("procurements.read_all");
+    sources["procurements.read_all"] ??= [{ type: "grant" }];
+  }
+  return { permissions: [...effective], sources };
+}
 
 const moduleDefinitions: ConsoleModule[] = [
   {
@@ -126,10 +183,7 @@ export function getEffectivePermissions(
   permissions: string[],
   baseTier: BaseTier = "normal"
 ) {
-  if (baseTier === "super") return [...knownPermissionKeys];
-  const effective = new Set(permissions);
-  if (["procurements.review", "procurements.purchase", "procurements.close"].some((permission) => effective.has(permission))) effective.add("procurements.read_all");
-  return [...effective];
+  return resolvePermissions({ baseTier, explicitGrants: permissions }).permissions;
 }
 
 export function getConsoleModules(

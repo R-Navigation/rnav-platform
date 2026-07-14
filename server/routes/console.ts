@@ -23,7 +23,8 @@ export function createConsoleRouter(options: ConsoleRouterOptions) {
           id: user.id,
           username: user.username,
           displayName: user.displayName,
-          tier: deriveDisplayTier(user.baseTier, user.permissions)
+          tier: deriveDisplayTier(user.baseTier, user.permissions),
+          mustChangePassword: user.mustChangePassword ?? false
         },
         permissions: user.permissions,
         consoleModules: getConsoleModules(user.permissions, user.baseTier)
