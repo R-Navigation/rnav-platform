@@ -23,7 +23,14 @@ export function createMediaService(pool: Pick<Pool, "query" | "connect">, cos: C
   const map = (row: MediaRow) => ({ id: row.id, filename: row.filename, objectKey: row.object_key, url: row.url, mimeType: row.mime_type, sizeBytes: Number(row.size_bytes), checksumSha256: row.checksum_sha256, status: row.status, recycledAt: row.recycled_at, createdAt: row.created_at, references: Number(row.references ?? 0) });
   return {
     async list(input: { search?: string; status: string }) {
-      const result = await pool.query<MediaRow>(`SELECT media_assets.*, 0::bigint references FROM media_assets WHERE status=$1 AND ($2='' OR filename ILIKE '%'||$2||'%' OR object_key ILIKE '%'||$2||'%') ORDER BY created_at DESC LIMIT 200`, [input.status, input.search ?? ""]);
+      const result = await pool.query<MediaRow>(`SELECT media_assets.*,
+        ((SELECT count(*) FROM user_profiles WHERE avatar_asset_id=media_assets.id) +
+         (SELECT count(*) FROM research_items WHERE image_asset_id=media_assets.id OR pdf_asset_id=media_assets.id) +
+         (SELECT count(*) FROM news_items WHERE image_asset_id=media_assets.id) +
+         (SELECT count(*) FROM team_members WHERE image_asset_id=media_assets.id) +
+         (SELECT count(*) FROM facility_items WHERE image_asset_id=media_assets.id) +
+         (SELECT count(*) FROM page_content WHERE content_json::text LIKE '%' || media_assets.id::text || '%'))::bigint references
+        FROM media_assets WHERE status=$1 AND ($2='' OR filename ILIKE '%'||$2||'%' OR object_key ILIKE '%'||$2||'%') ORDER BY created_at DESC LIMIT 200`, [input.status, input.search ?? ""]);
       return result.rows.map(map);
     },
     async getReferences(id: string) {
@@ -31,6 +38,9 @@ export function createMediaService(pool: Pick<Pool, "query" | "connect">, cos: C
     },
     async upload(input: MediaInput, actorId: string) {
       if (!mediaMimeTypes.includes(input.mimeType as never)) throw new MediaError("不支持的媒体类型", "MEDIA_TYPE_INVALID");
+      const extension = input.filename.toLowerCase().split(".").pop() ?? "";
+      const validExtension = input.mimeType === "application/pdf" ? extension === "pdf" : ["jpg", "jpeg", "png", "webp"].includes(extension);
+      if (!validExtension) throw new MediaError("文件扩展名与媒体类型不匹配", "MEDIA_EXTENSION_INVALID");
       if (input.body.length < 1 || input.body.length > input.maxBytes) throw new MediaError("媒体文件超过大小限制", "MEDIA_SIZE_INVALID");
       const checksum = createHash("sha256").update(input.body).digest("hex"); const id = randomUUID(); const key = `${input.pathPrefix.replace(/\/$/, "")}/${new Date().toISOString().slice(0,10)}/${id}-${safeFilename(input.filename)}`; const url = `${input.publicBaseUrl.replace(/\/$/, "")}/${key}`;
       try { await cos.putObject({ key, body: input.body, contentType: input.mimeType }); } catch { throw new MediaError("媒体存储服务不可用", "MEDIA_STORAGE_FAILED", 502); }
