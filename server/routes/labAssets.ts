@@ -2,6 +2,7 @@ import { Router, type Request, type RequestHandler } from "express";
 import { z, ZodError } from "zod";
 import { requireLogin } from "../middleware/auth.js";
 import { requirePermission } from "../middleware/requirePermission.js";
+import { requirePasswordChanged } from "../middleware/requirePasswordChanged.js";
 import { createRequireSameOrigin } from "../middleware/requireSameOrigin.js";
 import {
   ConflictError,
@@ -30,7 +31,7 @@ export function createLabAssetsRouter({ authMiddleware, service, trustProxy }: O
     else response.status(403).json({ error: "Permission denied" });
   };
 
-  router.use("/api/lab-assets", authMiddleware, requireLogin);
+  router.use("/api/lab-assets", authMiddleware, requireLogin, requirePasswordChanged);
   router.get("/api/lab-assets", requireReadOrWrite, async (_request, response, next) => {
     try {
       response.json(await service.getSnapshot());

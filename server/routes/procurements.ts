@@ -1,6 +1,7 @@
 import { Router, type RequestHandler } from "express";
 import { ZodError } from "zod";
 import { requireLogin } from "../middleware/auth.js";
+import { requirePasswordChanged } from "../middleware/requirePasswordChanged.js";
 import { createRequireSameOrigin } from "../middleware/requireSameOrigin.js";
 import { ProcurementAccessError, ProcurementConflictError, ProcurementNotFoundError, type ProcurementService } from "../services/procurement/procurementService.js";
 import { commentSchema, createProcurementSchema, procurementIdSchema, procurementListQuerySchema, transitionSchema } from "../services/procurement/schemas.js";
@@ -8,7 +9,7 @@ import { requiredPermissionForTransition } from "../services/procurement/workflo
 
 export function createProcurementRouter({ authMiddleware, service, trustProxy }: { authMiddleware: RequestHandler; service: ProcurementService; trustProxy: boolean }) {
   const router = Router(); const sameOrigin = createRequireSameOrigin({ trustProxy });
-  router.use("/api/procurements", authMiddleware, requireLogin);
+  router.use("/api/procurements", authMiddleware, requireLogin, requirePasswordChanged);
   const actor = (request: Parameters<RequestHandler>[0]) => ({ id: request.authUser!.id, permissions: request.authUser!.permissions });
   const handle = (response: Parameters<RequestHandler>[1], next: Parameters<RequestHandler>[2], error: unknown) => {
     if (error instanceof ZodError) response.status(400).json({ error: "Validation failed", issues: error.issues });

@@ -1,5 +1,5 @@
 import { Router, type RequestHandler } from "express";
-import { requirePermission } from "../middleware/requirePermission.js";
+import { requireLogin } from "../middleware/auth.js";
 import {
   deriveDisplayTier,
   getConsoleModules
@@ -15,7 +15,7 @@ export function createConsoleRouter(options: ConsoleRouterOptions) {
   router.get(
     "/api/console/bootstrap",
     options.authMiddleware,
-    requirePermission("console.access"),
+    requireLogin,
     (request, response) => {
       const user = request.authUser!;
       response.json({
@@ -27,7 +27,9 @@ export function createConsoleRouter(options: ConsoleRouterOptions) {
           mustChangePassword: user.mustChangePassword ?? false
         },
         permissions: user.permissions,
-        consoleModules: getConsoleModules(user.permissions, user.baseTier)
+        consoleModules: user.mustChangePassword
+          ? [{ key: "profile", href: "/console/profile?section=security", label: "账号安全" }]
+          : getConsoleModules(user.permissions, user.baseTier)
       });
     }
   );

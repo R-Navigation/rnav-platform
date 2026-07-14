@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { Router, json, type RequestHandler } from "express";
 import { serialize } from "cookie";
+import { z, ZodError } from "zod";
 import {
   hashSessionToken,
   normalizeAuthenticatedUser,
@@ -11,6 +12,12 @@ import {
   type SessionIdentity
 } from "../middleware/auth.js";
 import { deriveDisplayTier } from "../services/auth/permissions.js";
+import {
+  CurrentPasswordError,
+  PasswordValidationError,
+  type AccountService
+} from "../services/account/accountService.js";
+import { createRequireSameOrigin } from "../middleware/requireSameOrigin.js";
 
 // Legacy hashes may use different costs; this fixed policy only equalizes unknown-user work.
 const invalidPasswordHash =
@@ -23,7 +30,14 @@ type AuthRouterOptions = {
   cookieSecure?: boolean;
   sessionTtlMs?: number;
   now?: () => Date;
+  accountService?: AccountService;
+  trustProxy?: boolean;
 };
+
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1).max(256),
+  newPassword: z.string().min(1).max(256)
+}).strict();
 
 function cookieOptions(secure: boolean, maxAge?: number) {
   return {
@@ -87,6 +101,7 @@ export function createAuthRouter(options: AuthRouterOptions) {
     nodeEnv: process.env.NODE_ENV
   });
   const now = options.now ?? (() => new Date());
+  const requireSameOrigin = createRequireSameOrigin({ trustProxy: options.trustProxy });
 
   router.post("/api/auth/login", json(), async (request, response, next) => {
     try {
@@ -167,6 +182,43 @@ export function createAuthRouter(options: AuthRouterOptions) {
     requireLogin,
     (request, response) => {
       response.json(safeSessionPayload(request.authUser!));
+    }
+  );
+
+  router.post(
+    "/api/auth/change-password",
+    options.authMiddleware,
+    requireLogin,
+    requireSameOrigin,
+    json(),
+    async (request, response, next) => {
+      try {
+        if (!options.accountService || !request.presentedSessionTokenHash) {
+          throw new Error("Account service is unavailable");
+        }
+        const body = changePasswordSchema.parse(request.body);
+        await options.accountService.changePassword({
+          userId: request.authUser!.id,
+          currentPassword: body.currentPassword,
+          newPassword: body.newPassword,
+          currentSessionTokenHash: request.presentedSessionTokenHash
+        });
+        response.status(204).end();
+      } catch (error) {
+        if (error instanceof ZodError) {
+          response.status(400).json({ code: "VALIDATION_ERROR", error: "Validation failed", issues: error.issues });
+          return;
+        }
+        if (error instanceof PasswordValidationError) {
+          response.status(400).json({ code: "PASSWORD_POLICY_FAILED", error: error.message, issues: error.issues });
+          return;
+        }
+        if (error instanceof CurrentPasswordError) {
+          response.status(400).json({ code: "CURRENT_PASSWORD_INVALID", error: error.message });
+          return;
+        }
+        next(error);
+      }
     }
   );
 

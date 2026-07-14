@@ -2,6 +2,7 @@ import { Router, type RequestHandler } from "express";
 import { z, ZodError } from "zod";
 import { requireLogin } from "../middleware/auth.js";
 import { requirePermission } from "../middleware/requirePermission.js";
+import { requirePasswordChanged } from "../middleware/requirePasswordChanged.js";
 import { createRequireSameOrigin } from "../middleware/requireSameOrigin.js";
 import { AssetReferenceError, RevisionConflictError } from "../services/site-admin/postgres-repository.js";
 import { collectionRequestSchemas, pageKeySchema, pageRequestSchema, type ContactItems, type SiteRecord } from "../services/site-admin/schemas.js";
@@ -26,7 +27,7 @@ function validationError(response: Parameters<RequestHandler>[1], error: ZodErro
 export function createSiteAdminRouter({ authMiddleware, service, trustProxy }: Options) {
   const router = Router();
   const requireSameOrigin = createRequireSameOrigin({ trustProxy });
-  router.use("/api/site-admin", authMiddleware, requireLogin);
+  router.use("/api/site-admin", authMiddleware, requireLogin, requirePasswordChanged);
 
   router.get("/api/site-admin/snapshot", requireAnyPermission(["site.content.write", "site.members.write"]), async (_request, response, next) => {
     try { response.json(await service.getSnapshot()); } catch (error) { next(error); }

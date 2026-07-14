@@ -2,6 +2,7 @@ import { Router, type RequestHandler } from "express";
 import { z, ZodError } from "zod";
 import { requireLogin } from "../middleware/auth.js";
 import { requirePermission } from "../middleware/requirePermission.js";
+import { requirePasswordChanged } from "../middleware/requirePasswordChanged.js";
 import { createRequireSameOrigin } from "../middleware/requireSameOrigin.js";
 import { DeviceAuthenticationError, MonitorNotFoundError, MonitorValidationError } from "../services/monitor/monitorService.js";
 import { categoryRequestSchema, deviceRequestSchema, ingestEventSchema, ingestHeartbeatSchema, ingestTelemetrySchema, settingsRequestSchema } from "../services/monitor/schemas.js";
@@ -48,7 +49,7 @@ export function createMonitorRouter({ authMiddleware, service, trustProxy }: { a
   router.get("/api/monitor/public/bootstrap", async (_request, response, next) => { try { response.json(await service.getPublicBootstrap()); } catch (error) { next(error); } });
   router.get("/api/monitor/public/homepage-snapshot", async (request, response, next) => { try { response.json(await service.getHomepageSnapshot({ limit: limit(request.query.limit, 12, 50), onlineOnly: ["1", "true", "yes", "on"].includes(String(request.query.onlineOnly ?? "").toLowerCase()) })); } catch (error) { next(error); } });
 
-  router.use("/api/monitor/console", authMiddleware, requireLogin);
+  router.use("/api/monitor/console", authMiddleware, requireLogin, requirePasswordChanged);
   router.get("/api/monitor/console/bootstrap", requireAnyPermission(["monitor.devices.read", "monitor.devices.write", "monitor.settings.write"]), async (request, response, next) => {
     try {
       const snapshot = await service.getConsoleBootstrap();

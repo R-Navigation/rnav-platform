@@ -1,4 +1,5 @@
 import type { RequestHandler } from "express";
+import { requirePasswordChanged } from "./requirePasswordChanged.js";
 
 export function requirePermission(permission: string): RequestHandler {
   return (request, response, next) => {
@@ -7,13 +8,7 @@ export function requirePermission(permission: string): RequestHandler {
       return;
     }
 
-    if (request.authUser.mustChangePassword) {
-      response.status(403).json({
-        code: "PASSWORD_CHANGE_REQUIRED",
-        error: "Password change required"
-      });
-      return;
-    }
+    if (request.authUser.mustChangePassword) return requirePasswordChanged(request, response, next);
 
     if (!request.authUser.permissions.includes(permission)) {
       response.status(403).json({ error: "Permission denied" });
