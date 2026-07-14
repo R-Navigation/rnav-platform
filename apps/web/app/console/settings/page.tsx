@@ -1,5 +1,5 @@
-import { ConsolePlaceholder } from "@/features/console/ConsolePlaceholder";
+import { SettingsConsole } from "@/features/console/settings/SettingsConsole";
 
 export default function SettingsPage() {
-  return <ConsolePlaceholder description="系统设置功能将在后续任务中接入。" title="系统设置" />;
+  return <SettingsConsole />;
 }

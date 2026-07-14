@@ -30,6 +30,11 @@ import { createUsersRouter } from "./routes/users.js";
 import { createUserAdminService } from "./services/user-admin/userAdminService.js";
 import { createPermissionsRouter } from "./routes/permissions.js";
 import { createPermissionAdminService } from "./services/permission-admin/permissionAdminService.js";
+import { createCosGateway } from "./services/media/cosGateway.js";
+import { createMediaService } from "./services/media/mediaService.js";
+import { createMediaRouter } from "./routes/media.js";
+import { createSettingsService } from "./services/settings/settingsService.js";
+import { createSettingsRouter } from "./routes/settings.js";
 import { resolveWebDir } from "./webDir.js";
 
 const env = loadEnv();
@@ -58,6 +63,8 @@ const app = createApp({
     createProfileRouter({ authMiddleware, service: createProfileService(pool), trustProxy: true }),
     createUsersRouter({ authMiddleware, service: createUserAdminService(pool), trustProxy: true }),
     createPermissionsRouter({ authMiddleware, service: createPermissionAdminService(pool), trustProxy: true }),
+    createMediaRouter({ authMiddleware, service: createMediaService(pool, createCosGateway({ secretId: env.cosSecretId, secretKey: env.cosSecretKey, region: env.cosRegion, bucket: env.cosBucket }),), trustProxy: true, maxBytes: env.mediaMaxUploadBytes, publicBaseUrl: env.cosPublicBaseUrl ?? `${env.publicBaseUrl}/media`, pathPrefix: env.cosPathPrefix }),
+    createSettingsRouter({ authMiddleware, service: createSettingsService(pool), trustProxy: true }),
     createConsoleRouter({ authMiddleware }), createPublicRouter({ service: publicService }),
     createSiteAdminRouter({ authMiddleware, service: siteAdminService, trustProxy: true }),
     createLabAssetsRouter({ authMiddleware, service: createLabAssetsService(pool), trustProxy: true }),
