@@ -26,6 +26,8 @@ import { createSiteAdminService } from "./services/site-admin/service.js";
 import { createAccountService } from "./services/account/accountService.js";
 import { createProfileService } from "./services/account/profileService.js";
 import { createProfileRouter } from "./routes/profile.js";
+import { createUsersRouter } from "./routes/users.js";
+import { createUserAdminService } from "./services/user-admin/userAdminService.js";
 import { resolveWebDir } from "./webDir.js";
 
 const env = loadEnv();
@@ -52,6 +54,7 @@ const app = createApp({
   routers: [
     createAuthRouter({ repository: authRepository, authMiddleware, cookieSecure: env.cookieSecure, accountService: createAccountService(pool), trustProxy: true }),
     createProfileRouter({ authMiddleware, service: createProfileService(pool), trustProxy: true }),
+    createUsersRouter({ authMiddleware, service: createUserAdminService(pool), trustProxy: true }),
     createConsoleRouter({ authMiddleware }), createPublicRouter({ service: publicService }),
     createSiteAdminRouter({ authMiddleware, service: siteAdminService, trustProxy: true }),
     createLabAssetsRouter({ authMiddleware, service: createLabAssetsService(pool), trustProxy: true }),
