@@ -62,8 +62,8 @@ export function createAccountService(pool: Pick<Pool, "connect">): AccountServic
         );
         await client.query(
           `INSERT INTO audit_logs (actor_id, action, target_type, target_id, detail)
-          VALUES ($1, 'account.password.change', 'user', $1::text, $2::jsonb)`,
-          [input.userId, JSON.stringify({ revokedSessions: revoked.rowCount ?? 0 })]
+          VALUES ($1, 'account.password.change', 'user', $2::text, $3::jsonb)`,
+          [input.userId, input.userId, JSON.stringify({ revokedSessions: revoked.rowCount ?? 0 })]
         );
         await client.query("COMMIT");
       } catch (error) {

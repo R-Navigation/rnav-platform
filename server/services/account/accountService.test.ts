@@ -33,7 +33,7 @@ test("change password updates the hash, clears first login, revokes other sessio
   assert.match(update.sql, /must_change_password = false/);
   assert.ok(client.calls.some((call) => call.sql.includes("token_hash <> $2")));
   const audit = client.calls.find((call) => call.sql.includes("INSERT INTO audit_logs"));
-  assert.match(audit?.sql ?? "", /\$1::text/);
+  assert.match(audit?.sql ?? "", /\$2::text/);
   assert.equal(JSON.stringify(audit).includes("NewPassword2@"), false);
   assert.equal(client.calls.at(-1)?.sql, "COMMIT");
   assert.equal(client.released, true);
