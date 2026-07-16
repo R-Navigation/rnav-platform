@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applyCatalogImages } from "./import-catalog-images.js";
+import { applyCatalogImages, normalizeCosPublicBaseUrl } from "./import-catalog-images.js";
+
+test("catalog image import normalizes the legacy Tencent COS public hostname", () => {
+  assert.equal(normalizeCosPublicBaseUrl("https://bucket.cos-ap-beijing.myqcloud.com/"), "https://bucket.cos.ap-beijing.myqcloud.com");
+  assert.equal(normalizeCosPublicBaseUrl("https://media.example.com/"), "https://media.example.com");
+});
 
 test("catalog image import uploads one shared image and links every matching option", async () => {
   const calls: Array<{ sql: string; values?: readonly unknown[] }> = [];

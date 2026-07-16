@@ -12,6 +12,10 @@ type ObjectStore = { put(key: string, body: Buffer, contentType: string): Promis
 
 const mimeTypes: Record<string, string> = { ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp" };
 
+export function normalizeCosPublicBaseUrl(value: string) {
+  return value.replace(/\.cos-([a-z0-9-]+)\.myqcloud\.com\/?$/i, ".cos.$1.myqcloud.com").replace(/\/$/, "");
+}
+
 export async function loadCatalogImages(directory: string): Promise<ImageFile[]> {
   const root = resolve(directory);
   const files = await readdir(root, { withFileTypes: true });
@@ -33,6 +37,7 @@ export async function loadCatalogImages(directory: string): Promise<ImageFile[]>
 }
 
 export async function applyCatalogImages(client: Queryable, store: ObjectStore, images: ImageFile[], options: { publicBaseUrl: string; pathPrefix: string }) {
+  const publicBaseUrl = normalizeCosPublicBaseUrl(options.publicBaseUrl);
   const sourceSkus = images.map((image) => image.sourceSku);
   const counts = await client.query<{ source_sku: string; count: number }>(`SELECT spec_metadata->>'sourceSku' AS source_sku, count(*)::integer AS count
     FROM procurement_catalog_items WHERE spec_metadata->>'sourceSku' = ANY($1::text[])
@@ -50,7 +55,7 @@ export async function applyCatalogImages(client: Queryable, store: ObjectStore, 
       const existing = await client.query<MediaRow>("SELECT id,object_key,url,checksum_sha256 FROM media_assets WHERE object_key=$1", [objectKey]);
       let media = existing.rows[0]; let reused = Boolean(media);
       if (!media) {
-        const id = randomUUID(); const url = `${options.publicBaseUrl.replace(/\/$/, "")}/${objectKey}`;
+        const id = randomUUID(); const url = `${publicBaseUrl}/${objectKey}`;
         await store.put(objectKey, image.body, image.mimeType); uploadedKeys.push(objectKey);
         media = (await client.query<MediaRow>(`INSERT INTO media_assets(id,bucket,filename,object_key,url,mime_type,size_bytes,checksum_sha256,status)
           VALUES($1,'procurement',$2,$3,$4,$5,$6,$7,'active') RETURNING id,object_key,url,checksum_sha256`, [id, image.filename, objectKey, url, image.mimeType, image.body.length, image.checksum])).rows[0];
