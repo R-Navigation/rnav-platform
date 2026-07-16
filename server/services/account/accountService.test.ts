@@ -22,19 +22,19 @@ test("change password updates the hash, clears first login, revokes other sessio
   await service.changePassword({
     userId: "user-1",
     currentPassword: "OldPassword1!",
-    newPassword: "NewPassword2@",
+    newPassword: "abcdefgh",
     currentSessionTokenHash: "current-hash"
   });
 
   const update = client.calls.find((call) => call.sql.includes("UPDATE users"));
   assert.ok(update);
-  assert.notEqual(update.values?.[1], "NewPassword2@");
-  assert.equal(await bcrypt.compare("NewPassword2@", String(update.values?.[1])), true);
+  assert.notEqual(update.values?.[1], "abcdefgh");
+  assert.equal(await bcrypt.compare("abcdefgh", String(update.values?.[1])), true);
   assert.match(update.sql, /must_change_password = false/);
   assert.ok(client.calls.some((call) => call.sql.includes("token_hash <> $2")));
   const audit = client.calls.find((call) => call.sql.includes("INSERT INTO audit_logs"));
   assert.match(audit?.sql ?? "", /\$2::text/);
-  assert.equal(JSON.stringify(audit).includes("NewPassword2@"), false);
+  assert.equal(JSON.stringify(audit).includes("abcdefgh"), false);
   assert.equal(client.calls.at(-1)?.sql, "COMMIT");
   assert.equal(client.released, true);
 });

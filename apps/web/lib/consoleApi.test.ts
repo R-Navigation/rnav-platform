@@ -1,0 +1,37 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { consoleApi, ConsoleApiError } from "./consoleApi.ts";
+
+test("console API surfaces string validation issues", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    error: "Password does not meet policy",
+    issues: ["至少 8 个字符"],
+  }), { status: 400, headers: { "content-type": "application/json" } });
+
+  try {
+    await assert.rejects(consoleApi("/api/auth/change-password"), (error: unknown) => {
+      assert.ok(error instanceof ConsoleApiError);
+      assert.equal(error.message, "至少 8 个字符");
+      assert.equal(error.status, 400);
+      return true;
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("console API surfaces structured validation issues", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    issues: [{ message: "两次输入的新密码不一致" }],
+  }), { status: 400, headers: { "content-type": "application/json" } });
+
+  try {
+    await assert.rejects(consoleApi("/api/auth/change-password"), {
+      message: "两次输入的新密码不一致",
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
