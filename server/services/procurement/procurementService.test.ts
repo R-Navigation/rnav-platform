@@ -68,6 +68,18 @@ test("inactive or missing catalog items abort the whole request", async () => {
   assert.equal(db.queries.at(-1)?.sql, "ROLLBACK");
 });
 
+test("server resolved catalog totals cannot overflow the request amount", async () => {
+  const db = client([{ id: "00000000-0000-4000-8000-000000000011", sku: "EXPENSIVE", name_zh: "昂贵标准件", name_en: "", spec: "", unit: "件", pack_size: 1, estimated_unit_price: "9999999.99", vendor: null, url: null, category_code: "other-standard", category_name_zh: "其他标准件" }]);
+  const service = createProcurementService({ connect: async () => db } as never);
+  await assert.rejects(service.createRequest({ title: "大额申请", reason: "测试", items: [{ sourceType: "catalog", catalogItemId: "00000000-0000-4000-8000-000000000011", quantity: 1_000_000 }] }, "00000000-0000-4000-8000-000000000001"), ProcurementConflictError);
+  assert.equal(db.queries.at(-1)?.sql, "ROLLBACK");
+});
+
+test("inactive catalog visibility requires purchase permission", async () => {
+  const service = createProcurementService({ query: async () => ({ rows: [], rowCount: 0 }) } as never);
+  await assert.rejects(service.listCatalog({ search: "", includeInactive: true }, { id: "actor", permissions: ["procurements.create"] }), ProcurementAccessError);
+});
+
 test("catalog maintenance requires procurement purchase permission", async () => {
   const service = createProcurementService({ query: async () => ({ rows: [], rowCount: 0 }) } as never);
   await assert.rejects(service.createCatalogCategory({ code: "fasteners", nameZh: "紧固件", nameEn: "", descriptionZh: "", descriptionEn: "", sortOrder: 0, isActive: true }, { id: "actor", permissions: [] }), ProcurementAccessError);

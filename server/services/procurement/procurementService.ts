@@ -55,7 +55,8 @@ async function withTransaction<T>(pool: Pick<Pool, "connect">, invoke: (client: 
 export function createProcurementService(pool: Pick<Pool, "connect" | "query">, dependencies: Dependencies = {}) {
   const now = dependencies.now ?? (() => new Date());
   return {
-    async listCatalog(query: CatalogQuery) {
+    async listCatalog(query: CatalogQuery, actor: Actor) {
+      if (query.includeInactive) requireCatalogManager(actor);
       const values: unknown[] = [];
       const where: string[] = [];
       if (!query.includeInactive) where.push("categories.is_active = true", "items.is_active = true");
@@ -182,6 +183,7 @@ export function createProcurementService(pool: Pick<Pool, "connect" | "query">, 
           }
         }
         const total = resolvedItems.reduce((sum, item) => sum + Math.round(item.quantity * (item.estimatedUnitPrice ?? 0) * 100), 0) / 100;
+        if (total > 9_999_999_999.99) throw new ProcurementConflictError("Total estimated amount exceeds database range");
         const created = await client.query(`INSERT INTO procurement_requests
           (request_no, requester_id, title, reason, status, total_estimated_amount, submitted_at)
           VALUES ('PR-' || to_char($1::timestamptz, 'YYYYMMDD') || '-' || lpad(nextval('procurement_request_no_seq')::text, 6, '0'), $2, $3, $4, 'submitted', $5, $1) RETURNING id, request_no`, [now(), actorId, input.title, input.reason, total]);
