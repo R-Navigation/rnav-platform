@@ -3,6 +3,8 @@ export type ProcurementAction = "approve" | "reject" | "start_purchase" | "mark_
 export type CatalogAttribute = { id: string; subcategoryId: string; attributeKey: string; labelZh: string; labelEn: string; unit: string; valueType: "text" | "number" | "multi"; sortOrder: number; isFilterable: boolean; values: string[] };
 export type CatalogSubcategory = { id: string; categoryId: string; code: string; nameZh: string; nameEn: string; descriptionZh: string; descriptionEn: string; sortOrder: number; isActive: boolean; attributes?: CatalogAttribute[] };
 export type CatalogItem = { id: string; categoryId: string; categoryCode: string; categoryNameZh: string; subcategoryId: string; subcategoryCode: string; subcategoryNameZh: string; sku: string | null; nameZh: string; nameEn: string; spec: string; specMetadata: Record<string, string | number | boolean | null | string[]>; unit: string; packSize: number; estimatedUnitPrice: number | null; vendor: string | null; url: string | null; keywords: string[]; imageAssetId: string | null; imageUrl: string | null; isActive: boolean };
+export type ProcurementCatalogSnapshot = { categoryNameZh?: string; subcategoryNameZh?: string; specMetadata?: CatalogItem["specMetadata"]; url?: string };
+export type GroupableProcurementItem = { source_type?: "catalog" | "custom"; catalog_snapshot?: ProcurementCatalogSnapshot };
 export type CustomItemDraft = { itemName: string; spec: string; unit: string; quantity: number; estimatedUnitPrice: number | null; vendor: string | null; url: string | null; remark: string | null };
 export type CartItem =
   | { key: string; sourceType: "catalog"; catalogItemId: string; name: string; spec: string; unit: string; packSize: number; quantity: number; estimatedUnitPrice: number | null; remark: string; url: string | null }
@@ -22,3 +24,25 @@ const hiddenAttributeKeys=new Set(["source","sourceSku","optionSku","productFami
 const fallbackLabels:Record<string,string>={thread:"尺寸",lengthMm:"长度",headDiameterMm:"螺头直径",bodyLengthMm:"柱体长度",maleThreadLengthMm:"外螺纹长度",hexWidthMm:"对边尺寸",outerDiameterMm:"外径",thicknessMm:"厚度",threadPitchMm:"螺距",material:"材料",variants:"特性",standard:"标准",packQuantity:"每包数量",brand:"品牌",leadTime:"货期"};
 const unitByKey:Record<string,string>={lengthMm:"mm",headDiameterMm:"mm",bodyLengthMm:"mm",maleThreadLengthMm:"mm",hexWidthMm:"mm",outerDiameterMm:"mm",thicknessMm:"mm",threadPitchMm:"mm",packQuantity:"个"};
 export function displayAttributes(metadata: CatalogItem["specMetadata"], definitions: CatalogAttribute[] = []) { const definitionMap=new Map(definitions.map((item)=>[item.attributeKey,item]));return Object.entries(metadata).filter(([key,value])=>!hiddenAttributeKeys.has(key)&&value!==null&&value!==""&&(!Array.isArray(value)||value.length)).map(([key,value])=>({key,label:definitionMap.get(key)?.labelZh??fallbackLabels[key]??key,value:Array.isArray(value)?value.join("、"):String(value),unit:definitionMap.get(key)?.unit??unitByKey[key]??"",sortOrder:definitionMap.get(key)?.sortOrder??999})).sort((a,b)=>a.sortOrder-b.sortOrder||a.label.localeCompare(b.label,"zh-CN")); }
+
+export function groupProcurementItems<T extends GroupableProcurementItem>(items: T[]) {
+  const groups = new Map<string, Map<string, T[]>>();
+  for (const item of items) {
+    const category = item.catalog_snapshot?.categoryNameZh || "其他物料";
+    const subcategory = item.catalog_snapshot?.subcategoryNameZh || (item.source_type === "custom" ? "手动填写" : "未分类");
+    const subcategories = groups.get(category) ?? new Map<string, T[]>();
+    const groupedItems = subcategories.get(subcategory) ?? [];
+    groupedItems.push(item);
+    subcategories.set(subcategory, groupedItems);
+    groups.set(category, subcategories);
+  }
+
+  return [...groups.entries()]
+    .sort(([left], [right]) => left.localeCompare(right, "zh-CN"))
+    .map(([category, subcategories]) => ({
+      category,
+      subcategories: [...subcategories.entries()]
+        .sort(([left], [right]) => left.localeCompare(right, "zh-CN"))
+        .map(([subcategory, groupedItems]) => ({ subcategory, items: groupedItems })),
+    }));
+}

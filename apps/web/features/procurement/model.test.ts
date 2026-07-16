@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { addCatalogItem, availableActions, cartEstimatedTotal, procurementCapabilities, updateCartQuantity, type CatalogItem } from "./model.ts";
+import { addCatalogItem, availableActions, cartEstimatedTotal, groupProcurementItems, procurementCapabilities, updateCartQuantity, type CatalogItem } from "./model.ts";
 
 test("normal members can create and only see requester actions", () => {
   const capability = procurementCapabilities(["procurements.create", "procurements.read_own"]);
@@ -28,4 +28,17 @@ test("adding the same standard part merges its quantity using the pack size", ()
 
 test("setting a cart quantity to zero removes the line", () => {
   assert.deepEqual(updateCartQuantity(addCatalogItem([], bolt), "catalog:bolt-1", 0), []);
+});
+
+test("procurement lines are grouped by primary and secondary category", () => {
+  const grouped = groupProcurementItems([
+    { id: "washer", source_type: "catalog" as const, catalog_snapshot: { categoryNameZh: "垫圈", subcategoryNameZh: "平垫圈" } },
+    { id: "bolt", source_type: "catalog" as const, catalog_snapshot: { categoryNameZh: "螺栓", subcategoryNameZh: "内六角圆柱头螺钉" } },
+    { id: "custom", source_type: "custom" as const, catalog_snapshot: {} },
+    { id: "nut", source_type: "catalog" as const, catalog_snapshot: { categoryNameZh: "螺母", subcategoryNameZh: "六角螺母" } },
+  ]);
+
+  assert.deepEqual(grouped.map((group) => group.category), ["垫圈", "螺母", "螺栓", "其他物料"]);
+  assert.equal(grouped[2].subcategories[0].subcategory, "内六角圆柱头螺钉");
+  assert.equal(grouped[3].subcategories[0].subcategory, "手动填写");
 });
