@@ -139,6 +139,23 @@ test("catalog item deletion is auditable and preserves request history through t
   assert.match(calls[0].sql, /procurement\.catalog_item\.delete/);
 });
 
+test("request details backfill missing historical category fields without overriding snapshots", async () => {
+  const calls: string[] = [];
+  const service = createProcurementService({ query: async (sql: string) => {
+    calls.push(sql);
+    if (sql.includes("FROM procurement_requests requests")) return { rows: [{ id: "request-1", requester_id: "actor", status: "submitted" }], rowCount: 1 };
+    if (sql.includes("FROM procurement_request_items request_items")) return { rows: [{ id: "item-1", catalog_snapshot: { categoryNameZh: "螺栓", subcategoryNameZh: "内六角圆柱头螺钉" } }], rowCount: 1 };
+    return { rows: [], rowCount: 0 };
+  } } as never);
+
+  const detail = await service.getRequest("request-1", { id: "actor", permissions: ["procurements.read_own"] });
+  const itemQuery = calls.find((sql) => sql.includes("FROM procurement_request_items request_items"))!;
+  assert.match(itemQuery, /LEFT JOIN procurement_catalog_subcategories/);
+  assert.match(itemQuery, /jsonb_build_object/);
+  assert.match(itemQuery, /\|\| jsonb_strip_nulls\(COALESCE\(request_items\.catalog_snapshot/);
+  assert.equal(detail.items[0].catalog_snapshot.subcategoryNameZh, "内六角圆柱头螺钉");
+});
+
 test("catalog category deletion rejects non-empty categories", async () => {
   const calls: string[] = [];
   const service = createProcurementService({ query: async (sql: string) => {

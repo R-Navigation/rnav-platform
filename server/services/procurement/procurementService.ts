@@ -210,7 +210,20 @@ export function createProcurementService(pool: Pick<Pool, "connect" | "query">, 
 
     async getRequest(id: string, actor: Actor) {
       const result=await pool.query(`SELECT requests.*,users.username requester_username,users.display_name requester_name FROM procurement_requests requests JOIN users ON users.id=requests.requester_id WHERE requests.id=$1`,[id]); const request=result.rows[0]; if(!request)throw new ProcurementNotFoundError("Procurement request not found"); if(request.requester_id!==actor.id&&!actor.permissions.includes("procurements.read_all"))throw new ProcurementAccessError("Permission denied");
-      const [items,comments,history]=await Promise.all([pool.query("SELECT * FROM procurement_request_items WHERE request_id=$1 ORDER BY sort_order,id",[id]),pool.query("SELECT comments.*,users.display_name author_name FROM procurement_comments comments JOIN users ON users.id=comments.author_id WHERE request_id=$1 ORDER BY comments.created_at",[id]),pool.query("SELECT history.*,users.display_name actor_name FROM procurement_status_history history JOIN users ON users.id=history.actor_id WHERE request_id=$1 ORDER BY history.created_at",[id])]);
+      const [items,comments,history]=await Promise.all([pool.query(`SELECT request_items.*,
+        jsonb_strip_nulls(jsonb_build_object(
+          'categoryCode',categories.code,
+          'categoryNameZh',categories.name_zh,
+          'subcategoryCode',subcategories.code,
+          'subcategoryNameZh',subcategories.name_zh,
+          'specMetadata',catalog_items.spec_metadata,
+          'url',catalog_items.url
+        )) || jsonb_strip_nulls(COALESCE(request_items.catalog_snapshot,'{}'::jsonb)) catalog_snapshot
+        FROM procurement_request_items request_items
+        LEFT JOIN procurement_catalog_items catalog_items ON catalog_items.id=request_items.catalog_item_id
+        LEFT JOIN procurement_catalog_categories categories ON categories.id=catalog_items.category_id
+        LEFT JOIN procurement_catalog_subcategories subcategories ON subcategories.id=catalog_items.subcategory_id
+        WHERE request_items.request_id=$1 ORDER BY request_items.sort_order,request_items.id`,[id]),pool.query("SELECT comments.*,users.display_name author_name FROM procurement_comments comments JOIN users ON users.id=comments.author_id WHERE request_id=$1 ORDER BY comments.created_at",[id]),pool.query("SELECT history.*,users.display_name actor_name FROM procurement_status_history history JOIN users ON users.id=history.actor_id WHERE request_id=$1 ORDER BY history.created_at",[id])]);
       return {...request,items:items.rows,comments:comments.rows,history:history.rows};
     },
 
