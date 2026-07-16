@@ -90,7 +90,8 @@ test("getMigrationFiles returns SQL migrations in lexical order", async () => {
       "014_account_profile_permissions.sql",
       "015_media_settings.sql",
       "016_procurement_catalog.sql",
-      "017_remove_procurement_catalog_examples.sql"
+      "017_remove_procurement_catalog_examples.sql",
+      "018_lab_assets_sequences.sql"
     ]
   );
 });
@@ -134,6 +135,18 @@ test("procurement example cleanup targets only the original seeded SKUs", async 
   assert.match(migration, /ROD-THREADED-M6/);
   assert.doesNotMatch(migration, /JD-/);
   assert.doesNotMatch(migration, /DELETE FROM procurement_catalog_categories/i);
+});
+
+test("lab assets sequence migration advances every legacy-backed identity", async () => {
+  const migration = await import("node:fs/promises").then(({ readFile }) =>
+    readFile(new URL("./migrations/018_lab_assets_sequences.sql", import.meta.url), "utf8")
+  );
+  for (const table of ["lab_platform_types", "lab_platforms", "lab_assets", "lab_platform_notes", "lab_asset_notes"]) {
+    assert.match(migration, new RegExp(`pg_get_serial_sequence\\('${table}', 'id'\\)`, "i"));
+    assert.match(migration, new RegExp(`max\\(id\\) FROM ${table}`, "i"));
+    assert.match(migration, new RegExp(`EXISTS \\(SELECT 1 FROM ${table}\\)`, "i"));
+  }
+  assert.doesNotMatch(migration, /INSERT|UPDATE|DELETE|DROP|ALTER/i);
 });
 
 test("account profile permission migration is additive and seeds system templates", async () => {
