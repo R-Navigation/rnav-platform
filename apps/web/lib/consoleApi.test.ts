@@ -35,3 +35,23 @@ test("console API surfaces structured validation issues", async () => {
     globalThis.fetch = originalFetch;
   }
 });
+
+test("console API lets the browser set multipart boundaries for FormData", async () => {
+  const originalFetch = globalThis.fetch;
+  let headers: HeadersInit | undefined;
+  globalThis.fetch = async (_input, init) => {
+    headers = init?.headers;
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+  try {
+    const form = new FormData();
+    form.append("file", new Blob(["image"], { type: "image/png" }), "avatar.png");
+    await consoleApi("/api/media/upload", { method: "POST", body: form });
+    assert.equal(new Headers(headers).has("content-type"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

@@ -10,7 +10,11 @@ export class ConsoleApiError extends Error {
   }
 }
 export async function consoleApi<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, { ...init, headers: { ...(init?.body ? { "content-type": "application/json" } : {}), ...init?.headers } });
+  const isFormData = typeof FormData !== "undefined" && init?.body instanceof FormData;
+  const response = await fetch(path, {
+    ...init,
+    headers: { ...(init?.body && !isFormData ? { "content-type": "application/json" } : {}), ...init?.headers },
+  });
   if (response.status === 204) return undefined as T;
   let payload: unknown = {}; try { payload = await response.json(); } catch {}
   const errorPayload = payload && typeof payload === "object"
