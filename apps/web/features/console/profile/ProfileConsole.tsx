@@ -50,6 +50,7 @@ export function ProfileConsole({ mustChangePassword }: { mustChangePassword: boo
       };
       const saved = await consoleApi<Profile>("/api/profile", { method: "PUT", body: JSON.stringify(body) });
       setProfile(saved); setDraft(saved); setMessage("个人资料已保存。公开成员页会按照你的展示设置更新。");
+      if (profile?.memberStatus !== saved.memberStatus) router.refresh();
     } catch (reason) {
       setError(reason instanceof ConsoleApiError && reason.code === "VERSION_CONFLICT" ? "资料已被其他操作更新，请重新加载页面后再编辑。" : (reason as Error).message);
     } finally { setBusy(false); }
