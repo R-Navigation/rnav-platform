@@ -153,12 +153,12 @@ export function createPostgresSiteAdminRepository(
       try {
         await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
         const publicRepository = publicRepositoryFactory(client);
-        const [pageRows, revisions, researchItems, newsItems, teamMembers, facilityItems, contactItems] = await Promise.all([
+        const [pageRows, revisions, researchItems, newsItems, facilityItems, contactItems] = await Promise.all([
           client.query<{ page_key: string; content_json: unknown }>(
             "SELECT page_key, content_json FROM page_content WHERE page_key = ANY($1::text[])", [pageKeys]
           ),
           getRevisions(client),
-          publicRepository.getResearchItems(), publicRepository.getNewsItems(), publicRepository.getTeamMembers(),
+          publicRepository.getResearchItems(), publicRepository.getNewsItems(),
           publicRepository.getFacilityItems(), publicRepository.getContactItems()
         ]);
         const storedPages = new Map(pageRows.rows.map((row) => [row.page_key, row.content_json]));
@@ -169,7 +169,6 @@ export function createPostgresSiteAdminRepository(
           pages,
           researchItems: { items: normalizeSnapshotAssets(researchItems) as SiteRecord[], updatedAt: revisions.get("research-items") ?? "0" },
           newsItems: { items: normalizeSnapshotAssets(newsItems) as SiteRecord[], updatedAt: revisions.get("news-items") ?? "0" },
-          teamMembers: { items: normalizeSnapshotAssets(teamMembers) as SiteRecord[], updatedAt: revisions.get("team-members") ?? "0" },
           facilityItems: { items: normalizeSnapshotAssets(facilityItems) as SiteRecord[], updatedAt: revisions.get("facility-items") ?? "0" },
           contactItems: { items: contactItems, updatedAt: revisions.get("contact-items") ?? "0" }
         };
@@ -227,24 +226,6 @@ export function createPostgresSiteAdminRepository(
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,now())`,
       (item, index) => [item.id, number(item.sortOrder ?? index), ...locale(item.date), ...locale(item.badge), value(item.badgeTone || "cyan"), ...locale(item.title), ...locale(item.description), ...locale(item.excerpt), Boolean(item.featured), ...imageValues(item.image), ...locale(nested(item.link).label), nested(item.link).href || null, nested(item.link).icon || null, value(nested(item.link).variant)],
       "site.news.replace", "news_items"),
-
-    replaceTeamMembers(items, expected, actorId) {
-      return inReplacementTransaction(pool, { moduleKey: "team-members", actorId, action: "site.members.replace", targetType: "team_members", expected, count: items.length }, async (client) => {
-        await client.query("DELETE FROM team_members");
-        for (const [index, item] of items.entries()) {
-          const fields = ["name", "subtitle", "bio", "role", "focus", "degree"];
-          const tailFields = ["major", "research", "graduation", "thesis", "destination"];
-          const result = await client.query<{ id: string }>(
-            `INSERT INTO team_members (slug, group_key, sort_order, name_zh, name_en, subtitle_zh, subtitle_en, bio_zh, bio_en, role_zh, role_en, focus_zh, focus_en, degree_zh, degree_en, enrollment_year, major_zh, major_en, research_zh, research_en, graduation_zh, graduation_en, thesis_zh, thesis_en, destination_zh, destination_en, image_asset_id, image_src, image_alt, image_data_alt, updated_at)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,now()) RETURNING id::text AS id`,
-            [item.slug, item.group, number(item.sortOrder ?? index), ...fields.flatMap((field) => locale(item[field])), value(item.enrollmentYear), ...tailFields.flatMap((field) => locale(item[field])), ...imageValues(item.image)]
-          );
-          const memberId = result.rows[0].id;
-          await insertMany(client, "INSERT INTO team_member_links (team_member_id, sort_order, label_zh, label_en, href, icon, variant) VALUES ($1,$2,$3,$4,$5,$6,$7)", list(item.links).map((entry, childIndex) => [memberId, childIndex, ...locale(entry.label), value(entry.href), value(entry.icon), value(entry.variant)]));
-          await insertMany(client, "INSERT INTO team_member_contacts (team_member_id, sort_order, label_zh, label_en, value_zh, value_en) VALUES ($1,$2,$3,$4,$5,$6)", list(item.contacts).map((entry, childIndex) => [memberId, childIndex, ...locale(entry.label), ...locale(entry.value)]));
-        }
-      });
-    },
 
     replaceFacilityItems(items, expected, actorId) {
       return inReplacementTransaction(pool, { moduleKey: "facility-items", actorId, action: "site.facilities.replace", targetType: "facility_items", expected, count: items.length }, async (client) => {

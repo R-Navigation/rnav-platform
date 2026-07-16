@@ -5,6 +5,7 @@ import { parse } from "cookie";
 import {
   getEffectivePermissions,
   resolvePermissions,
+  restrictAlumniPermissions,
   type BaseTier
 } from "../services/auth/permissions.js";
 
@@ -26,6 +27,7 @@ export type SessionIdentity = Omit<
   UserForLogin,
   "passwordHash" | "status" | "mustChangePassword"
 > & {
+  memberStatus?: "current" | "alumni";
   mustChangePassword?: boolean;
   permissions: string[];
 };
@@ -67,6 +69,7 @@ type UserRow = {
 };
 
 type IdentityRow = Omit<UserRow, "password_hash"> & {
+  member_status: "current" | "alumni";
   template_permissions: string[] | null;
   explicit_grants: string[] | null;
   explicit_revokes: string[] | null;
@@ -79,10 +82,13 @@ export function hashSessionToken(token: string) {
 export function normalizeAuthenticatedUser(
   identity: SessionIdentity
 ): AuthenticatedUser {
+  const permissions = getEffectivePermissions(identity.permissions, identity.baseTier);
   return {
     ...identity,
     mustChangePassword: identity.mustChangePassword ?? false,
-    permissions: getEffectivePermissions(identity.permissions, identity.baseTier)
+    permissions: identity.memberStatus === "alumni"
+      ? restrictAlumniPermissions(permissions, identity.baseTier)
+      : permissions
   };
 }
 
@@ -150,6 +156,7 @@ export function createPostgresAuthRepository(pool: Pool): AuthRepository {
            users.base_tier,
            users.status,
            users.must_change_password,
+           user_profiles.member_status,
            COALESCE(
              (SELECT array_agg(DISTINCT permission_template_permissions.permission_key)
               FROM user_permission_templates
@@ -174,6 +181,7 @@ export function createPostgresAuthRepository(pool: Pool): AuthRepository {
            ) AS explicit_revokes
          FROM session_tokens
          JOIN users ON users.id = session_tokens.user_id
+         JOIN user_profiles ON user_profiles.user_id = users.id
          WHERE session_tokens.token_hash = $1
            AND session_tokens.expires_at > $2
            AND users.status = 'active'`,
@@ -197,6 +205,7 @@ export function createPostgresAuthRepository(pool: Pool): AuthRepository {
             displayName: row.display_name,
             baseTier: row.base_tier,
             mustChangePassword: row.must_change_password,
+            memberStatus: row.member_status,
             permissions: resolution?.permissions ?? []
           }
         : null;

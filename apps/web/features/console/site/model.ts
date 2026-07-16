@@ -30,7 +30,6 @@ const pageModules = [
 const collectionModules = [
   ["research-items", "论文条目", "researchItems", "/research-items"],
   ["news-items", "新闻条目", "newsItems", "/news-items"],
-  ["team-members", "团队成员", "teamMembers", "/team-members"],
   ["facility-items", "设备条目", "facilityItems", "/facility-items"],
   ["contact-items", "联系结构", "contactItems", "/contact-items"]
 ] as const;

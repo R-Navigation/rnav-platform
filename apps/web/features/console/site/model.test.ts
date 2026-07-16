@@ -24,11 +24,10 @@ test("legacy admin routes permanently redirect to console site", () => {
 test("snapshot normalization supports versioned pages and structured collections", () => {
   const modules = normalizeSiteAdminSnapshot({
     pages: { home: { content: { hero: { title: { zh: "主页", en: "Home" } } }, updatedAt: "r1" } },
-    teamMembers: { items: [{ slug: "advisor-alice", group: "advisor", name: { zh: "艾丽丝", en: "Alice" } }], updatedAt: "r2" }
   });
 
   assert.equal(modules.find((item) => item.key === "home")?.revision, "r1");
-  assert.equal(modules.find((item) => item.key === "team-members")?.revision, "r2");
+  assert.equal(modules.some((item) => item.key === "team-members"), false);
 });
 
 test("save requests carry the loaded revision for optimistic concurrency", () => {
@@ -41,10 +40,7 @@ test("save requests carry the loaded revision for optimistic concurrency", () =>
 test("module availability follows the permissions exposed by console bootstrap", () => {
   const modules = normalizeSiteAdminSnapshot({});
 
-  assert.deepEqual(
-    getAvailableSiteModules(modules, ["site.members.write"]).map((module) => module.key),
-    ["team-members"],
-  );
+  assert.deepEqual(getAvailableSiteModules(modules, ["site.members.write"]), []);
   assert.equal(getAvailableSiteModules(modules, ["site.content.write"]).some((module) => module.key === "team-members"), false);
 });
 

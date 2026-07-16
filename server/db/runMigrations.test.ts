@@ -91,7 +91,9 @@ test("getMigrationFiles returns SQL migrations in lexical order", async () => {
       "015_media_settings.sql",
       "016_procurement_catalog.sql",
       "017_remove_procurement_catalog_examples.sql",
-      "018_lab_assets_sequences.sql"
+      "018_lab_assets_sequences.sql",
+      "019_member_self_profiles.sql",
+      "020_legacy_serial_sequences.sql"
     ]
   );
 });
@@ -146,6 +148,31 @@ test("lab assets sequence migration advances every legacy-backed identity", asyn
     assert.match(migration, new RegExp(`max\\(id\\) FROM ${table}`, "i"));
     assert.match(migration, new RegExp(`EXISTS \\(SELECT 1 FROM ${table}\\)`, "i"));
   }
+  assert.doesNotMatch(migration, /INSERT|UPDATE|DELETE|DROP|ALTER/i);
+});
+
+test("member profile migration makes accounts the public member source", async () => {
+  const migration = await import("node:fs/promises").then(({ readFile }) =>
+    readFile(new URL("./migrations/019_member_self_profiles.sql", import.meta.url), "utf8")
+  );
+  for (const column of ["public_visible", "member_status", "degree_level", "graduation_year", "personal_links", "avatar_position_x", "avatar_position_y", "avatar_zoom"]) {
+    assert.match(migration, new RegExp(`ADD COLUMN IF NOT EXISTS ${column}`, "i"));
+  }
+  assert.match(migration, /FROM team_members team/i);
+  assert.match(migration, /jsonb_agg[\s\S]*team_member_links/i);
+  assert.match(migration, /link\.href ~\* '\^https\?:\/\/'/i);
+  assert.match(migration, /users[\s\S]*member_status = 'alumni'[\s\S]*status = 'disabled'/i);
+  assert.doesNotMatch(migration, /DROP (?:TABLE|COLUMN|CONSTRAINT)/i);
+});
+
+test("legacy sequence migration aligns every serial column dynamically", async () => {
+  const migration = await import("node:fs/promises").then(({ readFile }) =>
+    readFile(new URL("./migrations/020_legacy_serial_sequences.sql", import.meta.url), "utf8")
+  );
+  assert.match(migration, /information_schema\.columns/i);
+  assert.match(migration, /pg_get_serial_sequence/i);
+  assert.match(migration, /SELECT max\(%I\)/i);
+  assert.match(migration, /setval\(target\.sequence_name, COALESCE\(maximum, 1\), maximum IS NOT NULL\)/i);
   assert.doesNotMatch(migration, /INSERT|UPDATE|DELETE|DROP|ALTER/i);
 });
 

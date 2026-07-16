@@ -19,12 +19,14 @@ class Client {
   release() { this.released = true; }
 }
 
-test("user creation links account, profile, public member and returns a one-time password", async () => {
+test("user creation creates a private self-managed profile and returns a one-time password", async () => {
   const client = new Client(); const service = createUserAdminService({ connect: async () => client } as never);
   const result = await service.createUser({ username: "alice", nameZh: "张三", nameEn: "Alice", memberCategory: "phd", email: "a@example.com", baseTier: "normal" }, { id: "admin", baseTier: "super" });
   const insert = client.calls.find((call) => call.sql.includes("INSERT INTO users"));
   assert.equal(await bcrypt.compare(result.temporaryPassword, String(insert?.values?.[2])), true);
   assert.ok(client.calls.some((call) => call.sql.includes("INSERT INTO user_profiles")));
+  assert.equal(client.calls.some((call) => call.sql.includes("INSERT INTO team_members")), false);
+  assert.ok(client.calls.some((call) => call.sql.includes("public_visible")));
   assert.ok(client.calls.some((call) => call.sql.includes("normal-member")));
   assert.equal(JSON.stringify(client.calls).includes(result.temporaryPassword), false);
   assert.equal(client.calls.at(-1)?.sql, "COMMIT");

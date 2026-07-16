@@ -16,4 +16,7 @@ export const userListSchema = z.object({
 }).strict();
 export const statusSchema = z.object({ status: z.enum(["active", "disabled"]) }).strict();
 export const tierSchema = z.object({ baseTier: z.enum(["normal", "super"]) }).strict();
+export const publicProfileAdminSchema = z.object({
+  publicVisible: z.boolean(),
+}).strict();
 export const userIdSchema = z.string().uuid();

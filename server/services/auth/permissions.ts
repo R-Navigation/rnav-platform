@@ -98,6 +98,12 @@ export function resolvePermissions({
   return { permissions: [...effective], sources };
 }
 
+export function restrictAlumniPermissions(permissions: string[], baseTier: BaseTier) {
+  if (baseTier === "super") return permissions;
+  const internalMemberPermissions = new Set(["lab_assets.read", "procurements.create", "procurements.read_own"]);
+  return permissions.filter((permission) => !internalMemberPermissions.has(permission));
+}
+
 const moduleDefinitions: ConsoleModule[] = [
   {
     key: "profile",

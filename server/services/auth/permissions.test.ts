@@ -6,6 +6,7 @@ import {
   getEffectivePermissions,
   knownPermissionKeys,
   resolvePermissions
+  ,restrictAlumniPermissions
 } from "./permissions.js";
 
 test("deriveDisplayTier returns super for super users", () => {
@@ -69,6 +70,14 @@ test("procurement operators inherit read-all access needed for their workflow", 
   for (const permission of ["procurements.review", "procurements.purchase", "procurements.close"]) {
     assert.ok(getEffectivePermissions([permission]).includes("procurements.read_all"));
   }
+});
+
+test("alumni retain profile access but lose ordinary internal member access", () => {
+  const permissions = restrictAlumniPermissions(resolvePermissions({ baseTier: "normal" }).permissions, "normal");
+  assert.ok(permissions.includes("console.access"));
+  assert.ok(permissions.includes("profile.write_own"));
+  assert.equal(permissions.includes("lab_assets.read"), false);
+  assert.equal(permissions.includes("procurements.create"), false);
 });
 
 test("getConsoleModules returns users for permission managers", () => {

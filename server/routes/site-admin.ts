@@ -67,7 +67,6 @@ export function createSiteAdminRouter({ authMiddleware, service, trustProxy }: O
   type ContactBody = { items: ContactItems; expectedUpdatedAt: string };
   router.put("/api/site-admin/research-items", ...mutation("site.content.write", collectionRequestSchemas.research, (body: CollectionBody, actorId) => service.replaceResearchItems(body.items, body.expectedUpdatedAt, actorId)));
   router.put("/api/site-admin/news-items", ...mutation("site.content.write", collectionRequestSchemas.news, (body: CollectionBody, actorId) => service.replaceNewsItems(body.items, body.expectedUpdatedAt, actorId)));
-  router.put("/api/site-admin/team-members", ...mutation("site.members.write", collectionRequestSchemas.team, (body: CollectionBody, actorId) => service.replaceTeamMembers(body.items, body.expectedUpdatedAt, actorId)));
   router.put("/api/site-admin/facility-items", ...mutation("site.content.write", collectionRequestSchemas.facility, (body: CollectionBody, actorId) => service.replaceFacilityItems(body.items, body.expectedUpdatedAt, actorId)));
   router.put("/api/site-admin/contact-items", ...mutation("site.content.write", collectionRequestSchemas.contact, (body: ContactBody, actorId) => service.replaceContactItems(body.items, body.expectedUpdatedAt, actorId)));
   return router;

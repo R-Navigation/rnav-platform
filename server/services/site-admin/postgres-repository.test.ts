@@ -126,18 +126,6 @@ test("snapshot-style media parse and reach repository mapping without loss", asy
       inserts: ["INSERT INTO news_items"]
     },
     {
-      schema: collectionRequestSchemas.team,
-      method: "replaceTeamMembers",
-      items: [
-        { slug: "asset-member", group: "phd", image: { assetId: assetIds.teamImage, src: null } },
-        { slug: "src-member", group: "phd", image: { assetId: null, src: "/member.jpg" } },
-        { slug: "no-media-member", group: "phd", image: null }
-      ],
-      assetId: assetIds.teamImage,
-      src: "/member.jpg",
-      inserts: ["INSERT INTO team_members"]
-    },
-    {
       schema: collectionRequestSchemas.facility,
       method: "replaceFacilityItems",
       items: [
@@ -169,32 +157,7 @@ test("snapshot-style media parse and reach repository mapping without loss", asy
   }
 });
 
-test("team contacts persist localized values", async () => {
-  const client = new FakeClient();
-  const repository = createPostgresSiteAdminRepository({ connect: async () => client } as never);
-
-  await repository.replaceTeamMembers([{
-    slug: "alice", group: "phd",
-    contacts: [{ label: { zh: "邮箱", en: "Email" }, value: { zh: "中文地址", en: "english@example.com" } }]
-  }], "7", "user-1");
-
-  const contactInsert = client.calls.find(({ sql }) => sql.includes("INSERT INTO team_member_contacts"));
-  assert.match(contactInsert?.sql ?? "", /value_zh, value_en/);
-  assert.deepEqual(contactInsert?.values?.slice(-2), ["中文地址", "english@example.com"]);
-});
-
-test("team and news replacements persist link variants", async () => {
-  const teamClient = new FakeClient();
-  const teamRepository = createPostgresSiteAdminRepository({ connect: async () => teamClient } as never);
-  await teamRepository.replaceTeamMembers([{
-    slug: "alice", group: "phd",
-    links: [{ label: { en: "Profile" }, href: "/alice", icon: "link", variant: "subtle" }]
-  }], "7", "user-1");
-
-  const teamLinkInsert = teamClient.calls.find(({ sql }) => sql.includes("INSERT INTO team_member_links"));
-  assert.match(teamLinkInsert?.sql ?? "", /href, icon, variant/);
-  assert.equal(teamLinkInsert?.values?.at(-1), "subtle");
-
+test("news replacements persist link variants", async () => {
   const newsClient = new FakeClient();
   const newsRepository = createPostgresSiteAdminRepository({ connect: async () => newsClient } as never);
   await newsRepository.replaceNewsItems([{
@@ -268,7 +231,6 @@ test("asset foreign-key failures map to a safe domain error", async () => {
 test("collection replacements use the expected transaction, delete, audit, and commit shape", async () => {
   const cases = [
     ["replaceNewsItems", [{ id: "news-1" }], "DELETE FROM news_items", "site.news.replace"],
-    ["replaceTeamMembers", [{ slug: "alice", group: "phd" }], "DELETE FROM team_members", "site.members.replace"],
     ["replaceFacilityItems", [{ category: "quadrupeds" }], "DELETE FROM facility_items", "site.facilities.replace"],
     ["replaceContactItems", { primaryChannels: [], socialLinks: [], extraCards: [] }, "DELETE FROM contact_primary_channels", "site.contact.replace"]
   ] as const;
@@ -295,7 +257,7 @@ test("snapshot normalizes empty asset IDs from an injected public repository", a
   const publicRepository = {
     getResearchItems: async () => [{ id: "paper-1", image: { assetId: "", src: "/paper.jpg" }, pdf: { assetId: "", src: "/paper.pdf" } }],
     getNewsItems: async () => [{ id: "news-1", image: null }],
-    getTeamMembers: async () => [{ slug: "alice", group: "phd", image: { assetId: "", src: "/alice.jpg" } }],
+    getTeamMembers: async () => [],
     getFacilityItems: async () => [{ category: "quadrupeds", image: { assetId: "", src: "/robot.jpg" } }],
     getContactItems: async () => ({ primaryChannels: [], socialLinks: [], extraCards: [] }),
     getPageContent: async () => null
@@ -304,6 +266,5 @@ test("snapshot normalizes empty asset IDs from an injected public repository", a
   const snapshot = await repository.getSnapshot();
   assert.equal(snapshot.researchItems.items[0].image.assetId, null);
   assert.equal(snapshot.researchItems.items[0].pdf.assetId, null);
-  assert.equal(snapshot.teamMembers.items[0].image.assetId, null);
   assert.equal(snapshot.facilityItems.items[0].image.assetId, null);
 });

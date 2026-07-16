@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { DiscardDialog } from "./DiscardDialog";
 import { PageEditor } from "./PageEditor";
-import { TeamEditor } from "./TeamEditor";
 import { readSiteAdminError } from "./api";
 import {
   applyConflictSnapshot,
@@ -243,7 +242,7 @@ export function SiteContentConsole({ permissions }: Props) {
       <div className="mt-6" role="tabpanel">
         {mode === "json" ? (
           <label className="block text-sm font-semibold text-slate-700">高级 JSON 内容<textarea aria-invalid={Boolean(jsonError)} className="mt-2 min-h-[32rem] w-full border border-slate-300 bg-slate-950 p-4 font-mono text-sm leading-6 text-slate-100 outline-none focus:border-cyan-500" onChange={(event) => updateJson(event.target.value)} spellCheck={false} value={jsonSource} /></label>
-        ) : selectedModule.key === "team-members" ? <TeamEditor onChange={updateDraft} value={draftValue} /> : <PageEditor onChange={updateDraft} value={draftValue} />}
+        ) : <PageEditor onChange={updateDraft} value={draftValue} />}
         {jsonError ? <p className="mt-3 text-sm font-semibold text-red-700" role="alert">JSON 格式错误：{jsonError}</p> : null}
       </div>
 

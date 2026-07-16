@@ -13,11 +13,10 @@ function auth(user?: AuthenticatedUser): RequestHandler {
 async function request(method: string, path: string, options: { user?: AuthenticatedUser; body?: unknown; origin?: string; trustProxy?: boolean; forwardedHost?: string; forwardedProto?: string; mutationError?: Error } = {}) {
   const calls: string[] = [];
   const service = {
-    getSnapshot: async () => ({ pages: {}, researchItems: { items: [], updatedAt: "0" }, newsItems: { items: [], updatedAt: "0" }, teamMembers: { items: [], updatedAt: "0" }, facilityItems: { items: [], updatedAt: "0" }, contactItems: { items: {}, updatedAt: "0" } }),
+    getSnapshot: async () => ({ pages: {}, researchItems: { items: [], updatedAt: "0" }, newsItems: { items: [], updatedAt: "0" }, facilityItems: { items: [], updatedAt: "0" }, contactItems: { items: {}, updatedAt: "0" } }),
     replacePage: async () => { calls.push("page"); return "1"; },
     replaceResearchItems: async () => { calls.push("research"); return "1"; },
     replaceNewsItems: async () => { calls.push("news"); if (options.mutationError) throw options.mutationError; return "1"; },
-    replaceTeamMembers: async () => { calls.push("team"); return "1"; },
     replaceFacilityItems: async () => { calls.push("facility"); return "1"; },
     replaceContactItems: async () => { calls.push("contact"); return "1"; }
   };
@@ -43,7 +42,9 @@ async function request(method: string, path: string, options: { user?: Authentic
       body: options.body === undefined ? undefined : JSON.stringify(options.body)
     });
     const text = await response.text();
-    return { statusCode: response.status, body: text ? JSON.parse(text) : undefined, calls };
+    let body: unknown;
+    try { body = text ? JSON.parse(text) : undefined; } catch { body = text; }
+    return { statusCode: response.status, body, calls };
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
   }
@@ -83,11 +84,11 @@ test("asset reference domain errors return 400", async () => {
   assert.deepEqual(response.body, { error: "Invalid asset reference" });
 });
 
-test("team mutations require members permission", async () => {
+test("legacy team-member replacement endpoint is removed", async () => {
   const response = await request("PUT", "/api/site-admin/team-members", {
     user: user(["site.content.write"]), body: { items: [], expectedUpdatedAt: "0" }, origin: "http://admin.example.com"
   });
-  assert.equal(response.statusCode, 403);
+  assert.equal(response.statusCode, 404);
   assert.deepEqual(response.calls, []);
 });
 
@@ -109,7 +110,7 @@ test("invalid contact entries return 400 before the service runs", async () => {
   assert.deepEqual(response.calls, []);
 });
 
-test("invalid collection UUIDs and team groups return 400 before the service runs", async () => {
+test("invalid collection UUIDs return 400 before the service runs", async () => {
   const invalidUuid = await request("PUT", "/api/site-admin/research-items", {
     user: user(["site.content.write"]),
     body: { items: [{ id: "paper-1", image: { assetId: "nope", src: "/paper.jpg" } }], expectedUpdatedAt: "0" },
@@ -118,16 +119,9 @@ test("invalid collection UUIDs and team groups return 400 before the service run
   assert.equal(invalidUuid.statusCode, 400);
   assert.deepEqual(invalidUuid.calls, []);
 
-  const invalidGroup = await request("PUT", "/api/site-admin/team-members", {
-    user: user(["site.members.write"]),
-    body: { items: [{ slug: "alice", group: "visitor" }], expectedUpdatedAt: "0" },
-    origin: "same-origin"
-  });
-  assert.equal(invalidGroup.statusCode, 400);
-  assert.deepEqual(invalidGroup.calls, []);
 });
 
-test("duplicate collection IDs and team slugs return 400 before the service runs", async () => {
+test("duplicate collection IDs return 400 before the service runs", async () => {
   const duplicateId = await request("PUT", "/api/site-admin/news-items", {
     user: user(["site.content.write"]),
     body: { items: [{ id: "news-1" }, { id: "news-1" }], expectedUpdatedAt: "0" },
@@ -136,11 +130,4 @@ test("duplicate collection IDs and team slugs return 400 before the service runs
   assert.equal(duplicateId.statusCode, 400);
   assert.deepEqual(duplicateId.calls, []);
 
-  const duplicateSlug = await request("PUT", "/api/site-admin/team-members", {
-    user: user(["site.members.write"]),
-    body: { items: [{ slug: "alice", group: "phd" }, { slug: "alice", group: "alumni" }], expectedUpdatedAt: "0" },
-    origin: "same-origin"
-  });
-  assert.equal(duplicateSlug.statusCode, 400);
-  assert.deepEqual(duplicateSlug.calls, []);
 });

@@ -32,7 +32,7 @@ const array = (value: unknown): PublicRecord[] => Array.isArray(value) ? value.m
 const clean = (value: unknown) => String(value ?? "").trim();
 type Allowlist = true | { [key: string]: Allowlist } | readonly [Allowlist];
 const localized: Allowlist = { zh: true, en: true };
-const imageFields: Allowlist = { assetId: true, src: true, alt: true, dataAlt: true };
+const imageFields: Allowlist = { assetId: true, src: true, alt: true, dataAlt: true, positionX: true, positionY: true, zoom: true };
 const linkFields: Allowlist = { label: localized, href: true, icon: true, variant: true };
 const headerFields: Allowlist = { eyebrow: localized, title: localized, description: localized };
 const itemFields: Allowlist = {
@@ -147,7 +147,7 @@ function normalizeItem(item: PublicRecord): PublicRecord {
 
 function normalizeImage(value: unknown) {
   const source = object(value), src = sanitizePublicUrl(source.src);
-  return src ? { assetId: clean(source.assetId), src, alt: clean(source.alt), dataAlt: clean(source.dataAlt) } : null;
+  return src ? { assetId: clean(source.assetId), src, alt: clean(source.alt), dataAlt: clean(source.dataAlt), positionX: Number(source.positionX ?? 50), positionY: Number(source.positionY ?? 50), zoom: Number(source.zoom ?? 1) } : null;
 }
 
 function normalizeFacilitySection(item: PublicRecord): PublicRecord {
