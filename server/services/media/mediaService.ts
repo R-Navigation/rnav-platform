@@ -16,6 +16,7 @@ export function createMediaService(pool: Pick<Pool, "query" | "connect">, cos: C
       (SELECT count(*) FROM news_items WHERE image_asset_id=$1) +
       (SELECT count(*) FROM team_members WHERE image_asset_id=$1) +
       (SELECT count(*) FROM facility_items WHERE image_asset_id=$1) +
+      (SELECT count(*) FROM procurement_catalog_items WHERE image_asset_id=$1) +
       (SELECT count(*) FROM page_content WHERE content_json::text LIKE '%' || $1::text || '%')
     )::text count`, [id]);
     return Number(result.rows[0]?.count ?? 0);
@@ -29,6 +30,7 @@ export function createMediaService(pool: Pick<Pool, "query" | "connect">, cos: C
          (SELECT count(*) FROM news_items WHERE image_asset_id=media_assets.id) +
          (SELECT count(*) FROM team_members WHERE image_asset_id=media_assets.id) +
          (SELECT count(*) FROM facility_items WHERE image_asset_id=media_assets.id) +
+         (SELECT count(*) FROM procurement_catalog_items WHERE image_asset_id=media_assets.id) +
          (SELECT count(*) FROM page_content WHERE content_json::text LIKE '%' || media_assets.id::text || '%'))::bigint references
         FROM media_assets WHERE status=$1 AND ($2='' OR filename ILIKE '%'||$2||'%' OR object_key ILIKE '%'||$2||'%') ORDER BY created_at DESC LIMIT 200`, [input.status, input.search ?? ""]);
       return result.rows.map(map);

@@ -34,7 +34,7 @@ function mapCatalogItem(row: Record<string, unknown>) {
     id: row.id, categoryId: row.category_id, categoryCode: row.category_code, categoryNameZh: row.category_name_zh,
     sku: row.sku, nameZh: row.name_zh, nameEn: row.name_en, spec: row.spec, specMetadata: row.spec_metadata,
     unit: row.unit, packSize: Number(row.pack_size), estimatedUnitPrice: row.estimated_unit_price === null ? null : Number(row.estimated_unit_price),
-    vendor: row.vendor, url: row.url, keywords: row.keywords, imageAssetId: row.image_asset_id, isActive: row.is_active,
+    vendor: row.vendor, url: row.url, keywords: row.keywords, imageAssetId: row.image_asset_id, imageUrl: row.image_url ?? null, isActive: row.is_active,
   };
 }
 
@@ -69,8 +69,9 @@ export function createProcurementService(pool: Pick<Pool, "connect" | "query">, 
       const itemValues = [...values, query.limit, query.offset];
       const [categories, items] = await Promise.all([
         pool.query(`SELECT * FROM procurement_catalog_categories ${query.includeInactive ? "" : "WHERE is_active = true"} ORDER BY sort_order, name_zh`),
-        pool.query(`SELECT items.*, categories.code AS category_code, categories.name_zh AS category_name_zh, count(*) OVER()::integer AS total_count
+        pool.query(`SELECT items.*, categories.code AS category_code, categories.name_zh AS category_name_zh, media.url AS image_url, count(*) OVER()::integer AS total_count
           FROM procurement_catalog_items items JOIN procurement_catalog_categories categories ON categories.id = items.category_id
+          LEFT JOIN media_assets media ON media.id = items.image_asset_id AND media.status = 'active'
           ${itemWhere}
           ORDER BY categories.sort_order, items.name_zh, items.spec, items.sku
           LIMIT $${values.length + 1} OFFSET $${values.length + 2}`, itemValues),
@@ -206,8 +207,9 @@ export function createProcurementService(pool: Pick<Pool, "connect" | "query">, 
         const resolvedItems = [] as Array<{ catalogItemId: string | null; itemName: string; spec: string; unit: string; quantity: number; estimatedUnitPrice: number | null; vendor: string | null; url: string | null; remark: string | null; sourceType: "catalog" | "custom"; snapshot: Record<string, unknown> }>;
         for (const item of input.items) {
           if (item.sourceType === "catalog") {
-            const result = await client.query(`SELECT items.*, categories.code AS category_code, categories.name_zh AS category_name_zh
+            const result = await client.query(`SELECT items.*, categories.code AS category_code, categories.name_zh AS category_name_zh, media.url AS image_url
               FROM procurement_catalog_items items JOIN procurement_catalog_categories categories ON categories.id = items.category_id
+              LEFT JOIN media_assets media ON media.id = items.image_asset_id AND media.status = 'active'
               WHERE items.id = $1 AND items.is_active = true AND categories.is_active = true FOR SHARE OF items, categories`, [item.catalogItemId]);
             const catalog = result.rows[0];
             if (!catalog) throw new ProcurementConflictError("Catalog item is unavailable");
@@ -216,7 +218,7 @@ export function createProcurementService(pool: Pick<Pool, "connect" | "query">, 
               catalogItemId: catalog.id, itemName: catalog.name_zh, spec: catalog.spec, unit: catalog.unit,
               quantity: item.quantity, estimatedUnitPrice: price, vendor: catalog.vendor, url: catalog.url,
               remark: item.remark ?? null, sourceType: "catalog",
-              snapshot: { id: catalog.id, sku: catalog.sku, categoryCode: catalog.category_code, categoryNameZh: catalog.category_name_zh, nameZh: catalog.name_zh, nameEn: catalog.name_en, spec: catalog.spec, specMetadata: catalog.spec_metadata, unit: catalog.unit, packSize: Number(catalog.pack_size), estimatedUnitPrice: price, vendor: catalog.vendor, url: catalog.url },
+              snapshot: { id: catalog.id, sku: catalog.sku, categoryCode: catalog.category_code, categoryNameZh: catalog.category_name_zh, nameZh: catalog.name_zh, nameEn: catalog.name_en, spec: catalog.spec, specMetadata: catalog.spec_metadata, unit: catalog.unit, packSize: Number(catalog.pack_size), estimatedUnitPrice: price, vendor: catalog.vendor, url: catalog.url, imageUrl: catalog.image_url },
             });
           } else {
             resolvedItems.push({ catalogItemId: null, itemName: item.itemName, spec: item.spec ?? "", unit: item.unit ?? "件", quantity: item.quantity, estimatedUnitPrice: item.estimatedUnitPrice ?? null, vendor: item.vendor ?? null, url: item.url ?? null, remark: item.remark ?? null, sourceType: "custom", snapshot: {} });

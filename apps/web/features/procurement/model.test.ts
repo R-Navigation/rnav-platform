@@ -16,7 +16,7 @@ test("advanced procurement permissions expose only their workflow stage", () => 
   assert.deepEqual(availableActions("approved", purchaser, false).map((item) => item.action), ["start_purchase"]);
 });
 
-const bolt: CatalogItem = { id: "bolt-1", categoryId: "category-1", categoryCode: "bolts", categoryNameZh: "螺栓", sku: "BOLT-M6X20", nameZh: "内六角圆柱头螺钉", nameEn: "", spec: "M6x20", specMetadata: {}, unit: "个", packSize: 10, estimatedUnitPrice: 0.8, vendor: null, url: null, keywords: [], imageAssetId: null, isActive: true };
+const bolt: CatalogItem = { id: "bolt-1", categoryId: "category-1", categoryCode: "bolts", categoryNameZh: "螺栓", sku: "BOLT-M6X20", nameZh: "内六角圆柱头螺钉", nameEn: "", spec: "M6x20", specMetadata: {}, unit: "个", packSize: 10, estimatedUnitPrice: 0.8, vendor: null, url: null, keywords: [], imageAssetId: null, imageUrl: null, isActive: true };
 
 test("adding the same standard part merges its quantity using the pack size", () => {
   const once = addCatalogItem([], bolt);

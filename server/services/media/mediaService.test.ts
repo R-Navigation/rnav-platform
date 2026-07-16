@@ -31,6 +31,12 @@ test("upload validates input, stores one object, and writes an auditable asset",
   assert.equal(result.mimeType, "image/png"); assert.equal(cos.puts.length, 1); assert.ok(client.calls.some(call => call.sql.includes("media.upload"))); assert.equal(client.calls.at(-1)?.sql, "COMMIT");
 });
 
+test("media reference counts include procurement catalog images", async () => {
+  const client = new Client(); const service = createMediaService({ query: async (sql: string, values?: unknown[]) => client.query(sql, values) } as never, new Cos());
+  await service.getReferences("asset-1");
+  assert.ok(client.calls.some((call) => call.sql.includes("procurement_catalog_items WHERE image_asset_id=$1")));
+});
+
 test("recycle refuses referenced assets and permanent deletion requires the retention period", async () => {
   const client = new Client(); const service = createMediaService({ connect: async () => client } as never, new Cos()); client.referenceCount = "1";
   await assert.rejects(service.recycle("asset-1", "user-1"), (error: unknown) => error instanceof MediaError && error.code === "MEDIA_REFERENCED");

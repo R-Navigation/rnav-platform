@@ -80,6 +80,13 @@ test("inactive catalog visibility requires purchase permission", async () => {
   await assert.rejects(service.listCatalog({ search: "", includeInactive: true, limit: 100, offset: 0 }, { id: "actor", permissions: ["procurements.create"] }), ProcurementAccessError);
 });
 
+test("catalog listing exposes the linked active media URL", async () => {
+  const rows = [{ id: "item-1", category_id: "category-1", category_code: "bolts", category_name_zh: "螺栓", sku: "JD-1", name_zh: "螺钉", name_en: "Screw", spec: "M4x10", spec_metadata: {}, unit: "包", pack_size: "1", estimated_unit_price: null, vendor: null, url: null, keywords: [], image_asset_id: "asset-1", image_url: "https://cdn.example/item.jpg", is_active: true, total_count: 1 }];
+  const service = createProcurementService({ query: async (sql: string) => sql.includes("FROM procurement_catalog_items") ? { rows, rowCount: 1 } : { rows: [], rowCount: 0 } } as never);
+  const result = await service.listCatalog({ search: "", includeInactive: false, limit: 10, offset: 0 }, { id: "actor", permissions: ["procurements.create"] });
+  assert.equal(result.items[0].imageUrl, "https://cdn.example/item.jpg");
+});
+
 test("catalog maintenance requires procurement purchase permission", async () => {
   const service = createProcurementService({ query: async () => ({ rows: [], rowCount: 0 }) } as never);
   await assert.rejects(service.createCatalogCategory({ code: "fasteners", nameZh: "紧固件", nameEn: "", descriptionZh: "", descriptionEn: "", sortOrder: 0, isActive: true }, { id: "actor", permissions: [] }), ProcurementAccessError);

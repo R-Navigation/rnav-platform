@@ -25,7 +25,8 @@
     "db:migrate-legacy": "tsx scripts/db/migrate-legacy.ts",
     "db:import-legacy": "tsx scripts/db/import-legacy.ts",
     "db:verify-migration": "tsx scripts/db/verify-migration.ts",
-    "procurement:import-catalog": "tsx scripts/procurement/import-catalog-csv.ts"
+    "procurement:import-catalog": "tsx scripts/procurement/import-catalog-csv.ts",
+    "procurement:import-images": "tsx scripts/procurement/import-catalog-images.ts"
   },
   "devDependencies": {
     "csv-parse": "^6.2.1",

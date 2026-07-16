@@ -1,6 +1,6 @@
 export type ProcurementStatus = "draft" | "submitted" | "approved" | "rejected" | "purchasing" | "purchased" | "received" | "closed" | "cancelled";
 export type ProcurementAction = "approve" | "reject" | "start_purchase" | "mark_purchased" | "mark_received" | "close" | "cancel";
-export type CatalogItem = { id: string; categoryId: string; categoryCode: string; categoryNameZh: string; sku: string | null; nameZh: string; nameEn: string; spec: string; specMetadata: Record<string, string | number | boolean | null>; unit: string; packSize: number; estimatedUnitPrice: number | null; vendor: string | null; url: string | null; keywords: string[]; imageAssetId: string | null; isActive: boolean };
+export type CatalogItem = { id: string; categoryId: string; categoryCode: string; categoryNameZh: string; sku: string | null; nameZh: string; nameEn: string; spec: string; specMetadata: Record<string, string | number | boolean | null>; unit: string; packSize: number; estimatedUnitPrice: number | null; vendor: string | null; url: string | null; keywords: string[]; imageAssetId: string | null; imageUrl: string | null; isActive: boolean };
 export type CustomItemDraft = { itemName: string; spec: string; unit: string; quantity: number; estimatedUnitPrice: number | null; vendor: string | null; url: string | null; remark: string | null };
 export type CartItem =
   | { key: string; sourceType: "catalog"; catalogItemId: string; name: string; spec: string; unit: string; packSize: number; quantity: number; estimatedUnitPrice: number | null; remark: string }
