@@ -26,10 +26,12 @@
     "db:import-legacy": "tsx scripts/db/import-legacy.ts",
     "db:verify-migration": "tsx scripts/db/verify-migration.ts",
     "procurement:import-catalog": "tsx scripts/procurement/import-catalog-csv.ts",
-    "procurement:import-images": "tsx scripts/procurement/import-catalog-images.ts"
+    "procurement:import-images": "tsx scripts/procurement/import-catalog-images.ts",
+    "procurement:scrape-jd-public": "tsx scripts/procurement/scrape-jd-public.ts"
   },
   "devDependencies": {
     "csv-parse": "^6.2.1",
+    "csv-stringify": "^6.8.1",
     "tsx": "^4.20.0",
     "typescript": "^5.8.3"
   }

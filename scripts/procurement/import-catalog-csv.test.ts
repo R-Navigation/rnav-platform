@@ -14,12 +14,27 @@ test("catalog import is transactional and preserves manual prices and active sta
     return { rows: [], rowCount: 0 };
   } };
   const result = await applyCatalogImport(client as never, [item]);
-  assert.deepEqual(result, { inserted: 0, updated: 1 });
+  assert.deepEqual(result, { inserted: 0, updated: 1, skipped: 0 });
   const upsert = calls.find((call) => call.sql.includes("ON CONFLICT (sku)"))!;
   assert.match(upsert.sql, /COALESCE\(EXCLUDED\.estimated_unit_price, procurement_catalog_items\.estimated_unit_price\)/);
   assert.doesNotMatch(upsert.sql, /is_active\s*=\s*EXCLUDED/i);
   assert.ok(calls.some((call) => call.sql.includes("procurement.catalog.bulk_import")));
   assert.equal(calls.at(-1)?.sql, "COMMIT");
+});
+
+test("missing-only catalog import never updates an existing SKU", async () => {
+  const calls: Array<{ sql: string; values?: unknown[] }> = [];
+  const client = { query: async (sql: string, values?: unknown[]) => {
+    calls.push({ sql, values });
+    if (sql.startsWith("SELECT id, code")) return { rows: [{ id: "category-1", code: "bolts" }], rowCount: 1 };
+    if (sql.includes("RETURNING (xmax = 0)")) return { rows: [], rowCount: 0 };
+    return { rows: [], rowCount: 0 };
+  } };
+  const result = await applyCatalogImport(client as never, [item], { insertMissingOnly: true });
+  assert.deepEqual(result, { inserted: 0, updated: 0, skipped: 1 });
+  const insert = calls.find((call) => call.sql.includes("ON CONFLICT (sku)"))!;
+  assert.match(insert.sql, /ON CONFLICT \(sku\) DO NOTHING/);
+  assert.doesNotMatch(insert.sql, /DO UPDATE SET/);
 });
 
 test("catalog import refuses unknown target categories before opening a transaction", async () => {

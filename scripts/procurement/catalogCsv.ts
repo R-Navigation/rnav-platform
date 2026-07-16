@@ -45,6 +45,8 @@ export const families: Record<string, Family> = {
   "100044541370": { categoryCode: "studs-rods", nameZh: "铜双通六角隔离柱", nameEn: "Brass female-female hex standoff", family: "female-female-hex-standoff", material: "铜" },
   "100044811888": { categoryCode: "studs-rods", nameZh: "铜单通六角隔离柱", nameEn: "Brass male-female hex standoff", family: "male-female-hex-standoff", material: "铜" },
   "100345313878": { categoryCode: "studs-rods", nameZh: "不锈钢双通六角隔离柱", nameEn: "Stainless female-female hex standoff", family: "stainless-female-female-hex-standoff", material: "304不锈钢" },
+  "100202715039": { categoryCode: "bolts", nameZh: "内六角圆柱头螺钉", nameEn: "Socket head cap screw", family: "socket-head-cap-screw", material: "304不锈钢" },
+  "100112164913": { categoryCode: "bolts", nameZh: "内六角圆柱头螺钉", nameEn: "Socket head cap screw", family: "socket-head-cap-screw", material: "304不锈钢", standard: "GB/T 70.1" },
 };
 
 function parseOptions(value: string) {

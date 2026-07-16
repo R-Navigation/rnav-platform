@@ -30,6 +30,16 @@ test("keeps across-flats dimensions that distinguish otherwise identical standof
   assert.match(item.spec, /对边5mm/);
 });
 
+test("normalizes public-only socket screw products without price data", () => {
+  const small = normalizeCatalogRow(row({ source_sku: "100202715039", option_sku: "100268396406", option_values: "型号=M6x200[5个/包]", price: "", price_status: "" }));
+  assert.equal(small.categoryCode, "bolts");
+  assert.equal(small.spec, "M6x200 · 304不锈钢 · 5个/包");
+  assert.equal(small.estimatedUnitPrice, null);
+  const bulk = normalizeCatalogRow(row({ source_sku: "100112164913", option_sku: "100112165067", option_values: "型号=M3x8[500个/包]", price: "", price_status: "" }));
+  assert.equal(bulk.specMetadata.standard, "GB/T 70.1");
+  assert.equal(bulk.specMetadata.packQuantity, 500);
+});
+
 test("preserves special nut variants and parses an available package price", () => {
   const item = normalizeCatalogRow(row({ source_sku: "100044346892", option_sku: "100053388107", option_values: "型号=非金属嵌件锁紧螺母；规格=M10x1.25牙[10个/包]304细牙；货期=1-5天", price: "19.90" }));
   assert.equal(item.specMetadata.thread, "M10");
