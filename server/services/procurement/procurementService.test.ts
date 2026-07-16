@@ -83,6 +83,7 @@ test("inactive catalog visibility requires purchase permission", async () => {
 test("catalog maintenance requires procurement purchase permission", async () => {
   const service = createProcurementService({ query: async () => ({ rows: [], rowCount: 0 }) } as never);
   await assert.rejects(service.createCatalogCategory({ code: "fasteners", nameZh: "紧固件", nameEn: "", descriptionZh: "", descriptionEn: "", sortOrder: 0, isActive: true }, { id: "actor", permissions: [] }), ProcurementAccessError);
+  await assert.rejects(service.deleteCatalogItem("00000000-0000-4000-8000-000000000011", { id: "actor", permissions: [] }), ProcurementAccessError);
 });
 
 test("catalog writes are auditable and duplicate codes become stable conflicts", async () => {
@@ -92,6 +93,32 @@ test("catalog writes are auditable and duplicate codes become stable conflicts",
   assert.match(calls[0], /audit_logs/);
   const duplicate = createProcurementService({ query: async () => { throw Object.assign(new Error("duplicate"), { code: "23505" }); } } as never);
   await assert.rejects(duplicate.createCatalogCategory({ code: "bolts", nameZh: "螺栓", nameEn: "", descriptionZh: "", descriptionEn: "", sortOrder: 0, isActive: true }, { id: "actor", permissions: ["procurements.purchase"] }), ProcurementConflictError);
+});
+
+test("catalog item deletion is auditable and preserves request history through the database foreign key", async () => {
+  const calls: Array<{ sql: string; values?: readonly unknown[] }> = [];
+  const service = createProcurementService({ query: async (sql: string, values?: readonly unknown[]) => {
+    calls.push({ sql, values });
+    return { rows: [{ id: "00000000-0000-4000-8000-000000000011", sku: "JD-1", name_zh: "标准件" }], rowCount: 1 };
+  } } as never);
+  const result = await service.deleteCatalogItem("00000000-0000-4000-8000-000000000011", { id: "actor", permissions: ["procurements.purchase"] });
+  assert.deepEqual(result, { id: "00000000-0000-4000-8000-000000000011" });
+  assert.match(calls[0].sql, /DELETE FROM procurement_catalog_items/);
+  assert.match(calls[0].sql, /procurement\.catalog_item\.delete/);
+});
+
+test("catalog category deletion rejects non-empty categories", async () => {
+  const calls: string[] = [];
+  const service = createProcurementService({ query: async (sql: string) => {
+    calls.push(sql);
+    if (sql.includes("DELETE FROM procurement_catalog_categories")) return { rows: [], rowCount: 0 };
+    return { rows: [{ exists: true }], rowCount: 1 };
+  } } as never);
+  await assert.rejects(
+    service.deleteCatalogCategory("00000000-0000-4000-8000-000000000012", { id: "actor", permissions: ["procurements.purchase"] }),
+    (error: unknown) => error instanceof ProcurementConflictError && error.message.includes("先删除或移动")
+  );
+  assert.equal(calls.length, 2);
 });
 
 test("a requester cannot cancel another member's submitted request", async () => {

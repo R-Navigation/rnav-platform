@@ -22,5 +22,7 @@ export const loadProcurementCatalog = (options: { search?: string; categoryId?: 
 };
 export const createCatalogCategory = (body: unknown) => request("/catalog/categories", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 export const updateCatalogCategory = (id: string, body: unknown) => request(`/catalog/categories/${encodeURIComponent(id)}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+export const deleteCatalogCategory = (id: string) => request(`/catalog/categories/${encodeURIComponent(id)}`, { method: "DELETE" });
 export const createCatalogItem = (body: unknown) => request("/catalog/items", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 export const updateCatalogItem = (id: string, body: unknown) => request(`/catalog/items/${encodeURIComponent(id)}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+export const deleteCatalogItem = (id: string) => request(`/catalog/items/${encodeURIComponent(id)}`, { method: "DELETE" });

@@ -17,7 +17,7 @@ export class ProcurementConflictError extends Error {}
 
 function mapCatalogWriteError(error: unknown): never {
   if (error && typeof error === "object" && (error as { code?: unknown }).code === "23505") throw new ProcurementConflictError("Catalog code or SKU already exists");
-  if (error && typeof error === "object" && (error as { code?: unknown }).code === "23503") throw new ProcurementConflictError("Catalog category or media asset is unavailable");
+  if (error && typeof error === "object" && (error as { code?: unknown }).code === "23503") throw new ProcurementConflictError("Catalog category still contains items or a referenced resource is unavailable");
   throw error;
 }
 
@@ -107,6 +107,29 @@ export function createProcurementService(pool: Pick<Pool, "connect" | "query">, 
       } catch (error) { if (error instanceof ProcurementNotFoundError) throw error; mapCatalogWriteError(error); }
     },
 
+    async deleteCatalogCategory(id: string, actor: Actor) {
+      requireCatalogManager(actor);
+      try {
+        const result = await pool.query(`WITH deleted AS (
+          DELETE FROM procurement_catalog_categories categories
+          WHERE categories.id=$1
+            AND NOT EXISTS (SELECT 1 FROM procurement_catalog_items items WHERE items.category_id=categories.id)
+          RETURNING categories.id, categories.code, categories.name_zh
+        ), audited AS (
+          INSERT INTO audit_logs (actor_id, action, target_type, target_id, detail)
+          SELECT $2, 'procurement.catalog_category.delete', 'procurement_catalog_category', id,
+            jsonb_build_object('code', code, 'nameZh', name_zh) FROM deleted
+        ) SELECT * FROM deleted`, [id, actor.id]);
+        if (result.rows[0]) return { id: result.rows[0].id };
+        const existing = await pool.query("SELECT EXISTS(SELECT 1 FROM procurement_catalog_categories WHERE id=$1) AS exists", [id]);
+        if (!existing.rows[0]?.exists) throw new ProcurementNotFoundError("Catalog category not found");
+        throw new ProcurementConflictError("请先删除或移动该分类下的所有标准件，再删除分类");
+      } catch (error) {
+        if (error instanceof ProcurementNotFoundError || error instanceof ProcurementConflictError) throw error;
+        mapCatalogWriteError(error);
+      }
+    },
+
     async createCatalogItem(input: CatalogItemInput, actor: Actor) {
       requireCatalogManager(actor);
       try {
@@ -135,6 +158,20 @@ export function createProcurementService(pool: Pick<Pool, "connect" | "query">, 
         if (!result.rows[0]) throw new ProcurementNotFoundError("Catalog item not found");
         return mapCatalogItem(result.rows[0]);
       } catch (error) { if (error instanceof ProcurementNotFoundError) throw error; mapCatalogWriteError(error); }
+    },
+
+    async deleteCatalogItem(id: string, actor: Actor) {
+      requireCatalogManager(actor);
+      const result = await pool.query(`WITH deleted AS (
+        DELETE FROM procurement_catalog_items WHERE id=$1
+        RETURNING id, sku, name_zh
+      ), audited AS (
+        INSERT INTO audit_logs (actor_id, action, target_type, target_id, detail)
+        SELECT $2, 'procurement.catalog_item.delete', 'procurement_catalog_item', id,
+          jsonb_build_object('sku', sku, 'nameZh', name_zh) FROM deleted
+      ) SELECT * FROM deleted`, [id, actor.id]);
+      if (!result.rows[0]) throw new ProcurementNotFoundError("Catalog item not found");
+      return { id: result.rows[0].id };
     },
 
     async listRequests(actor: Actor, scope: "mine" | "all", status?: ProcurementStatus) {

@@ -89,7 +89,8 @@ test("getMigrationFiles returns SQL migrations in lexical order", async () => {
       "013_procurement_request_sequence.sql",
       "014_account_profile_permissions.sql",
       "015_media_settings.sql",
-      "016_procurement_catalog.sql"
+      "016_procurement_catalog.sql",
+      "017_remove_procurement_catalog_examples.sql"
     ]
   );
 });
@@ -122,6 +123,17 @@ test("procurement catalog migration is additive and preserves request item histo
   assert.match(migration, /CHECK \(source_type IN \('catalog', 'custom'\)\)/i);
   assert.match(migration, /INSERT INTO procurement_catalog_categories/i);
   assert.doesNotMatch(migration, /DROP (?:TABLE|COLUMN|CONSTRAINT)/i);
+});
+
+test("procurement example cleanup targets only the original seeded SKUs", async () => {
+  const migration = await import("node:fs/promises").then(({ readFile }) =>
+    readFile(new URL("./migrations/017_remove_procurement_catalog_examples.sql", import.meta.url), "utf8")
+  );
+  assert.match(migration, /DELETE FROM procurement_catalog_items/i);
+  assert.match(migration, /BOLT-SHCS-M3X8/);
+  assert.match(migration, /ROD-THREADED-M6/);
+  assert.doesNotMatch(migration, /JD-/);
+  assert.doesNotMatch(migration, /DELETE FROM procurement_catalog_categories/i);
 });
 
 test("account profile permission migration is additive and seeds system templates", async () => {

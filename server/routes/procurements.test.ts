@@ -38,6 +38,10 @@ test("members can browse the catalog while catalog changes require purchase perm
   assert.deepEqual(allowed.calls, ["createCatalogCategory"]);
   assert.equal((await request("GET", "/api/procurements/catalog?includeInactive=true", { user: identity(["procurements.create"]) })).status, 403);
   assert.equal((await request("GET", "/api/procurements/catalog?includeInactive=true", { user: identity(["procurements.purchase"]) })).status, 200);
+  const deleted = await request("DELETE", "/api/procurements/catalog/items/00000000-0000-4000-8000-000000000099", { user: identity(["procurements.purchase"]), origin: true });
+  assert.equal(deleted.status, 200);
+  assert.deepEqual(deleted.calls, ["deleteCatalogItem"]);
+  assert.equal((await request("DELETE", "/api/procurements/catalog/categories/00000000-0000-4000-8000-000000000099", { user: identity(["procurements.create"]), origin: true })).status, 403);
 });
 
 test("all-scope and approval actions require their advanced permissions", async () => {

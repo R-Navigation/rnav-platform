@@ -13,4 +13,4 @@ async function proxy(request: Request, context: { params: Promise<{ path?: strin
   } catch { return NextResponse.json({ error: "Procurement service unavailable" }, { status: 502 }); }
 }
 
-export const GET = proxy; export const POST = proxy;
+export const GET = proxy; export const POST = proxy; export const PUT = proxy; export const DELETE = proxy;
