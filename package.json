@@ -17,15 +17,18 @@
     "dev:server": "npm --workspace server run dev",
     "start": "npm --workspace server run start",
     "build": "npm run build --workspaces",
-    "test": "npm run test --workspaces",
+    "test": "npm run test --workspaces && npm run test:scripts",
+    "test:scripts": "tsx --test \"scripts/**/*.test.ts\"",
     "lint": "npm run lint --workspaces",
     "db:migrate": "npm --workspace server run db:migrate",
     "db:export-legacy": "tsx scripts/db/export-legacy.ts",
     "db:migrate-legacy": "tsx scripts/db/migrate-legacy.ts",
     "db:import-legacy": "tsx scripts/db/import-legacy.ts",
-    "db:verify-migration": "tsx scripts/db/verify-migration.ts"
+    "db:verify-migration": "tsx scripts/db/verify-migration.ts",
+    "procurement:import-catalog": "tsx scripts/procurement/import-catalog-csv.ts"
   },
   "devDependencies": {
+    "csv-parse": "^6.2.1",
     "tsx": "^4.20.0",
     "typescript": "^5.8.3"
   }

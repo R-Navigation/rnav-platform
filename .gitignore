@@ -12,6 +12,7 @@ scripts/db/username-map.json
 dist/
 coverage/
 backups/
+outputs/
 
 *.log
 npm-debug.log*

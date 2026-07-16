@@ -77,7 +77,7 @@ test("server resolved catalog totals cannot overflow the request amount", async 
 
 test("inactive catalog visibility requires purchase permission", async () => {
   const service = createProcurementService({ query: async () => ({ rows: [], rowCount: 0 }) } as never);
-  await assert.rejects(service.listCatalog({ search: "", includeInactive: true }, { id: "actor", permissions: ["procurements.create"] }), ProcurementAccessError);
+  await assert.rejects(service.listCatalog({ search: "", includeInactive: true, limit: 100, offset: 0 }, { id: "actor", permissions: ["procurements.create"] }), ProcurementAccessError);
 });
 
 test("catalog maintenance requires procurement purchase permission", async () => {

@@ -51,6 +51,8 @@ export const catalogQuerySchema = z.object({
   search: text(100).optional().default(""),
   categoryId: z.string().uuid().optional(),
   includeInactive: booleanQuery.optional().default(false),
+  limit: z.coerce.number().int().min(1).max(200).default(100),
+  offset: z.coerce.number().int().min(0).max(1_000_000).default(0),
 }).strict();
 
 export const catalogCategorySchema = z.object({

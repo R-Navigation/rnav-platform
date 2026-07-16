@@ -3,7 +3,7 @@ export type ProcurementAction = "approve" | "reject" | "start_purchase" | "mark_
 export type CatalogItem = { id: string; categoryId: string; categoryCode: string; categoryNameZh: string; sku: string | null; nameZh: string; nameEn: string; spec: string; specMetadata: Record<string, string | number | boolean | null>; unit: string; packSize: number; estimatedUnitPrice: number | null; vendor: string | null; url: string | null; keywords: string[]; imageAssetId: string | null; isActive: boolean };
 export type CustomItemDraft = { itemName: string; spec: string; unit: string; quantity: number; estimatedUnitPrice: number | null; vendor: string | null; url: string | null; remark: string | null };
 export type CartItem =
-  | { key: string; sourceType: "catalog"; catalogItemId: string; name: string; spec: string; unit: string; quantity: number; estimatedUnitPrice: number | null; remark: string }
+  | { key: string; sourceType: "catalog"; catalogItemId: string; name: string; spec: string; unit: string; packSize: number; quantity: number; estimatedUnitPrice: number | null; remark: string }
   | ({ key: string; sourceType: "custom" } & CustomItemDraft);
 
 export type ProcurementCapabilities = {
@@ -37,7 +37,7 @@ export function addCatalogItem(cart: CartItem[], item: CatalogItem, quantity = i
   const key = `catalog:${item.id}`;
   const existing = cart.find((entry) => entry.key === key);
   if (existing?.sourceType === "catalog") return cart.map((entry) => entry.key === key ? { ...existing, quantity: existing.quantity + quantity } : entry);
-  const line: CartItem = { key, sourceType: "catalog", catalogItemId: item.id, name: item.nameZh, spec: item.spec, unit: item.unit, quantity, estimatedUnitPrice: item.estimatedUnitPrice, remark: "" };
+  const line: CartItem = { key, sourceType: "catalog", catalogItemId: item.id, name: item.nameZh, spec: item.spec, unit: item.unit, packSize: item.packSize, quantity, estimatedUnitPrice: item.estimatedUnitPrice, remark: "" };
   return [...cart, line];
 }
 

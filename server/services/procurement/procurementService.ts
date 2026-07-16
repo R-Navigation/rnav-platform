@@ -65,14 +65,17 @@ export function createProcurementService(pool: Pick<Pool, "connect" | "query">, 
         values.push(`%${query.search}%`);
         where.push(`(items.name_zh ILIKE $${values.length} OR items.name_en ILIKE $${values.length} OR items.spec ILIKE $${values.length} OR COALESCE(items.sku, '') ILIKE $${values.length} OR array_to_string(items.keywords, ' ') ILIKE $${values.length})`);
       }
+      const itemWhere = where.length ? `WHERE ${where.join(" AND ")}` : "";
+      const itemValues = [...values, query.limit, query.offset];
       const [categories, items] = await Promise.all([
         pool.query(`SELECT * FROM procurement_catalog_categories ${query.includeInactive ? "" : "WHERE is_active = true"} ORDER BY sort_order, name_zh`),
-        pool.query(`SELECT items.*, categories.code AS category_code, categories.name_zh AS category_name_zh
+        pool.query(`SELECT items.*, categories.code AS category_code, categories.name_zh AS category_name_zh, count(*) OVER()::integer AS total_count
           FROM procurement_catalog_items items JOIN procurement_catalog_categories categories ON categories.id = items.category_id
-          ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
-          ORDER BY categories.sort_order, items.name_zh, items.spec, items.sku`, values),
+          ${itemWhere}
+          ORDER BY categories.sort_order, items.name_zh, items.spec, items.sku
+          LIMIT $${values.length + 1} OFFSET $${values.length + 2}`, itemValues),
       ]);
-      return { categories: categories.rows.map(mapCategory), items: items.rows.map(mapCatalogItem) };
+      return { categories: categories.rows.map(mapCategory), items: items.rows.map(mapCatalogItem), total: Number(items.rows[0]?.total_count ?? 0), limit: query.limit, offset: query.offset };
     },
 
     async createCatalogCategory(input: CatalogCategoryInput, actor: Actor) {
