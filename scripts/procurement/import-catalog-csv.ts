@@ -31,6 +31,14 @@ export async function applyCatalogImport(client: Queryable, items: CatalogImport
   const categoryIds = new Map(categories.rows.map((row) => [row.code, row.id]));
   const missing = [...new Set(items.map((item) => item.categoryCode))].filter((code) => !categoryIds.has(code));
   if (missing.length) throw new Error(`Missing catalog categories: ${missing.join(", ")}`);
+  const subcategories = await client.query<{ id: string; category_code: string; code: string }>(`SELECT subcategories.id,categories.code category_code,subcategories.code
+    FROM procurement_catalog_subcategories subcategories
+    JOIN procurement_catalog_categories categories ON categories.id=subcategories.category_id
+    WHERE categories.code = ANY($1::text[])`, [[...categoryIds.keys()]]);
+  const subcategoryIds = new Map(subcategories.rows.map((row) => [`${row.category_code}:${row.code}`, row.id]));
+  const itemSubcategory = (item: CatalogImportItem) => `${item.categoryCode}:${String(item.specMetadata.productFamily || "other")}`;
+  const missingSubcategories = [...new Set(items.map(itemSubcategory))].filter((key) => !subcategoryIds.has(key));
+  if (missingSubcategories.length) throw new Error(`Missing catalog subcategories: ${missingSubcategories.join(", ")}`);
   await client.query("BEGIN");
   try {
     let inserted = 0;
@@ -41,6 +49,7 @@ export async function applyCatalogImport(client: Queryable, items: CatalogImport
         ? "DO NOTHING"
         : `DO UPDATE SET
           category_id = EXCLUDED.category_id,
+          subcategory_id = EXCLUDED.subcategory_id,
           name_zh = EXCLUDED.name_zh,
           name_en = EXCLUDED.name_en,
           spec = EXCLUDED.spec,
@@ -53,10 +62,10 @@ export async function applyCatalogImport(client: Queryable, items: CatalogImport
           keywords = EXCLUDED.keywords,
           updated_at = now()`;
       const result = await client.query<{ inserted: boolean }>(`INSERT INTO procurement_catalog_items
-        (category_id, sku, name_zh, name_en, spec, spec_metadata, unit, pack_size, estimated_unit_price, vendor, url, keywords, is_active)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,true)
+        (category_id, subcategory_id, sku, name_zh, name_en, spec, spec_metadata, unit, pack_size, estimated_unit_price, vendor, url, keywords, is_active)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,true)
         ON CONFLICT (sku) ${conflictAction}
-        RETURNING (xmax = 0) AS inserted`, [categoryIds.get(item.categoryCode), item.sku, item.nameZh, item.nameEn, item.spec, item.specMetadata, item.unit, item.packSize, item.estimatedUnitPrice, item.vendor, item.url, item.keywords]);
+        RETURNING (xmax = 0) AS inserted`, [categoryIds.get(item.categoryCode), subcategoryIds.get(itemSubcategory(item)), item.sku, item.nameZh, item.nameEn, item.spec, item.specMetadata, item.unit, item.packSize, item.estimatedUnitPrice, item.vendor, item.url, item.keywords]);
       if (!result.rows.length) skipped += 1;
       else if (result.rows[0].inserted) inserted += 1;
       else updated += 1;

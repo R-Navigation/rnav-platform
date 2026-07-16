@@ -8,7 +8,7 @@ function client(rows: Record<string, unknown>[] = []) {
     queries,
     query: async (sql: string, values?: readonly unknown[]) => {
       queries.push({ sql, values });
-      if (sql.includes("RETURNING id, request_no")) return { rows: [{ id: "00000000-0000-4000-8000-000000000099", request_no: "PR-20260712-000001" }], rowCount: 1 };
+      if (/RETURNING id,\s*request_no/.test(sql)) return { rows: [{ id: "00000000-0000-4000-8000-000000000099", request_no: "PR-20260712-000001" }], rowCount: 1 };
       if (sql.includes("FROM procurement_catalog_items") && sql.includes("FOR SHARE")) return { rows, rowCount: rows.length };
       if (sql.includes("FOR UPDATE")) return { rows, rowCount: rows.length };
       return { rows: [], rowCount: 1 };
@@ -77,14 +77,36 @@ test("server resolved catalog totals cannot overflow the request amount", async 
 
 test("inactive catalog visibility requires purchase permission", async () => {
   const service = createProcurementService({ query: async () => ({ rows: [], rowCount: 0 }) } as never);
-  await assert.rejects(service.listCatalog({ search: "", includeInactive: true, limit: 100, offset: 0 }, { id: "actor", permissions: ["procurements.create"] }), ProcurementAccessError);
+  await assert.rejects(service.listCatalog({ search: "", attributes: {}, includeInactive: true, limit: 100, offset: 0 }, { id: "actor", permissions: ["procurements.create"] }), ProcurementAccessError);
 });
 
 test("catalog listing exposes the linked active media URL", async () => {
   const rows = [{ id: "item-1", category_id: "category-1", category_code: "bolts", category_name_zh: "螺栓", sku: "JD-1", name_zh: "螺钉", name_en: "Screw", spec: "M4x10", spec_metadata: {}, unit: "包", pack_size: "1", estimated_unit_price: null, vendor: null, url: null, keywords: [], image_asset_id: "asset-1", image_url: "https://cdn.example/item.jpg", is_active: true, total_count: 1 }];
   const service = createProcurementService({ query: async (sql: string) => sql.includes("FROM procurement_catalog_items") ? { rows, rowCount: 1 } : { rows: [], rowCount: 0 } } as never);
-  const result = await service.listCatalog({ search: "", includeInactive: false, limit: 10, offset: 0 }, { id: "actor", permissions: ["procurements.create"] });
+  const result = await service.listCatalog({ search: "", attributes: {}, includeInactive: false, limit: 10, offset: 0 }, { id: "actor", permissions: ["procurements.create"] });
   assert.equal(result.items[0].imageUrl, "https://cdn.example/item.jpg");
+});
+
+test("catalog filters bind subcategory and attribute selections as JSONB predicates", async () => {
+  const calls: Array<{ sql: string; values?: readonly unknown[] }> = [];
+  const service = createProcurementService({ query: async (sql: string, values?: readonly unknown[]) => { calls.push({ sql, values }); return { rows: [], rowCount: 0 }; } } as never);
+  await service.listCatalog({ search: "", subcategoryId: "00000000-0000-4000-8000-000000000012", attributes: { thread: ["M3", "M4"], variants: ["黑色"] }, includeInactive: false, limit: 10, offset: 0 }, { id: "actor", permissions: ["procurements.create"] });
+  const itemQuery = calls.find((call) => call.sql.includes("count(*) OVER"))!;
+  assert.match(itemQuery.sql, /items\.subcategory_id=/);
+  assert.match(itemQuery.sql, /jsonb_typeof/);
+  assert.ok(itemQuery.values?.includes("thread"));
+  assert.ok(itemQuery.values?.some((value) => Array.isArray(value) && value.includes("M3")));
+  const facetQuery = calls.find((call) => call.sql.includes("jsonb_agg"))!;
+  assert.match(facetQuery.sql, /HAVING count\(flattened\.value\)>0/);
+});
+
+test("numeric catalog facets use natural numeric ordering", async () => {
+  const service = createProcurementService({ query: async (sql: string) => {
+    if (sql.includes("jsonb_agg")) return { rows: [{ id: "attribute-1", subcategory_id: "subcategory-1", attribute_key: "lengthMm", label_zh: "长度", label_en: "Length", unit: "mm", value_type: "number", sort_order: 10, is_filterable: true, values: ["10", "2", "2.5"] }], rowCount: 1 };
+    return { rows: [], rowCount: 0 };
+  } } as never);
+  const result = await service.listCatalog({ search: "", subcategoryId: "00000000-0000-4000-8000-000000000012", attributes: {}, includeInactive: false, limit: 10, offset: 0 }, { id: "actor", permissions: ["procurements.create"] });
+  assert.deepEqual(result.attributes[0].values, ["2", "2.5", "10"]);
 });
 
 test("catalog maintenance requires procurement purchase permission", async () => {
@@ -95,10 +117,13 @@ test("catalog maintenance requires procurement purchase permission", async () =>
 
 test("catalog writes are auditable and duplicate codes become stable conflicts", async () => {
   const calls: string[] = [];
-  const service = createProcurementService({ query: async (sql: string) => { calls.push(sql); return { rows: [{ id: "category-1", code: "bolts", name_zh: "螺栓" }], rowCount: 1 }; } } as never);
+  const db = { query: async (sql: string) => { calls.push(sql); return { rows: sql.includes("RETURNING *") ? [{ id: "category-1", code: "bolts", name_zh: "螺栓" }] : [], rowCount: 1 }; }, release() {} };
+  const service = createProcurementService({ connect: async () => db } as never);
   await service.createCatalogCategory({ code: "bolts", nameZh: "螺栓", nameEn: "", descriptionZh: "", descriptionEn: "", sortOrder: 0, isActive: true }, { id: "actor", permissions: ["procurements.purchase"] });
-  assert.match(calls[0], /audit_logs/);
-  const duplicate = createProcurementService({ query: async () => { throw Object.assign(new Error("duplicate"), { code: "23505" }); } } as never);
+  assert.ok(calls.some((sql) => sql.includes("procurement_catalog_subcategories")));
+  assert.ok(calls.some((sql) => sql.includes("audit_logs")));
+  const duplicateDb = { query: async (sql: string) => { if(sql==="BEGIN"||sql==="ROLLBACK")return { rows: [], rowCount: 0 };throw Object.assign(new Error("duplicate"), { code: "23505" }); }, release() {} };
+  const duplicate = createProcurementService({ connect: async () => duplicateDb } as never);
   await assert.rejects(duplicate.createCatalogCategory({ code: "bolts", nameZh: "螺栓", nameEn: "", descriptionZh: "", descriptionEn: "", sortOrder: 0, isActive: true }, { id: "actor", permissions: ["procurements.purchase"] }), ProcurementConflictError);
 });
 
@@ -123,7 +148,7 @@ test("catalog category deletion rejects non-empty categories", async () => {
   } } as never);
   await assert.rejects(
     service.deleteCatalogCategory("00000000-0000-4000-8000-000000000012", { id: "actor", permissions: ["procurements.purchase"] }),
-    (error: unknown) => error instanceof ProcurementConflictError && error.message.includes("先删除或移动")
+    (error: unknown) => error instanceof ProcurementConflictError && error.message.includes("先删除")
   );
   assert.equal(calls.length, 2);
 });
@@ -157,4 +182,51 @@ test("transition updates bind exactly the placeholders used by each status", asy
     const placeholders = [...update.sql.matchAll(/\$(\d+)/g)].map((match) => Number(match[1]));
     assert.equal(Math.max(...placeholders), update.values?.length);
   }
+});
+
+function processingClient(requestStatus: string, itemStatuses: readonly string[] = []) {
+  const queries: Array<{ sql: string; values?: readonly unknown[] }> = [];
+  return {
+    queries,
+    async query(sql: string, values?: readonly unknown[]) {
+      queries.push({ sql, values });
+      if (sql.includes("FROM procurement_requests") && sql.includes("FOR UPDATE")) return { rows: [{ id: "request-1", status: requestStatus }], rowCount: 1 };
+      if (sql.includes("SELECT processing_status")) return { rows: itemStatuses.map((processing_status) => ({ processing_status })), rowCount: itemStatuses.length };
+      return { rows: [], rowCount: 1 };
+    },
+    release() {},
+  };
+}
+
+test("saving line processing persists progress and moves a submitted request into processing", async () => {
+  const db = processingClient("submitted");
+  const service = createProcurementService({ connect: async () => db } as never, { now: () => new Date("2026-07-16T08:00:00Z") });
+  const result = await service.saveProcessing("00000000-0000-4000-8000-000000000099", { items: [{ itemId: "00000000-0000-4000-8000-000000000011", status: "purchased", rejectionReason: null }] }, { id: "actor", permissions: ["procurements.purchase"] });
+  assert.equal(result.status, "purchasing");
+  assert.ok(db.queries.some((query) => query.sql.includes("processing_status=$3")));
+  assert.ok(db.queries.some((query) => query.sql.includes("status='purchasing'")));
+});
+
+test("processing cannot complete while lines are pending", async () => {
+  const db = processingClient("purchasing", ["purchased", "pending"]);
+  const service = createProcurementService({ connect: async () => db } as never);
+  await assert.rejects(service.completeProcessing("00000000-0000-4000-8000-000000000099", { id: "actor", permissions: ["procurements.purchase"] }), ProcurementConflictError);
+  assert.equal(db.queries.at(-1)?.sql, "ROLLBACK");
+});
+
+test("processing completion orders requests with purchases and closes all-rejected requests", async () => {
+  for (const [lineStatuses, expected] of [[["purchased", "rejected"], "purchased"], [["rejected", "rejected"], "closed"]] as const) {
+    const db = processingClient("purchasing", lineStatuses);
+    const service = createProcurementService({ connect: async () => db } as never);
+    const result = await service.completeProcessing("00000000-0000-4000-8000-000000000099", { id: "actor", permissions: ["procurements.purchase"] });
+    assert.equal(result.status, expected);
+  }
+});
+
+test("confirming receipt closes an ordered request", async () => {
+  const db = processingClient("purchased");
+  const service = createProcurementService({ connect: async () => db } as never);
+  const result = await service.confirmReceived("00000000-0000-4000-8000-000000000099", { id: "actor", permissions: ["procurements.purchase"] });
+  assert.equal(result.status, "closed");
+  assert.ok(db.queries.some((query) => query.sql.includes("received_at=$2")));
 });

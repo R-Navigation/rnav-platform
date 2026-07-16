@@ -93,7 +93,8 @@ test("getMigrationFiles returns SQL migrations in lexical order", async () => {
       "017_remove_procurement_catalog_examples.sql",
       "018_lab_assets_sequences.sql",
       "019_member_self_profiles.sql",
-      "020_legacy_serial_sequences.sql"
+      "020_legacy_serial_sequences.sql",
+      "021_procurement_catalog_hierarchy_processing.sql"
     ]
   );
 });
@@ -174,6 +175,21 @@ test("legacy sequence migration aligns every serial column dynamically", async (
   assert.match(migration, /SELECT max\(%I\)/i);
   assert.match(migration, /setval\(target\.sequence_name, COALESCE\(maximum, 1\), maximum IS NOT NULL\)/i);
   assert.doesNotMatch(migration, /INSERT|UPDATE|DELETE|DROP|ALTER/i);
+});
+
+test("procurement hierarchy migration preserves catalog data and adds line processing", async () => {
+  const migration = await import("node:fs/promises").then(({ readFile }) =>
+    readFile(new URL("./migrations/021_procurement_catalog_hierarchy_processing.sql", import.meta.url), "utf8")
+  );
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS procurement_catalog_subcategories/i);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS procurement_catalog_attribute_definitions/i);
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS subcategory_id uuid/i);
+  assert.match(migration, /ALTER COLUMN subcategory_id SET NOT NULL/i);
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS processing_status text/i);
+  assert.match(migration, /processing_status IN \('pending','purchased','rejected'\)/i);
+  assert.match(migration, /procurement_request_items_rejection_reason_check/i);
+  assert.match(migration, /productFamily/i);
+  assert.doesNotMatch(migration, /DROP (?:TABLE|COLUMN)/i);
 });
 
 test("account profile permission migration is additive and seeds system templates", async () => {

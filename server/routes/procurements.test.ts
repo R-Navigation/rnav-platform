@@ -50,6 +50,17 @@ test("all-scope and approval actions require their advanced permissions", async 
   assert.equal((await request("POST", "/api/procurements/00000000-0000-4000-8000-000000000099/transition", { user: identity(["procurements.review"]), origin: true, body: { action: "approve" } })).status, 200);
 });
 
+test("purchase managers can maintain subcategories and process request lines", async () => {
+  const subcategory = await request("POST", "/api/procurements/catalog/subcategories", { user: identity(["procurements.purchase"]), origin: true, body: { categoryId: "00000000-0000-4000-8000-000000000010", code: "socket-head", nameZh: "内六角", attributes: [] } });
+  assert.equal(subcategory.status, 200);
+  assert.deepEqual(subcategory.calls, ["createCatalogSubcategory"]);
+  const processing = await request("PUT", "/api/procurements/00000000-0000-4000-8000-000000000099/processing", { user: identity(["procurements.purchase"]), origin: true, body: { items: [{ itemId: "00000000-0000-4000-8000-000000000011", status: "purchased", rejectionReason: null }] } });
+  assert.equal(processing.status, 200);
+  assert.deepEqual(processing.calls, ["saveProcessing"]);
+  assert.equal((await request("POST", "/api/procurements/00000000-0000-4000-8000-000000000099/processing/complete", { user: identity(["procurements.create"]), origin: true })).status, 403);
+  assert.equal((await request("POST", "/api/procurements/00000000-0000-4000-8000-000000000099/received", { user: identity(["procurements.purchase"]), origin: true })).status, 200);
+});
+
 test("procurement mutations require same origin", async () => {
   const response = await request("POST", "/api/procurements", { user: identity(["procurements.create"]), body: { title: "相机", reason: "实验", items: [{ itemName: "D455", quantity: 1 }] } });
   assert.equal(response.status, 403);

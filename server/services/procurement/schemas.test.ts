@@ -31,7 +31,7 @@ test("catalog references cannot smuggle browser supplied names or prices", () =>
 test("catalog query and item administration payloads are bounded", () => {
   assert.equal(catalogQuerySchema.safeParse({ search: "M6", includeInactive: "false", limit: "50", offset: "100" }).success, true);
   assert.equal(catalogQuerySchema.safeParse({ limit: "500" }).success, false);
-  assert.equal(catalogItemSchema.safeParse({ categoryId: "00000000-0000-4000-8000-000000000011", nameZh: "内六角圆柱头螺钉", spec: "M6x20", unit: "个", packSize: 1, keywords: ["螺栓", "M6"] }).success, true);
+  assert.equal(catalogItemSchema.safeParse({ categoryId: "00000000-0000-4000-8000-000000000011", subcategoryId: "00000000-0000-4000-8000-000000000012", nameZh: "内六角圆柱头螺钉", spec: "M6x20", unit: "个", packSize: 1, keywords: ["螺栓", "M6"] }).success, true);
   assert.equal(catalogItemSchema.safeParse({ categoryId: "not-a-uuid", nameZh: "螺钉", unit: "个" }).success, false);
 });
 

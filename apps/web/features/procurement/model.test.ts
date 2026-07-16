@@ -13,10 +13,10 @@ test("advanced procurement permissions expose only their workflow stage", () => 
   const reviewer = procurementCapabilities(["procurements.review"]);
   assert.deepEqual(availableActions("submitted", reviewer, false).map((item) => item.action), ["approve", "reject"]);
   const purchaser = procurementCapabilities(["procurements.purchase"]);
-  assert.deepEqual(availableActions("approved", purchaser, false).map((item) => item.action), ["start_purchase"]);
+  assert.deepEqual(availableActions("submitted", purchaser, false), []);
 });
 
-const bolt: CatalogItem = { id: "bolt-1", categoryId: "category-1", categoryCode: "bolts", categoryNameZh: "螺栓", sku: "BOLT-M6X20", nameZh: "内六角圆柱头螺钉", nameEn: "", spec: "M6x20", specMetadata: {}, unit: "个", packSize: 10, estimatedUnitPrice: 0.8, vendor: null, url: null, keywords: [], imageAssetId: null, imageUrl: null, isActive: true };
+const bolt: CatalogItem = { id: "bolt-1", categoryId: "category-1", categoryCode: "bolts", categoryNameZh: "螺栓", subcategoryId: "subcategory-1", subcategoryCode: "socket-head-cap-screw", subcategoryNameZh: "内六角圆柱头螺钉", sku: "BOLT-M6X20", nameZh: "内六角圆柱头螺钉", nameEn: "", spec: "M6x20", specMetadata: {}, unit: "个", packSize: 10, estimatedUnitPrice: 0.8, vendor: null, url: null, keywords: [], imageAssetId: null, imageUrl: null, isActive: true };
 
 test("adding the same standard part merges its quantity using the pack size", () => {
   const once = addCatalogItem([], bolt);
