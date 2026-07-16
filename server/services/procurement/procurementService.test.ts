@@ -9,6 +9,7 @@ function client(rows: Record<string, unknown>[] = []) {
     query: async (sql: string, values?: readonly unknown[]) => {
       queries.push({ sql, values });
       if (sql.includes("RETURNING id, request_no")) return { rows: [{ id: "00000000-0000-4000-8000-000000000099", request_no: "PR-20260712-000001" }], rowCount: 1 };
+      if (sql.includes("FROM procurement_catalog_items") && sql.includes("FOR SHARE")) return { rows, rowCount: rows.length };
       if (sql.includes("FOR UPDATE")) return { rows, rowCount: rows.length };
       return { rows: [], rowCount: 1 };
     },
@@ -26,6 +27,59 @@ test("creating a submitted request persists items, history, and audit atomically
   assert.ok(db.queries.some((query) => query.sql.includes("procurement_status_history")));
   assert.ok(db.queries.some((query) => query.sql.includes("audit_logs")));
   assert.equal(db.queries.at(-1)?.sql, "COMMIT");
+});
+
+test("catalog items are resolved by the server and persisted with an immutable snapshot", async () => {
+  const db = client([{
+    id: "00000000-0000-4000-8000-000000000011",
+    sku: "BOLT-M6X20",
+    name_zh: "内六角圆柱头螺钉",
+    name_en: "Socket head cap screw",
+    spec: "M6x20",
+    unit: "个",
+    pack_size: 1,
+    estimated_unit_price: "0.80",
+    vendor: "标准件供应商",
+    url: null,
+    category_code: "bolts",
+    category_name_zh: "螺栓",
+  }]);
+  const service = createProcurementService({ connect: async () => db } as never, { now: () => new Date("2026-07-12T08:00:00Z") });
+  await service.createRequest({
+    title: "紧固件",
+    reason: "装配",
+    items: [{ sourceType: "catalog", catalogItemId: "00000000-0000-4000-8000-000000000011", quantity: 10, remark: null }],
+  }, "00000000-0000-4000-8000-000000000001");
+  const insert = db.queries.find((query) => query.sql.includes("INSERT INTO procurement_request_items"))!;
+  assert.match(insert.sql, /catalog_snapshot/);
+  assert.equal(insert.values?.[2], "内六角圆柱头螺钉");
+  assert.equal(insert.values?.[5], 0.8);
+  assert.match(String(insert.values?.[11]), /BOLT-M6X20/);
+});
+
+test("inactive or missing catalog items abort the whole request", async () => {
+  const db = client([]);
+  const service = createProcurementService({ connect: async () => db } as never);
+  await assert.rejects(service.createRequest({
+    title: "紧固件",
+    reason: "装配",
+    items: [{ sourceType: "catalog", catalogItemId: "00000000-0000-4000-8000-000000000011", quantity: 10 }],
+  }, "00000000-0000-4000-8000-000000000001"), ProcurementConflictError);
+  assert.equal(db.queries.at(-1)?.sql, "ROLLBACK");
+});
+
+test("catalog maintenance requires procurement purchase permission", async () => {
+  const service = createProcurementService({ query: async () => ({ rows: [], rowCount: 0 }) } as never);
+  await assert.rejects(service.createCatalogCategory({ code: "fasteners", nameZh: "紧固件", nameEn: "", descriptionZh: "", descriptionEn: "", sortOrder: 0, isActive: true }, { id: "actor", permissions: [] }), ProcurementAccessError);
+});
+
+test("catalog writes are auditable and duplicate codes become stable conflicts", async () => {
+  const calls: string[] = [];
+  const service = createProcurementService({ query: async (sql: string) => { calls.push(sql); return { rows: [{ id: "category-1", code: "bolts", name_zh: "螺栓" }], rowCount: 1 }; } } as never);
+  await service.createCatalogCategory({ code: "bolts", nameZh: "螺栓", nameEn: "", descriptionZh: "", descriptionEn: "", sortOrder: 0, isActive: true }, { id: "actor", permissions: ["procurements.purchase"] });
+  assert.match(calls[0], /audit_logs/);
+  const duplicate = createProcurementService({ query: async () => { throw Object.assign(new Error("duplicate"), { code: "23505" }); } } as never);
+  await assert.rejects(duplicate.createCatalogCategory({ code: "bolts", nameZh: "螺栓", nameEn: "", descriptionZh: "", descriptionEn: "", sortOrder: 0, isActive: true }, { id: "actor", permissions: ["procurements.purchase"] }), ProcurementConflictError);
 });
 
 test("a requester cannot cancel another member's submitted request", async () => {

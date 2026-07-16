@@ -27,6 +27,17 @@ test("normal members can list their own requests and create one", async () => {
   assert.deepEqual(created.calls, ["createRequest"]);
 });
 
+test("members can browse the catalog while catalog changes require purchase permission", async () => {
+  const listed = await request("GET", "/api/procurements/catalog?search=M6", { user: identity(["procurements.create"]) });
+  assert.equal(listed.status, 200);
+  assert.deepEqual(listed.calls, ["listCatalog"]);
+  const denied = await request("POST", "/api/procurements/catalog/categories", { user: identity(["procurements.create"]), origin: true, body: { code: "bolts", nameZh: "螺栓" } });
+  assert.equal(denied.status, 403);
+  const allowed = await request("POST", "/api/procurements/catalog/categories", { user: identity(["procurements.purchase"]), origin: true, body: { code: "bolts", nameZh: "螺栓" } });
+  assert.equal(allowed.status, 200);
+  assert.deepEqual(allowed.calls, ["createCatalogCategory"]);
+});
+
 test("all-scope and approval actions require their advanced permissions", async () => {
   assert.equal((await request("GET", "/api/procurements?scope=all", { user: identity(["procurements.read_own"]) })).status, 403);
   assert.equal((await request("POST", "/api/procurements/00000000-0000-4000-8000-000000000099/transition", { user: identity(["procurements.read_own"]), origin: true, body: { action: "approve" } })).status, 403);

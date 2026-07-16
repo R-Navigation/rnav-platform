@@ -88,7 +88,8 @@ test("getMigrationFiles returns SQL migrations in lexical order", async () => {
       "012_monitor.sql",
       "013_procurement_request_sequence.sql",
       "014_account_profile_permissions.sql",
-      "015_media_settings.sql"
+      "015_media_settings.sql",
+      "016_procurement_catalog.sql"
     ]
   );
 });
@@ -106,6 +107,20 @@ test("media and settings migration adds recycle state and seeded database settin
     assert.match(migration, new RegExp(`'${key}'`));
   }
   assert.match(migration, /user_profiles_avatar_asset_id_fkey/i);
+  assert.doesNotMatch(migration, /DROP (?:TABLE|COLUMN|CONSTRAINT)/i);
+});
+
+test("procurement catalog migration is additive and preserves request item history", async () => {
+  const migration = await import("node:fs/promises").then(({ readFile }) =>
+    readFile(new URL("./migrations/016_procurement_catalog.sql", import.meta.url), "utf8")
+  );
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS procurement_catalog_categories/i);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS procurement_catalog_items/i);
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS catalog_item_id uuid/i);
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS source_type text NOT NULL DEFAULT 'custom'/i);
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS catalog_snapshot jsonb NOT NULL DEFAULT '\{\}'::jsonb/i);
+  assert.match(migration, /CHECK \(source_type IN \('catalog', 'custom'\)\)/i);
+  assert.match(migration, /INSERT INTO procurement_catalog_categories/i);
   assert.doesNotMatch(migration, /DROP (?:TABLE|COLUMN|CONSTRAINT)/i);
 });
 
