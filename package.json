@@ -26,6 +26,7 @@
     "db:import-legacy": "tsx scripts/db/import-legacy.ts",
     "db:verify-migration": "tsx scripts/db/verify-migration.ts",
     "procurement:import-catalog": "tsx scripts/procurement/import-catalog-csv.ts",
+    "procurement:import-history": "tsx scripts/procurement/import-history-csv.ts",
     "procurement:import-images": "tsx scripts/procurement/import-catalog-images.ts",
     "procurement:scrape-jd-public": "tsx scripts/procurement/scrape-jd-public.ts"
   },
