@@ -3,5 +3,5 @@ import { LabAssetsConsole } from "@/features/console/lab-assets/LabAssetsConsole
 
 export default async function LabAssetsPage() {
   const result = await getConsoleBootstrap();
-  return <LabAssetsConsole permissions={result.status === "authenticated" ? result.data.permissions : []} />;
+  return result.status === "authenticated" ? <LabAssetsConsole permissions={result.data.permissions} userId={result.data.user.id} /> : null;
 }

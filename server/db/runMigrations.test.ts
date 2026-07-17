@@ -95,7 +95,8 @@ test("getMigrationFiles returns SQL migrations in lexical order", async () => {
       "019_member_self_profiles.sql",
       "020_legacy_serial_sequences.sql",
       "021_procurement_catalog_hierarchy_processing.sql",
-      "022_procurement_actual_spending.sql"
+      "022_procurement_actual_spending.sql",
+      "023_lab_assets_usage_workflow.sql"
     ]
   );
 });
@@ -204,6 +205,22 @@ test("procurement spending migration supports request totals and grouped line am
   assert.match(migration, /UNIQUE \(item_id\)/i);
   assert.match(migration, /WHERE scope='request_total'/i);
   assert.doesNotMatch(migration, /DROP (?:TABLE|COLUMN|CONSTRAINT)/i);
+});
+
+test("lab assets workflow migration adds typed devices and usage requests without dropping history", async () => {
+  const migration = await import("node:fs/promises").then(({ readFile }) =>
+    readFile(new URL("./migrations/023_lab_assets_usage_workflow.sql", import.meta.url), "utf8")
+  );
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS lab_device_types/i);
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS assigned_user_id uuid/i);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS lab_asset_usage_requests/i);
+  assert.match(migration, /ALTER TABLE lab_platforms ALTER COLUMN type_id SET NOT NULL/i);
+  assert.match(migration, /ALTER TABLE lab_assets ALTER COLUMN device_type_id SET NOT NULL/i);
+  assert.match(migration, /status IN \('idle','in_use','mounted','maintenance','lend','retired'\)/i);
+  assert.match(migration, /lab_assets_state_fields_check/i);
+  assert.match(migration, /string_agg[\s\S]*lab_asset_notes/i);
+  assert.match(migration, /历史借用者（待补充）/);
+  assert.doesNotMatch(migration, /DROP (?:TABLE|COLUMN)/i);
 });
 
 test("account profile permission migration is additive and seeds system templates", async () => {

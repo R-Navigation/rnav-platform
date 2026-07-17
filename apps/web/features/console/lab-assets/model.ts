@@ -1,141 +1,23 @@
-export type LocalizedText = { en: string; zh: string };
-export type LabNote = { content: LocalizedText; id: string; sortOrder: number };
-export type LabPlatform = {
-  assets: string[];
-  code: string;
-  description: LocalizedText;
-  name: LocalizedText;
-  notes: LabNote[];
-  sortOrder: number;
-  status: "active" | "partial" | "empty" | "maintenance" | "lend";
-  typeCode: string | null;
-};
-export type LabPlatformType = {
-  code: string;
-  description: LocalizedText;
-  name: LocalizedText;
-  platforms: LabPlatform[];
-  sortOrder: number;
-};
-export type LabAsset = {
-  code: string;
-  currentPlatformCode: string | null;
-  description: LocalizedText;
-  deviceType: LocalizedText;
-  model: string;
-  name: LocalizedText;
-  notes: LabNote[];
-  shareScope: string;
-  sortOrder: number;
-  status: "idle" | "mounted" | "maintenance" | "retired" | "lend";
-  vendorSerial: string;
-};
-export type LabAssetsSnapshot = {
-  assets: LabAsset[];
-  page: Record<string, unknown>;
-  platforms: LabPlatform[];
-  platformTypes: LabPlatformType[];
-  revision: string;
-  stats: Record<string, number>;
-};
-export type AssetFilters = { platform: string; query: string; status: string };
-export const labAssetsRedirects = [{ source: "/lab-assets", destination: "/console/lab-assets", permanent: true }];
+export type LocalizedText={en:string;zh:string};
+export type LabDeviceType={code:string;name:string};
+export type LabPlatformType={code:string;name:string;platforms:LabPlatform[]};
+export type LabMember={id:string;username:string;displayName:string};
+export type LabPlatform={assetCodes:string[];code:string;description:LocalizedText;name:LocalizedText;status:"active"|"maintenance"|"building"|"lend"|"retired";typeCode:string};
+export type LabAsset={code:string;currentPlatformCode:string|null;description:LocalizedText;deviceTypeCode:string;deviceTypeName:string;model:string;name:LocalizedText;vendorSerial:string;status:"idle"|"in_use"|"mounted"|"maintenance"|"lend"|"retired";assignedUserId:string|null;assignedUserName:string;borrowerName:string;borrowerContact:string};
+export type LabUsageRequest={id:string;status:"pending"|"approved"|"rejected"|"cancelled";reason:string;reviewNote:string;createdAt:string;reviewedAt:string|null;assetCode:string;assetName:LocalizedText;requesterId:string;requesterName:string;reviewerName:string};
+export type LabAssetsSnapshot={assets:LabAsset[];deviceTypes:LabDeviceType[];members:LabMember[];page:Record<string,unknown>;platforms:LabPlatform[];platformTypes:LabPlatformType[];revision:string;stats:Record<string,number>;usageRequests:LabUsageRequest[]};
+export type AssetFilters={platform:string;query:string;status:string};
+export const labAssetsRedirects=[{source:"/lab-assets",destination:"/console/lab-assets",permanent:true}];
 
-function object(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("实验室资产数据格式无效。");
-  return value as Record<string, unknown>;
-}
+function object(value:unknown):Record<string,unknown>{if(!value||typeof value!=="object"||Array.isArray(value))throw new Error("实验室资产数据格式无效。");return value as Record<string,unknown>}
+function localized(value:unknown):LocalizedText{const item=object(value);if(typeof item.zh!=="string"||typeof item.en!=="string")throw new Error("实验室资产数据格式无效。");return{zh:item.zh,en:item.en}}
+function strings(value:unknown){if(!Array.isArray(value)||value.some((item)=>typeof item!=="string"))throw new Error("实验室资产数据格式无效。");return value as string[]}
+function platform(value:unknown):LabPlatform{const item=object(value);if(typeof item.code!=="string"||typeof item.typeCode!=="string"||typeof item.status!=="string")throw new Error("实验室资产数据格式无效。");return{assetCodes:strings(item.assetCodes),code:item.code,description:localized(item.description),name:localized(item.name),status:item.status as LabPlatform["status"],typeCode:item.typeCode}}
+function asset(value:unknown):LabAsset{const item=object(value);if(typeof item.code!=="string"||typeof item.deviceTypeCode!=="string"||typeof item.deviceTypeName!=="string"||typeof item.model!=="string"||typeof item.vendorSerial!=="string"||typeof item.status!=="string")throw new Error("实验室资产数据格式无效。");return{code:item.code,currentPlatformCode:typeof item.currentPlatformCode==="string"?item.currentPlatformCode:null,description:localized(item.description),deviceTypeCode:item.deviceTypeCode,deviceTypeName:item.deviceTypeName,model:item.model,name:localized(item.name),vendorSerial:item.vendorSerial,status:item.status as LabAsset["status"],assignedUserId:typeof item.assignedUserId==="string"?item.assignedUserId:null,assignedUserName:typeof item.assignedUserName==="string"?item.assignedUserName:"",borrowerName:typeof item.borrowerName==="string"?item.borrowerName:"",borrowerContact:typeof item.borrowerContact==="string"?item.borrowerContact:""}}
+function usageRequest(value:unknown):LabUsageRequest{const item=object(value);if(typeof item.id!=="string"||typeof item.status!=="string"||typeof item.assetCode!=="string"||typeof item.requesterId!=="string")throw new Error("实验室资产数据格式无效。");return{id:item.id,status:item.status as LabUsageRequest["status"],reason:typeof item.reason==="string"?item.reason:"",reviewNote:typeof item.reviewNote==="string"?item.reviewNote:"",createdAt:String(item.createdAt??""),reviewedAt:item.reviewedAt?String(item.reviewedAt):null,assetCode:item.assetCode,assetName:localized(item.assetName),requesterId:item.requesterId,requesterName:String(item.requesterName??""),reviewerName:String(item.reviewerName??"")}}
 
-function localized(value: unknown): LocalizedText {
-  const item = object(value);
-  if (typeof item.zh !== "string" || typeof item.en !== "string") throw new Error("实验室资产数据格式无效。");
-  return { zh: item.zh, en: item.en };
-}
-
-function notes(value: unknown): LabNote[] {
-  if (!Array.isArray(value)) throw new Error("实验室资产数据格式无效。");
-  return value.map((entry) => {
-    const item = object(entry);
-    if (typeof item.id !== "string" || typeof item.sortOrder !== "number") throw new Error("实验室资产数据格式无效。");
-    return { id: item.id, sortOrder: item.sortOrder, content: localized(item.content) };
-  });
-}
-
-function platform(value: unknown): LabPlatform {
-  const item = object(value);
-  const assetCodes = Array.isArray(item.assetCodes) ? item.assetCodes : item.assets;
-  if (typeof item.code !== "string" || typeof item.sortOrder !== "number" || typeof item.status !== "string" || !Array.isArray(assetCodes)) {
-    throw new Error("实验室资产数据格式无效。");
-  }
-  return {
-    assets: assetCodes.filter((code): code is string => typeof code === "string"),
-    code: item.code,
-    description: localized(item.description),
-    name: localized(item.name),
-    notes: notes(item.notes),
-    sortOrder: item.sortOrder,
-    status: item.status as LabPlatform["status"],
-    typeCode: typeof item.typeCode === "string" ? item.typeCode : null,
-  };
-}
-
-function platformType(value: unknown): LabPlatformType {
-  const item = object(value);
-  if (typeof item.code !== "string" || typeof item.sortOrder !== "number" || !Array.isArray(item.platforms)) {
-    throw new Error("实验室资产数据格式无效。");
-  }
-  return { code: item.code, description: localized(item.description), name: localized(item.name), platforms: item.platforms.map(platform), sortOrder: item.sortOrder };
-}
-
-function asset(value: unknown): LabAsset {
-  const item = object(value);
-  if (typeof item.code !== "string" || typeof item.model !== "string" || typeof item.vendorSerial !== "string" || typeof item.status !== "string" || typeof item.shareScope !== "string" || typeof item.sortOrder !== "number") {
-    throw new Error("实验室资产数据格式无效。");
-  }
-  return {
-    code: item.code,
-    currentPlatformCode: typeof item.currentPlatformCode === "string" ? item.currentPlatformCode : null,
-    description: localized(item.description),
-    deviceType: localized(item.deviceType),
-    model: item.model,
-    name: localized(item.name),
-    notes: notes(item.notes),
-    shareScope: item.shareScope,
-    sortOrder: item.sortOrder,
-    status: item.status as LabAsset["status"],
-    vendorSerial: item.vendorSerial,
-  };
-}
-
-export function normalizeLabAssetsSnapshot(value: unknown): LabAssetsSnapshot {
-  const item = object(value);
-  if (typeof item.revision !== "string" || !Array.isArray(item.assets) || !Array.isArray(item.platformTypes)) {
-    throw new Error("实验室资产数据格式无效。");
-  }
-  const platformTypes = item.platformTypes.map(platformType);
-  const platforms = Array.isArray(item.platforms) && item.platforms.length
-    ? item.platforms.map(platform)
-    : platformTypes.flatMap((type) => type.platforms);
-  const statsValue = object(item.stats);
-  const stats = Object.fromEntries(Object.entries(statsValue).filter((entry): entry is [string, number] => typeof entry[1] === "number"));
-  return { assets: item.assets.map(asset), page: object(item.page), platforms, platformTypes, revision: item.revision, stats };
-}
-
-export function canWriteLabAssets(permissions: string[]) {
-  return permissions.includes("lab_assets.write");
-}
-
-export function applyRevision(snapshot: LabAssetsSnapshot, revision: string): LabAssetsSnapshot {
-  return { ...snapshot, revision };
-}
-
-export function filterAssets(assets: LabAsset[], filters: AssetFilters) {
-  const query = filters.query.trim().toLocaleLowerCase();
-  return assets.filter((item) => {
-    const matchesStatus = filters.status === "all" || item.status === filters.status;
-    const matchesPlatform = filters.platform === "all"
-      || (filters.platform === "unassigned" ? !item.currentPlatformCode : item.currentPlatformCode === filters.platform);
-    const haystack = [item.code, item.model, item.vendorSerial, item.name.zh, item.name.en, item.deviceType.zh, item.deviceType.en].join(" ").toLocaleLowerCase();
-    return matchesStatus && matchesPlatform && (!query || haystack.includes(query));
-  });
-}
+export function normalizeLabAssetsSnapshot(value:unknown):LabAssetsSnapshot{const item=object(value);if(typeof item.revision!=="string"||!Array.isArray(item.assets)||!Array.isArray(item.platforms)||!Array.isArray(item.platformTypes)||!Array.isArray(item.deviceTypes)||!Array.isArray(item.members)||!Array.isArray(item.usageRequests))throw new Error("实验室资产数据格式无效。");const statsValue=object(item.stats);return{assets:item.assets.map(asset),deviceTypes:item.deviceTypes.map((entry)=>{const row=object(entry);if(typeof row.code!=="string"||typeof row.name!=="string")throw new Error("实验室资产数据格式无效。");return{code:row.code,name:row.name}}),members:item.members.map((entry)=>{const row=object(entry);if(typeof row.id!=="string"||typeof row.username!=="string"||typeof row.displayName!=="string")throw new Error("实验室资产数据格式无效。");return{id:row.id,username:row.username,displayName:row.displayName}}),page:object(item.page),platforms:item.platforms.map(platform),platformTypes:item.platformTypes.map((entry)=>{const row=object(entry);if(typeof row.code!=="string"||typeof row.name!=="string"||!Array.isArray(row.platforms))throw new Error("实验室资产数据格式无效。");return{code:row.code,name:row.name,platforms:row.platforms.map(platform)}}),revision:item.revision,stats:Object.fromEntries(Object.entries(statsValue).filter((entry):entry is[string,number]=>typeof entry[1]==="number")),usageRequests:item.usageRequests.map(usageRequest)};}
+export function canWriteLabAssets(permissions:string[]){return permissions.includes("lab_assets.write")}
+export function applyRevision(snapshot:LabAssetsSnapshot,revision:string):LabAssetsSnapshot{return{...snapshot,revision}}
+export function filterAssets(assets:LabAsset[],filters:AssetFilters){const query=filters.query.trim().toLocaleLowerCase();return assets.filter((item)=>{const matchesStatus=filters.status==="all"||item.status===filters.status;const matchesPlatform=filters.platform==="all"||(filters.platform==="unassigned"?!item.currentPlatformCode:item.currentPlatformCode===filters.platform);const haystack=[item.code,item.model,item.vendorSerial,item.name.zh,item.name.en,item.deviceTypeName,item.description.zh,item.description.en,item.assignedUserName,item.borrowerName].join(" ").toLocaleLowerCase();return matchesStatus&&matchesPlatform&&(!query||haystack.includes(query))})}
+export function groupAssetsByType(assets:LabAsset[]){const groups=new Map<string,LabAsset[]>();for(const item of assets){const group=groups.get(item.deviceTypeName)??[];group.push(item);groups.set(item.deviceTypeName,group)}return[...groups.entries()].sort(([a],[b])=>a.localeCompare(b,"zh-CN",{numeric:true})).map(([name,items])=>({name,items:[...items].sort((a,b)=>a.code.localeCompare(b.code,"zh-CN",{numeric:true}))}))}

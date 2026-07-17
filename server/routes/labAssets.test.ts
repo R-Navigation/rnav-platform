@@ -73,14 +73,15 @@ test("lab_assets.write permission can read and write", async () => {
       code: "CAM-1",
       currentPlatformCode: null,
       description: { en: "", zh: "" },
-      deviceType: { en: "Camera", zh: "相机" },
+      deviceTypeCode: "camera",
       expectedRevision: "0",
       model: "D455",
       name: { en: "Camera", zh: "相机" },
-      shareScope: "internal",
-      sortOrder: 0,
       status: "idle",
       vendorSerial: "",
+      assignedUserId: null,
+      borrowerName: "",
+      borrowerContact: "",
     },
   });
   assert.equal(response.statusCode, 200);
@@ -109,9 +110,9 @@ test("invalid mutation bodies return 400 before the service runs", async () => {
 test("domain conflicts map to 409 responses", async () => {
   const body = {
     code: "CAM-1", currentPlatformCode: null, description: { en: "", zh: "" },
-    deviceType: { en: "Camera", zh: "相机" }, expectedRevision: "0", model: "D455",
-    name: { en: "Camera", zh: "相机" }, shareScope: "internal", sortOrder: 0,
-    status: "idle", vendorSerial: "",
+    deviceTypeCode: "camera", expectedRevision: "0", model: "D455",
+    name: { en: "Camera", zh: "相机" }, status: "idle", vendorSerial: "",
+    assignedUserId: null, borrowerName: "", borrowerContact: "",
   };
   const duplicate = await request("POST", "/api/lab-assets/assets", {
     user: user(["lab_assets.write"]), origin: "same-origin", body,
@@ -126,4 +127,26 @@ test("domain conflicts map to 409 responses", async () => {
   });
   assert.equal(revision.statusCode, 409);
   assert.deepEqual(revision.body, { error: "Lab assets revision conflict" });
+});
+
+test("members can request devices while only asset managers can review", async () => {
+  const submitted = await request("POST", "/api/lab-assets/usage-requests", {
+    user: user(["lab_assets.read"]), origin: "same-origin",
+    body: { assetCode: "CAM-1", reason: "定位实验", expectedRevision: "0" },
+  });
+  assert.equal(submitted.statusCode, 200);
+  assert.deepEqual(submitted.calls, ["submitUsageRequest"]);
+
+  const denied = await request("POST", "/api/lab-assets/usage-requests/00000000-0000-4000-8000-000000000099/review", {
+    user: user(["lab_assets.read"]), origin: "same-origin",
+    body: { action: "approve", note: "", expectedRevision: "0" },
+  });
+  assert.equal(denied.statusCode, 403);
+
+  const approved = await request("POST", "/api/lab-assets/usage-requests/00000000-0000-4000-8000-000000000099/review", {
+    user: user(["lab_assets.write"]), origin: "same-origin",
+    body: { action: "approve", note: "同意", expectedRevision: "0" },
+  });
+  assert.equal(approved.statusCode, 200);
+  assert.deepEqual(approved.calls, ["reviewUsageRequest"]);
 });
