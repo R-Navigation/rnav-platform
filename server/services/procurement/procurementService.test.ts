@@ -209,6 +209,7 @@ function processingClient(requestStatus: string, itemStatuses: readonly string[]
       queries.push({ sql, values });
       if (sql.includes("FROM procurement_requests") && sql.includes("FOR UPDATE")) return { rows: [{ id: "request-1", status: requestStatus }], rowCount: 1 };
       if (sql.includes("SELECT processing_status")) return { rows: itemStatuses.map((processing_status) => ({ processing_status })), rowCount: itemStatuses.length };
+      if (sql.includes("INSERT INTO procurement_spend_entries")) return { rows: [{ id: "spend-entry-1" }], rowCount: 1 };
       return { rows: [], rowCount: 1 };
     },
     release() {},
@@ -222,6 +223,31 @@ test("saving line processing persists progress and moves a submitted request int
   assert.equal(result.status, "purchasing");
   assert.ok(db.queries.some((query) => query.sql.includes("processing_status=$3")));
   assert.ok(db.queries.some((query) => query.sql.includes("status='purchasing'")));
+});
+
+test("saving processing replaces grouped spending records atomically", async () => {
+  const db = processingClient("purchasing");
+  const service = createProcurementService({ connect: async () => db } as never, { now: () => new Date("2026-07-17T08:00:00Z") });
+  await service.saveProcessing("00000000-0000-4000-8000-000000000099", {
+    items: [
+      { itemId: "00000000-0000-4000-8000-000000000011", status: "purchased", rejectionReason: null },
+      { itemId: "00000000-0000-4000-8000-000000000012", status: "purchased", rejectionReason: null },
+    ],
+    spendingEntries: [{ scope: "items", itemIds: ["00000000-0000-4000-8000-000000000011", "00000000-0000-4000-8000-000000000012"], amount: 38.5, note: "合并付款" }],
+  }, { id: "actor", permissions: ["procurements.purchase"] });
+  assert.ok(db.queries.some((query) => query.sql.includes("DELETE FROM procurement_spend_entries")));
+  assert.ok(db.queries.some((query) => query.sql.includes("INSERT INTO procurement_spend_entries")));
+  assert.equal(db.queries.filter((query) => query.sql.includes("INSERT INTO procurement_spend_entry_items")).length, 2);
+});
+
+test("spending records can only reference purchased request lines", async () => {
+  const db = processingClient("purchasing");
+  const service = createProcurementService({ connect: async () => db } as never);
+  await assert.rejects(service.saveProcessing("00000000-0000-4000-8000-000000000099", {
+    items: [{ itemId: "00000000-0000-4000-8000-000000000011", status: "rejected", rejectionReason: "不需要" }],
+    spendingEntries: [{ scope: "items", itemIds: ["00000000-0000-4000-8000-000000000011"], amount: 10, note: "" }],
+  }, { id: "actor", permissions: ["procurements.purchase"] }), ProcurementConflictError);
+  assert.equal(db.queries.at(-1)?.sql, "ROLLBACK");
 });
 
 test("processing cannot complete while lines are pending", async () => {

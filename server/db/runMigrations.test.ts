@@ -94,7 +94,8 @@ test("getMigrationFiles returns SQL migrations in lexical order", async () => {
       "018_lab_assets_sequences.sql",
       "019_member_self_profiles.sql",
       "020_legacy_serial_sequences.sql",
-      "021_procurement_catalog_hierarchy_processing.sql"
+      "021_procurement_catalog_hierarchy_processing.sql",
+      "022_procurement_actual_spending.sql"
     ]
   );
 });
@@ -190,6 +191,19 @@ test("procurement hierarchy migration preserves catalog data and adds line proce
   assert.match(migration, /procurement_request_items_rejection_reason_check/i);
   assert.match(migration, /productFamily/i);
   assert.doesNotMatch(migration, /DROP (?:TABLE|COLUMN)/i);
+});
+
+test("procurement spending migration supports request totals and grouped line amounts", async () => {
+  const migration = await import("node:fs/promises").then(({ readFile }) =>
+    readFile(new URL("./migrations/022_procurement_actual_spending.sql", import.meta.url), "utf8")
+  );
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS procurement_spend_entries/i);
+  assert.match(migration, /scope IN \('items', 'request_total'\)/i);
+  assert.match(migration, /amount numeric\(12,2\) NOT NULL CHECK \(amount >= 0\)/i);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS procurement_spend_entry_items/i);
+  assert.match(migration, /UNIQUE \(item_id\)/i);
+  assert.match(migration, /WHERE scope='request_total'/i);
+  assert.doesNotMatch(migration, /DROP (?:TABLE|COLUMN|CONSTRAINT)/i);
 });
 
 test("account profile permission migration is additive and seeds system templates", async () => {

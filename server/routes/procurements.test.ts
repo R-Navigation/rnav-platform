@@ -54,7 +54,7 @@ test("purchase managers can maintain subcategories and process request lines", a
   const subcategory = await request("POST", "/api/procurements/catalog/subcategories", { user: identity(["procurements.purchase"]), origin: true, body: { categoryId: "00000000-0000-4000-8000-000000000010", code: "socket-head", nameZh: "内六角", attributes: [] } });
   assert.equal(subcategory.status, 200);
   assert.deepEqual(subcategory.calls, ["createCatalogSubcategory"]);
-  const processing = await request("PUT", "/api/procurements/00000000-0000-4000-8000-000000000099/processing", { user: identity(["procurements.purchase"]), origin: true, body: { items: [{ itemId: "00000000-0000-4000-8000-000000000011", status: "purchased", rejectionReason: null }] } });
+  const processing = await request("PUT", "/api/procurements/00000000-0000-4000-8000-000000000099/processing", { user: identity(["procurements.purchase"]), origin: true, body: { items: [{ itemId: "00000000-0000-4000-8000-000000000011", status: "purchased", rejectionReason: null }], spendingEntries: [{ scope: "items", itemIds: ["00000000-0000-4000-8000-000000000011"], amount: 19.9 }] } });
   assert.equal(processing.status, 200);
   assert.deepEqual(processing.calls, ["saveProcessing"]);
   assert.equal((await request("POST", "/api/procurements/00000000-0000-4000-8000-000000000099/processing/complete", { user: identity(["procurements.create"]), origin: true })).status, 403);

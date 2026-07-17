@@ -2,7 +2,8 @@ import { z } from "zod";
 import { procurementStatuses } from "./workflow.js";
 
 const text = (maximum: number) => z.string().trim().max(maximum);
-const money = (maximum: number) => z.coerce.number().nonnegative().max(maximum).refine((value) => Number.isInteger(value * 100), "Use at most two decimal places");
+const hasAtMostTwoDecimals = (value: number) => Math.abs(Math.round(value * 100) - value * 100) < 1e-8;
+const money = (maximum: number) => z.coerce.number().nonnegative().max(maximum).refine(hasAtMostTwoDecimals, "Use at most two decimal places");
 const quantity = z.coerce.number().positive().max(1_000_000).refine((value) => Number.isInteger(value * 100), "Use at most two decimal places");
 const booleanQuery = z.preprocess((value) => value === true || value === "true", z.boolean());
 const nullableText = (maximum: number) => text(maximum).nullable().optional();
@@ -58,7 +59,21 @@ export const processingItemSchema = z.object({
   if (value.status === "rejected" && !value.rejectionReason) context.addIssue({ code: "custom", path: ["rejectionReason"], message: "Rejected items require a reason" });
 });
 
-export const processingSaveSchema = z.object({ items: z.array(processingItemSchema).min(1).max(100) }).strict();
+export const spendingEntrySchema = z.discriminatedUnion("scope", [
+  z.object({ scope: z.literal("items"), itemIds: z.array(z.string().uuid()).min(1).max(100), amount: money(9_999_999_999.99), note: text(500).optional().default("") }).strict(),
+  z.object({ scope: z.literal("request_total"), amount: money(9_999_999_999.99), note: text(500).optional().default("") }).strict(),
+]);
+
+export const processingSaveSchema = z.object({
+  items: z.array(processingItemSchema).min(1).max(100).refine((items) => new Set(items.map((item) => item.itemId)).size === items.length, "Duplicate processing items are not allowed"),
+  spendingEntries: z.array(spendingEntrySchema).max(100).optional(),
+}).strict().superRefine((value, context) => {
+  if (!value.spendingEntries) return;
+  const requestTotals = value.spendingEntries.filter((entry) => entry.scope === "request_total");
+  if (requestTotals.length && value.spendingEntries.length !== 1) context.addIssue({ code: "custom", path: ["spendingEntries"], message: "Request total cannot be combined with item amounts" });
+  const itemIds = value.spendingEntries.flatMap((entry) => entry.scope === "items" ? entry.itemIds : []);
+  if (new Set(itemIds).size !== itemIds.length) context.addIssue({ code: "custom", path: ["spendingEntries"], message: "Each item can belong to only one spending entry" });
+});
 
 export const commentSchema = z.object({ body: text(2_000).min(1) }).strict();
 export const procurementIdSchema = z.string().uuid();

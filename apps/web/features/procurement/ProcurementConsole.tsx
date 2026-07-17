@@ -36,6 +36,8 @@ type RequestSummary = {
   updatedAt: string;
 };
 type ProcessingStatus = "pending" | "purchased" | "rejected";
+type SpendingEntry = { id: string; scope: "items" | "request_total"; amount: number; note: string; item_ids: string[] };
+type SpendingDraft = { key: string; scope: "items" | "request_total"; amount: string; note: string; itemIds: string[] };
 type ProcurementItem = {
   id: string;
   item_name: string;
@@ -60,6 +62,7 @@ type ProcurementDetail = {
   reason: string;
   status: ProcurementStatus;
   items?: ProcurementItem[];
+  spending_entries?: SpendingEntry[];
 };
 
 const field =
@@ -168,6 +171,26 @@ function GroupedItems({ items }: { items: ProcurementItem[] }) {
   );
 }
 
+function SpendingSummary({ request }: { request: ProcurementDetail }) {
+  const entries = request.spending_entries ?? [];
+  if (!entries.length) return null;
+  const items = request.items ?? [];
+  const total = entries.reduce((sum, entry) => sum + entry.amount, 0);
+  return (
+    <section className="mt-6 border border-slate-300 bg-slate-50 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="font-bold text-blue-950">实际采购金额</h3><strong className="text-lg text-blue-950">合计：¥{total.toFixed(2)}</strong></div>
+      <div className="mt-3 divide-y divide-slate-200 border border-slate-200 bg-white">
+        {entries.map((entry) => (
+          <div className="grid gap-2 p-3 md:grid-cols-[minmax(0,1fr)_140px]" key={entry.id}>
+            <div><p className="text-sm font-bold text-slate-800">{entry.scope === "request_total" ? "整张采购清单" : entry.item_ids.map((id) => { const item = items.find((candidate) => candidate.id === id); return item ? `${item.item_name}${item.spec ? `（${item.spec}）` : ""}` : "未知条目" }).join("、")}</p>{entry.note ? <p className="mt-1 text-xs text-slate-500">{entry.note}</p> : null}</div>
+            <p className="text-xl font-black text-blue-950 md:text-right">¥{entry.amount.toFixed(2)}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function ProcessingPanel({
   request,
   busy,
@@ -180,24 +203,60 @@ function ProcessingPanel({
   const [draft, setDraft] = useState(
     () => Object.fromEntries((request.items ?? []).map((item) => [item.id, { status: item.processing_status ?? "pending", rejectionReason: item.rejection_reason ?? "" }])) as Record<string, { status: ProcessingStatus; rejectionReason: string }>,
   );
+  const [spending, setSpending] = useState<SpendingDraft[]>(() => (request.spending_entries ?? []).map((entry) => ({ key: entry.id, scope: entry.scope, amount: entry.amount.toFixed(2), note: entry.note, itemIds: entry.item_ids })));
+  const [selectedForGroup, setSelectedForGroup] = useState<string[]>([]);
+  const [groupAmount, setGroupAmount] = useState("");
+  const [groupNote, setGroupNote] = useState("");
   useEffect(() => {
-    setDraft(Object.fromEntries((request.items ?? []).map((item) => [item.id, { status: item.processing_status ?? "pending", rejectionReason: item.rejection_reason ?? "" }])))
+    setDraft(Object.fromEntries((request.items ?? []).map((item) => [item.id, { status: item.processing_status ?? "pending", rejectionReason: item.rejection_reason ?? "" }])));
+    setSpending((request.spending_entries ?? []).map((entry) => ({ key: entry.id, scope: entry.scope, amount: entry.amount.toFixed(2), note: entry.note, itemIds: entry.item_ids })));
+    setSelectedForGroup([]);
+    setGroupAmount("");
+    setGroupNote("");
   }, [request]);
 
   const items = request.items ?? [];
   const groups = groupProcurementItems(items);
   const completedCount = items.filter((item) => draft[item.id]?.status !== "pending").length;
   const allDone = items.length > 0 && completedCount === items.length;
-  const setStatus = (id: string, status: ProcessingStatus) => setDraft((current) => ({
-    ...current,
-    [id]: { status, rejectionReason: status === "rejected" ? current[id]?.rejectionReason ?? "" : "" },
-  }));
+  const requestTotal = spending.find((entry) => entry.scope === "request_total");
+  const itemSpending = spending.filter((entry) => entry.scope === "items");
+  const assignedItemIds = new Set(itemSpending.flatMap((entry) => entry.itemIds));
+  const actualTotal = spending.reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0);
+  const setStatus = (id: string, status: ProcessingStatus) => {
+    setDraft((current) => ({ ...current, [id]: { status, rejectionReason: status === "rejected" ? current[id]?.rejectionReason ?? "" : "" } }));
+    if (status !== "purchased") {
+      setSpending((current) => current.map((entry) => ({ ...entry, itemIds: entry.itemIds.filter((itemId) => itemId !== id) })).filter((entry) => entry.scope === "request_total" || entry.itemIds.length));
+      setSelectedForGroup((current) => current.filter((itemId) => itemId !== id));
+    }
+  };
+  const addSingleSpending = (itemId: string) => {
+    setSpending((current) => [...current, { key: crypto.randomUUID(), scope: "items", amount: "", note: "", itemIds: [itemId] }]);
+    setSelectedForGroup((current) => current.filter((id) => id !== itemId));
+  };
+  const addGroupedSpending = () => {
+    if (!selectedForGroup.length || groupAmount === "") return;
+    setSpending((current) => [...current, { key: crypto.randomUUID(), scope: "items", amount: groupAmount, note: groupNote, itemIds: selectedForGroup }]);
+    setSelectedForGroup([]); setGroupAmount(""); setGroupNote("");
+  };
+  const setRequestTotalMode = () => {
+    setSpending([{ key: crypto.randomUUID(), scope: "request_total", amount: "", note: "", itemIds: [] }]);
+    setSelectedForGroup([]); setGroupAmount(""); setGroupNote("");
+  };
+  const setItemMode = () => { setSpending([]); setSelectedForGroup([]); setGroupAmount(""); setGroupNote(""); };
+  const spendingValid = spending.every((entry) => {
+    const amount = Number(entry.amount);
+    return entry.amount !== "" && Number.isFinite(amount) && amount >= 0 && Math.abs(Math.round(amount * 100) - amount * 100) < 1e-8;
+  });
   const processingBody = () => ({
     items: items.map((item) => ({
       itemId: item.id,
       status: draft[item.id]?.status ?? "pending",
       rejectionReason: draft[item.id]?.status === "rejected" ? draft[item.id]?.rejectionReason || null : null,
     })),
+    spendingEntries: spending.map((entry) => entry.scope === "request_total"
+      ? { scope: entry.scope, amount: Number(entry.amount), note: entry.note }
+      : { scope: entry.scope, itemIds: entry.itemIds, amount: Number(entry.amount), note: entry.note }),
   });
   const save = () => onRun(() => saveProcurementProcessing(request.id, processingBody()), "采购处理进度已保存。");
   const complete = () => onRun(async () => {
@@ -258,6 +317,18 @@ function ProcessingPanel({
                             <button aria-label="标记驳回" className={`grid h-12 w-12 place-items-center border text-2xl font-bold ${state.status === "rejected" ? "border-red-700 bg-red-700 text-white" : "border-slate-300 bg-white text-red-700"}`} onClick={() => setStatus(item.id, state.status === "rejected" ? "pending" : "rejected")} title="驳回/取消" type="button">×</button>
                           </div>
                         </div>
+                        {state.status === "purchased" && !requestTotal ? (
+                          <div className="mt-4 border-t border-emerald-200 pt-3">
+                            {assignedItemIds.has(item.id) ? (
+                              <p className="text-xs font-semibold text-emerald-800">已加入实际金额记录</p>
+                            ) : (
+                              <div className="flex flex-wrap items-center gap-3">
+                                <label className="flex items-center gap-2 text-xs font-semibold text-slate-700"><input checked={selectedForGroup.includes(item.id)} onChange={(event) => setSelectedForGroup((current) => event.target.checked ? [...current, item.id] : current.filter((id) => id !== item.id))} type="checkbox" />加入组合金额</label>
+                                <button className="text-xs font-bold text-cyan-800 underline" onClick={() => addSingleSpending(item.id)} type="button">填写该条金额</button>
+                              </div>
+                            )}
+                          </div>
+                        ) : null}
                         {state.status === "rejected" ? (
                           <label className="mt-4 block text-xs font-semibold text-red-800">
                             驳回意见
@@ -274,9 +345,52 @@ function ProcessingPanel({
         ))}
       </div>
 
+      <section className="mt-6 border border-slate-300 bg-slate-50 p-4">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div><h3 className="font-bold text-blue-950">实际采购金额</h3><p className="mt-1 text-xs text-slate-500">可按单条、组合付款或整张清单记录，金额允许稍后补充。</p></div>
+          <div className="flex border border-slate-300 bg-white p-1">
+            <button className={`px-3 py-2 text-xs font-bold ${!requestTotal ? "bg-blue-950 text-white" : "text-slate-600"}`} onClick={setItemMode} type="button">按条目 / 组合</button>
+            <button className={`px-3 py-2 text-xs font-bold ${requestTotal ? "bg-blue-950 text-white" : "text-slate-600"}`} onClick={setRequestTotalMode} type="button">整单总额</button>
+          </div>
+        </div>
+
+        {requestTotal ? (
+          <div className="mt-4 grid gap-3 md:grid-cols-[180px_minmax(0,1fr)]">
+            <label className="text-xs font-semibold">整单实际金额（元）<input className={field} min="0" onChange={(event) => setSpending([{ ...requestTotal, amount: event.target.value }])} placeholder="0.00" step="0.01" type="number" value={requestTotal.amount} /></label>
+            <label className="text-xs font-semibold">备注<input className={field} maxLength={500} onChange={(event) => setSpending([{ ...requestTotal, note: event.target.value }])} placeholder="例如：京东合并付款" value={requestTotal.note} /></label>
+          </div>
+        ) : (
+          <>
+            {selectedForGroup.length ? (
+              <div className="mt-4 border border-cyan-200 bg-white p-3">
+                <p className="text-sm font-bold text-blue-950">已选择 {selectedForGroup.length} 个条目</p>
+                <div className="mt-3 grid gap-3 md:grid-cols-[180px_minmax(0,1fr)_auto] md:items-end">
+                  <label className="text-xs font-semibold">组合实际金额（元）<input className={field} min="0" onChange={(event) => setGroupAmount(event.target.value)} placeholder="0.00" step="0.01" type="number" value={groupAmount} /></label>
+                  <label className="text-xs font-semibold">备注<input className={field} maxLength={500} onChange={(event) => setGroupNote(event.target.value)} placeholder="例如：同一订单合并付款" value={groupNote} /></label>
+                  <button className={primary} disabled={groupAmount === ""} onClick={addGroupedSpending} type="button">添加组合金额</button>
+                </div>
+              </div>
+            ) : null}
+            <div className="mt-4 space-y-2">
+              {itemSpending.map((entry) => (
+                <div className="grid gap-3 border border-slate-200 bg-white p-3 md:grid-cols-[minmax(0,1fr)_160px_minmax(180px,1fr)_auto] md:items-end" key={entry.key}>
+                  <div><p className="text-xs font-semibold text-slate-500">计费条目</p><p className="mt-1 text-sm font-bold text-slate-800">{entry.itemIds.map((id) => { const item = items.find((candidate) => candidate.id === id); return item ? `${item.item_name}${item.spec ? `（${item.spec}）` : ""}` : "未知条目" }).join("、")}</p></div>
+                  <label className="text-xs font-semibold">实际金额（元）<input className={field} min="0" onChange={(event) => setSpending((current) => current.map((item) => item.key === entry.key ? { ...item, amount: event.target.value } : item))} placeholder="0.00" step="0.01" type="number" value={entry.amount} /></label>
+                  <label className="text-xs font-semibold">备注<input className={field} maxLength={500} onChange={(event) => setSpending((current) => current.map((item) => item.key === entry.key ? { ...item, note: event.target.value } : item))} placeholder="订单或付款说明" value={entry.note} /></label>
+                  <button className="h-9 px-2 text-xs font-bold text-red-700 underline" onClick={() => setSpending((current) => current.filter((item) => item.key !== entry.key))} type="button">删除</button>
+                </div>
+              ))}
+              {!itemSpending.length ? <p className="text-xs text-slate-500">将条目标记为已购买后，可为单个条目填写金额，或勾选多个条目填写合计。</p> : null}
+            </div>
+          </>
+        )}
+        <div className="mt-4 flex items-center justify-between border-t border-slate-200 pt-3"><span className="text-xs text-slate-500">已记录 {spending.length} 笔</span><strong className="text-lg text-blue-950">实际支出合计：¥{actualTotal.toFixed(2)}</strong></div>
+      </section>
+
       <div className="sticky bottom-0 mt-5 flex flex-wrap items-center gap-3 border-t border-slate-300 bg-white py-4">
-        <button className={secondary} disabled={busy} onClick={() => void save()} type="button">保存当前进度</button>
-        <button className={primary} disabled={busy || !allDone || items.some((item) => draft[item.id]?.status === "rejected" && !draft[item.id]?.rejectionReason.trim())} onClick={() => void complete()} type="button">完成处理</button>
+        <button className={secondary} disabled={busy || !spendingValid} onClick={() => void save()} type="button">保存当前进度</button>
+        <button className={primary} disabled={busy || !spendingValid || !allDone || items.some((item) => draft[item.id]?.status === "rejected" && !draft[item.id]?.rejectionReason.trim())} onClick={() => void complete()} type="button">完成处理</button>
+        {!spendingValid ? <p className="text-xs font-semibold text-red-700">请补全实际金额，最多保留两位小数。</p> : null}
         {!allDone ? <p className="text-xs text-slate-500">所有条目都标记为已购买或已驳回后，才能完成处理。</p> : null}
       </div>
     </section>
@@ -429,6 +543,7 @@ export function ProcurementConsole({ permissions, userId }: Props) {
                   <section className="mt-6">
                     <div className="mb-4 flex items-center justify-between"><h3 className="text-lg font-bold text-blue-950">采购清单</h3><span className="text-xs text-slate-500">{selected.items?.length ?? 0} 项</span></div>
                     <GroupedItems items={selected.items ?? []} />
+                    <SpendingSummary request={selected} />
                   </section>
                 )}
 
