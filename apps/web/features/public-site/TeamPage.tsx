@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { PageHeader } from "./PageHeader";
 import { useLanguage } from "./LanguageProvider";
 import { getLocalizedText, normalizeInternalHref } from "./i18n";
@@ -14,7 +15,7 @@ function MemberPhoto({ image, name, featured }: { image: any; name: string; feat
   const [preview, setPreview] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
-  const size = featured ? "h-36 w-32 sm:h-44 sm:w-40" : "h-24 w-24";
+  const size = featured ? "h-32 w-28 sm:h-36 sm:w-32" : "h-24 w-24";
 
   useEffect(() => {
     if (!preview) return;
@@ -47,13 +48,13 @@ function MemberPhoto({ image, name, featured }: { image: any; name: string; feat
       <img alt={alt} className="h-full w-full object-cover transition duration-300 group-hover:opacity-90" src={image.src} style={cropStyle}/>
       <span aria-hidden="true" className="absolute bottom-2 right-2 grid h-7 w-7 place-items-center bg-slate-950/75 text-lg leading-none text-white opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100">+</span>
     </button>
-    {preview ? <div aria-label={`${name}的照片大图`} aria-modal="true" className="fixed inset-0 z-[80] grid place-items-center bg-slate-950/80 p-4 sm:p-8" onClick={() => setPreview(false)} role="dialog">
+    {preview ? createPortal(<div aria-label={`${name}的照片大图`} aria-modal="true" className="fixed inset-0 z-[9999] grid place-items-center bg-slate-950/80 p-4 sm:p-8" onClick={() => setPreview(false)} role="dialog">
       <div className="relative flex max-h-[92vh] max-w-5xl flex-col bg-white p-3 shadow-2xl sm:p-4" onClick={(event) => event.stopPropagation()}>
         <button aria-label="关闭照片大图" className="absolute right-3 top-3 z-10 grid h-10 w-10 place-items-center bg-slate-950 text-2xl leading-none text-white" onClick={() => setPreview(false)} ref={closeButtonRef} type="button">×</button>
         <img alt={alt} className="max-h-[78vh] max-w-full object-contain" src={image.src}/>
         <p className="px-1 pb-1 pt-3 pr-12 font-serif text-lg font-semibold text-primary">{name}</p>
       </div>
-    </div> : null}
+    </div>, document.body) : null}
   </>;
 }
 
@@ -65,8 +66,8 @@ function MemberCard({ member, group, labels, featured = false }: { member: any; 
   const bio = getLocalizedText(member.bio, locale);
   const major = getLocalizedText(member.major, locale);
 
-  return <article className={`flex h-full flex-col border border-slate-200 border-t-2 bg-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-t-cyan-600 hover:shadow-panel ${featured ? "border-t-cyan-600 p-6 sm:p-7" : "p-5"}`}>
-    <div className={`flex ${featured ? "flex-col items-start gap-5 sm:flex-row sm:gap-6" : "gap-4"}`}>
+  return <article className={`flex h-full flex-col border border-slate-200 border-t-2 bg-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-t-cyan-600 hover:shadow-panel ${featured ? "border-t-cyan-600 p-5 sm:p-6" : "p-5"}`}>
+    <div className={`flex ${featured ? "flex-col items-start gap-5 sm:flex-row" : "gap-4"}`}>
       <MemberPhoto featured={featured} image={member.image} name={name}/>
       <div className="min-w-0 flex-1">
         <h3 className={`font-serif font-semibold leading-tight text-primary ${featured ? "text-2xl" : "text-xl"}`}>{name}</h3>

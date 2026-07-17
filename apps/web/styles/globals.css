@@ -48,10 +48,13 @@
   }
 
   .team-featured-grid {
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 31rem), 1fr));
+    max-width: 72rem;
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .team-featured-grid > article:only-child {
-    width: min(100%, 52rem);
+  @media (min-width: 1024px) {
+    .team-featured-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
   }
 }
