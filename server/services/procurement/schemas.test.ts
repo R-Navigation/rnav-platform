@@ -61,4 +61,5 @@ test("processing amounts reject mixed totals and duplicate item billing", () => 
   assert.equal(processingSaveSchema.safeParse({ items, spendingEntries: [{ scope: "request_total", amount: 10 }, { scope: "items", itemIds: [first], amount: 10 }] }).success, false);
   assert.equal(processingSaveSchema.safeParse({ items, spendingEntries: [{ scope: "items", itemIds: [first], amount: 5 }, { scope: "items", itemIds: [first], amount: 5 }] }).success, false);
   assert.equal(processingSaveSchema.safeParse({ items, spendingEntries: [{ scope: "request_total", amount: 1.001 }] }).success, false);
+  assert.equal(processingSaveSchema.safeParse({ items: items.map((item) => ({ ...item, status: "rejected", rejectionReason: "不购买" })), spendingEntries: [{ scope: "request_total", amount: 10 }] }).success, false);
 });

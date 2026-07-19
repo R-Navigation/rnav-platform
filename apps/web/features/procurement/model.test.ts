@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { addCatalogItem, availableActions, cartEstimatedTotal, groupProcurementItems, procurementCapabilities, updateCartQuantity, type CatalogItem } from "./model.ts";
+import { addCatalogItem, availableActions, cartEstimatedTotal, groupProcurementItems, processingCompletionBlockers, procurementCapabilities, updateCartQuantity, type CatalogItem } from "./model.ts";
 
 test("normal members can create and only see requester actions", () => {
   const capability = procurementCapabilities(["procurements.create", "procurements.read_own"]);
@@ -41,4 +41,41 @@ test("procurement lines are grouped by primary and secondary category", () => {
   assert.deepEqual(grouped.map((group) => group.category), ["垫圈", "螺母", "螺栓", "其他物料"]);
   assert.equal(grouped[2].subcategories[0].subcategory, "内六角圆柱头螺钉");
   assert.equal(grouped[3].subcategories[0].subcategory, "手动填写");
+});
+
+test("processing completion explains every blocking draft condition", () => {
+  const blockers = processingCompletionBlockers(
+    ["pending", "rejected", "purchased"],
+    {
+      pending: { status: "pending", rejectionReason: "" },
+      rejected: { status: "rejected", rejectionReason: "" },
+      purchased: { status: "purchased", rejectionReason: "" },
+    },
+    [{ scope: "items", itemIds: ["rejected"], amount: "12.345" }],
+  );
+  assert.equal(blockers.length, 4);
+  assert.ok(blockers.some((item) => item.includes("未标记")));
+  assert.ok(blockers.some((item) => item.includes("驳回意见")));
+  assert.ok(blockers.some((item) => item.includes("金额")));
+  assert.ok(blockers.some((item) => item.includes("已购买")));
+});
+
+test("processing completion accepts completed lines without spending records", () => {
+  assert.deepEqual(processingCompletionBlockers(
+    ["purchased", "rejected"],
+    {
+      purchased: { status: "purchased", rejectionReason: "" },
+      rejected: { status: "rejected", rejectionReason: "无法购买" },
+    },
+    [],
+  ), []);
+});
+
+test("processing completion rejects request totals when every line is rejected", () => {
+  const blockers = processingCompletionBlockers(
+    ["rejected"],
+    { rejected: { status: "rejected", rejectionReason: "无货" } },
+    [{ scope: "request_total", itemIds: [], amount: "10.00" }],
+  );
+  assert.ok(blockers.some((item) => item.includes("没有已购买条目")));
 });

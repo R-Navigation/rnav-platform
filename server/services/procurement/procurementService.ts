@@ -71,6 +71,49 @@ async function ensureSubcategory(pool: Pick<Pool, "query">, categoryId: string, 
   if (!result.rowCount) throw new ProcurementConflictError("二级分类不属于所选一级分类");
 }
 
+async function persistProcessing(
+  client: Pick<PoolClient, "query">,
+  id: string,
+  input: ProcessingInput,
+  actor: Actor,
+  processedAt: Date,
+) {
+  const locked = await client.query("SELECT id,status FROM procurement_requests WHERE id=$1 FOR UPDATE", [id]);
+  const request = locked.rows[0];
+  if (!request) throw new ProcurementNotFoundError("Procurement request not found");
+  if (!["submitted", "approved", "purchasing"].includes(request.status)) throw new ProcurementConflictError("当前申请不能编辑采购处理进度");
+
+  for (const item of input.items) {
+    const updated = await client.query(
+      `UPDATE procurement_request_items SET processing_status=$3,rejection_reason=$4,processed_by=CASE WHEN $3='pending' THEN NULL ELSE $5::uuid END,processed_at=CASE WHEN $3='pending' THEN NULL ELSE $6::timestamptz END WHERE id=$1 AND request_id=$2`,
+      [item.itemId, id, item.status, item.status === "rejected" ? item.rejectionReason : null, actor.id, processedAt],
+    );
+    if (!updated.rowCount) throw new ProcurementConflictError("采购条目不存在或不属于当前申请");
+  }
+
+  if (input.spendingEntries) {
+    const itemStatus = new Map(input.items.map((item) => [item.itemId, item.status]));
+    const spendingItemIds = input.spendingEntries.flatMap((entry) => entry.scope === "items" ? entry.itemIds : []);
+    if (spendingItemIds.some((itemId) => itemStatus.get(itemId) !== "purchased")) throw new ProcurementConflictError("只有标记为已购买的条目可以记录实际金额");
+    if (input.spendingEntries.some((entry) => entry.scope === "request_total") && !input.items.some((item) => item.status === "purchased")) throw new ProcurementConflictError("没有已购买条目时不能记录实际金额");
+    await client.query("DELETE FROM procurement_spend_entries WHERE request_id=$1", [id]);
+    for (const entry of input.spendingEntries) {
+      const created = await client.query(
+        `INSERT INTO procurement_spend_entries(request_id,scope,amount,note,created_by,updated_by,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$5,$6::timestamptz,$6::timestamptz) RETURNING id`,
+        [id, entry.scope, entry.amount, entry.note, actor.id, processedAt],
+      );
+      if (entry.scope === "items") for (const itemId of entry.itemIds) {
+        const linked = await client.query(
+          `INSERT INTO procurement_spend_entry_items(entry_id,item_id) SELECT $1,request_items.id FROM procurement_request_items request_items WHERE request_items.id=$2 AND request_items.request_id=$3 RETURNING item_id`,
+          [created.rows[0].id, itemId, id],
+        );
+        if (!linked.rowCount) throw new ProcurementConflictError("金额记录包含不属于当前申请的条目");
+      }
+    }
+  }
+  return request;
+}
+
 export function createProcurementService(pool: Pick<Pool, "connect" | "query">, dependencies: Dependencies = {}) {
   const now = dependencies.now ?? (() => new Date());
   return {
@@ -238,14 +281,14 @@ export function createProcurementService(pool: Pick<Pool, "connect" | "query">, 
 
     async saveProcessing(id: string, input: ProcessingInput, actor: Actor) {
       requireCatalogManager(actor);
-      return withTransaction(pool,async(client)=>{const locked=await client.query("SELECT id,status FROM procurement_requests WHERE id=$1 FOR UPDATE",[id]);const request=locked.rows[0];if(!request)throw new ProcurementNotFoundError("Procurement request not found");if(!["submitted","purchasing"].includes(request.status))throw new ProcurementConflictError("当前申请不能编辑采购处理进度");for(const item of input.items){const updated=await client.query(`UPDATE procurement_request_items SET processing_status=$3,rejection_reason=$4,processed_by=CASE WHEN $3='pending' THEN NULL ELSE $5::uuid END,processed_at=CASE WHEN $3='pending' THEN NULL ELSE $6 END WHERE id=$1 AND request_id=$2`,[item.itemId,id,item.status,item.status==="rejected"?item.rejectionReason:null,actor.id,now()]);if(!updated.rowCount)throw new ProcurementConflictError("采购条目不存在或不属于当前申请");}
+      return withTransaction(pool,async(client)=>{const locked=await client.query("SELECT id,status FROM procurement_requests WHERE id=$1 FOR UPDATE",[id]);const request=locked.rows[0];if(!request)throw new ProcurementNotFoundError("Procurement request not found");if(!["submitted","approved","purchasing"].includes(request.status))throw new ProcurementConflictError("当前申请不能编辑采购处理进度");for(const item of input.items){const updated=await client.query(`UPDATE procurement_request_items SET processing_status=$3,rejection_reason=$4,processed_by=CASE WHEN $3='pending' THEN NULL ELSE $5::uuid END,processed_at=CASE WHEN $3='pending' THEN NULL ELSE $6::timestamptz END WHERE id=$1 AND request_id=$2`,[item.itemId,id,item.status,item.status==="rejected"?item.rejectionReason:null,actor.id,now()]);if(!updated.rowCount)throw new ProcurementConflictError("采购条目不存在或不属于当前申请");}
         if(input.spendingEntries){const itemStatus=new Map(input.items.map((item)=>[item.itemId,item.status]));const spendingItemIds=input.spendingEntries.flatMap((entry)=>entry.scope==="items"?entry.itemIds:[]);if(spendingItemIds.some((itemId)=>itemStatus.get(itemId)!=="purchased"))throw new ProcurementConflictError("只有标记为已购买的条目可以记录实际金额");await client.query("DELETE FROM procurement_spend_entries WHERE request_id=$1",[id]);for(const entry of input.spendingEntries){const created=await client.query(`INSERT INTO procurement_spend_entries(request_id,scope,amount,note,created_by,updated_by,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$5,$6,$6) RETURNING id`,[id,entry.scope,entry.amount,entry.note,actor.id,now()]);if(entry.scope==="items")for(const itemId of entry.itemIds){const linked=await client.query(`INSERT INTO procurement_spend_entry_items(entry_id,item_id) SELECT $1,request_items.id FROM procurement_request_items request_items WHERE request_items.id=$2 AND request_items.request_id=$3 RETURNING item_id`,[created.rows[0].id,itemId,id]);if(!linked.rowCount)throw new ProcurementConflictError("金额记录包含不属于当前申请的条目");}}
-        }if(request.status==="submitted"){await client.query("UPDATE procurement_requests SET status='purchasing',purchased_by=$2,updated_at=$3 WHERE id=$1",[id,actor.id,now()]);await client.query("INSERT INTO procurement_status_history(request_id,from_status,to_status,actor_id,note) VALUES($1,'submitted','purchasing',$2,'开始逐条处理')",[id,actor.id]);}else await client.query("UPDATE procurement_requests SET updated_at=$2 WHERE id=$1",[id,now()]);await client.query("INSERT INTO audit_logs(actor_id,action,target_type,target_id,detail) VALUES($1,'procurement.processing.save','procurement_request',$2,$3::jsonb)",[actor.id,id,JSON.stringify({items:input.items.length,spendingEntries:input.spendingEntries?.length})]);return{id,status:"purchasing"};});
+        }if(request.status==="submitted"||request.status==="approved"){await client.query("UPDATE procurement_requests SET status='purchasing',purchased_by=$2,updated_at=$3 WHERE id=$1",[id,actor.id,now()]);await client.query("INSERT INTO procurement_status_history(request_id,from_status,to_status,actor_id,note) VALUES($1,$2,'purchasing',$3,'开始逐条处理')",[id,request.status,actor.id]);}else await client.query("UPDATE procurement_requests SET updated_at=$2 WHERE id=$1",[id,now()]);await client.query("INSERT INTO audit_logs(actor_id,action,target_type,target_id,detail) VALUES($1,'procurement.processing.save','procurement_request',$2,$3::jsonb)",[actor.id,id,JSON.stringify({items:input.items.length,spendingEntries:input.spendingEntries?.length})]);return{id,status:"purchasing"};});
     },
 
-    async completeProcessing(id: string, actor: Actor) {
+    async completeProcessing(id: string, actor: Actor, input?: ProcessingInput) {
       requireCatalogManager(actor);
-      return withTransaction(pool,async(client)=>{const locked=await client.query("SELECT id,status FROM procurement_requests WHERE id=$1 FOR UPDATE",[id]);const request=locked.rows[0];if(!request)throw new ProcurementNotFoundError("Procurement request not found");if(!["submitted","purchasing"].includes(request.status))throw new ProcurementConflictError("当前申请不能完成处理");const items=await client.query<{processing_status:string}>("SELECT processing_status FROM procurement_request_items WHERE request_id=$1 FOR UPDATE",[id]);if(!items.rows.length||items.rows.some(item=>item.processing_status==="pending"))throw new ProcurementConflictError("请先处理清单中的全部条目");const purchased=items.rows.some(item=>item.processing_status==="purchased");const next=purchased?"purchased":"closed";await client.query(`UPDATE procurement_requests SET status=$2,purchased_by=$3,purchased_at=CASE WHEN $2='purchased' THEN $4 ELSE purchased_at END,closed_at=CASE WHEN $2='closed' THEN $4 ELSE closed_at END,updated_at=$4 WHERE id=$1`,[id,next,actor.id,now()]);await client.query("INSERT INTO procurement_status_history(request_id,from_status,to_status,actor_id,note) VALUES($1,$2,$3,$4,$5)",[id,request.status,next,actor.id,purchased?"逐条处理完成，包含已购买项目":"全部条目驳回，申请完成"]);await client.query("INSERT INTO audit_logs(actor_id,action,target_type,target_id,detail) VALUES($1,'procurement.processing.complete','procurement_request',$2,$3::jsonb)",[actor.id,id,JSON.stringify({status:next})]);return{id,status:next};});
+      return withTransaction(pool,async(client)=>{if(input)await persistProcessing(client,id,input,actor,now());const locked=await client.query("SELECT id,status FROM procurement_requests WHERE id=$1 FOR UPDATE",[id]);const request=locked.rows[0];if(!request)throw new ProcurementNotFoundError("Procurement request not found");if(!["submitted","approved","purchasing"].includes(request.status))throw new ProcurementConflictError("当前申请不能完成处理");const items=await client.query<{processing_status:string}>("SELECT processing_status FROM procurement_request_items WHERE request_id=$1 FOR UPDATE",[id]);if(!items.rows.length||items.rows.some(item=>item.processing_status==="pending"))throw new ProcurementConflictError("请先处理清单中的全部条目");const purchased=items.rows.some(item=>item.processing_status==="purchased");const next=purchased?"purchased":"closed";await client.query(`UPDATE procurement_requests SET status=$2,purchased_by=$3,purchased_at=CASE WHEN $2='purchased' THEN $4::timestamptz ELSE purchased_at END,closed_at=CASE WHEN $2='closed' THEN $4::timestamptz ELSE closed_at END,updated_at=$4::timestamptz WHERE id=$1`,[id,next,actor.id,now()]);await client.query("INSERT INTO procurement_status_history(request_id,from_status,to_status,actor_id,note) VALUES($1,$2,$3,$4,$5)",[id,request.status,next,actor.id,purchased?"逐条处理完成，包含已购买项目":"全部条目驳回，申请完成"]);await client.query("INSERT INTO audit_logs(actor_id,action,target_type,target_id,detail) VALUES($1,'procurement.processing.complete','procurement_request',$2,$3::jsonb)",[actor.id,id,JSON.stringify({status:next,atomic:Boolean(input)})]);return{id,status:next};});
     },
 
     async confirmReceived(id: string, actor: Actor) {

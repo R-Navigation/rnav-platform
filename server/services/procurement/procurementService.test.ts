@@ -222,7 +222,17 @@ test("saving line processing persists progress and moves a submitted request int
   const result = await service.saveProcessing("00000000-0000-4000-8000-000000000099", { items: [{ itemId: "00000000-0000-4000-8000-000000000011", status: "purchased", rejectionReason: null }] }, { id: "actor", permissions: ["procurements.purchase"] });
   assert.equal(result.status, "purchasing");
   assert.ok(db.queries.some((query) => query.sql.includes("processing_status=$3")));
+  assert.ok(db.queries.some((query) => query.sql.includes("$6::timestamptz")));
   assert.ok(db.queries.some((query) => query.sql.includes("status='purchasing'")));
+});
+
+test("saving line processing also starts an approved request", async () => {
+  const db = processingClient("approved");
+  const service = createProcurementService({ connect: async () => db } as never);
+  const result = await service.saveProcessing("00000000-0000-4000-8000-000000000099", { items: [{ itemId: "00000000-0000-4000-8000-000000000011", status: "purchased", rejectionReason: null }] }, { id: "actor", permissions: ["procurements.purchase"] });
+  assert.equal(result.status, "purchasing");
+  const history = db.queries.find((query) => query.sql.includes("INSERT INTO procurement_status_history") && query.sql.includes("'purchasing'"));
+  assert.equal(history?.values?.[1], "approved");
 });
 
 test("saving processing replaces grouped spending records atomically", async () => {
@@ -264,6 +274,24 @@ test("processing completion orders requests with purchases and closes all-reject
     const result = await service.completeProcessing("00000000-0000-4000-8000-000000000099", { id: "actor", permissions: ["procurements.purchase"] });
     assert.equal(result.status, expected);
   }
+});
+
+test("processing completion atomically persists the submitted draft", async () => {
+  const db = processingClient("submitted", ["purchased", "rejected"]);
+  const service = createProcurementService({ connect: async () => db } as never, { now: () => new Date("2026-07-18T08:00:00Z") });
+  const result = await service.completeProcessing("00000000-0000-4000-8000-000000000099", { id: "actor", permissions: ["procurements.purchase"] }, {
+    items: [
+      { itemId: "00000000-0000-4000-8000-000000000011", status: "purchased", rejectionReason: null },
+      { itemId: "00000000-0000-4000-8000-000000000012", status: "rejected", rejectionReason: "缺货" },
+    ],
+    spendingEntries: [{ scope: "items", itemIds: ["00000000-0000-4000-8000-000000000011"], amount: 20, note: "" }],
+  });
+  assert.equal(result.status, "purchased");
+  assert.equal(db.queries[0].sql, "BEGIN");
+  assert.equal(db.queries.at(-1)?.sql, "COMMIT");
+  assert.ok(db.queries.some((query) => query.sql.includes("processing_status=$3")));
+  assert.ok(db.queries.some((query) => query.sql.includes("procurement.processing.complete")));
+  assert.equal(db.queries.some((query) => query.sql.includes("procurement.processing.save")), false);
 });
 
 test("confirming receipt closes an ordered request", async () => {

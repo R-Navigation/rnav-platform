@@ -11,6 +11,8 @@ export type CartItem =
   | ({ key: string; sourceType: "custom" } & CustomItemDraft);
 
 export type ProcurementCapabilities = { create: boolean; readOwn: boolean; readAll: boolean; review: boolean; purchase: boolean; close: boolean };
+export type ProcessingDraftState = { status: "pending" | "purchased" | "rejected"; rejectionReason: string };
+export type ProcessingSpendingDraft = { scope: "items" | "request_total"; amount: string; itemIds: string[] };
 
 export function procurementCapabilities(permissions: string[]): ProcurementCapabilities { const available=new Set(permissions);return{create:available.has("procurements.create"),readOwn:available.has("procurements.read_own"),readAll:available.has("procurements.read_all"),review:available.has("procurements.review"),purchase:available.has("procurements.purchase"),close:available.has("procurements.close")}; }
 
@@ -45,4 +47,50 @@ export function groupProcurementItems<T extends GroupableProcurementItem>(items:
         .sort(([left], [right]) => left.localeCompare(right, "zh-CN"))
         .map(([subcategory, groupedItems]) => ({ subcategory, items: groupedItems })),
     }));
+}
+
+export function processingCompletionBlockers(
+  itemIds: string[],
+  draft: Record<string, ProcessingDraftState>,
+  spending: ProcessingSpendingDraft[],
+) {
+  const blockers: string[] = [];
+  const pendingCount = itemIds.filter((id) => (draft[id]?.status ?? "pending") === "pending").length;
+  if (!itemIds.length) blockers.push("采购清单中没有可处理的条目。");
+  if (pendingCount) blockers.push(`还有 ${pendingCount} 个条目未标记为已购买或已驳回。`);
+  return [...blockers, ...processingSaveBlockers(itemIds, draft, spending)];
+}
+
+export function processingSaveBlockers(
+  itemIds: string[],
+  draft: Record<string, ProcessingDraftState>,
+  spending: ProcessingSpendingDraft[],
+) {
+  const missingReasons = itemIds.filter((id) => draft[id]?.status === "rejected" && !draft[id]?.rejectionReason.trim()).length;
+  return [
+    ...(missingReasons ? [`还有 ${missingReasons} 个已驳回条目未填写驳回意见。`] : []),
+    ...processingSpendingBlockers(draft, spending),
+  ];
+}
+
+export function processingSpendingBlockers(
+  draft: Record<string, ProcessingDraftState>,
+  spending: ProcessingSpendingDraft[],
+) {
+  const blockers: string[] = [];
+  const invalidAmounts = spending.filter((entry) => {
+    const amount = Number(entry.amount);
+    return entry.amount === "" || !Number.isFinite(amount) || amount < 0 || Math.abs(Math.round(amount * 100) - amount * 100) >= 1e-8;
+  }).length;
+  const requestTotals = spending.filter((entry) => entry.scope === "request_total");
+  const billedItemIds = spending.flatMap((entry) => entry.scope === "items" ? entry.itemIds : []);
+  const duplicateBilling = new Set(billedItemIds).size !== billedItemIds.length;
+  const invalidBilling = billedItemIds.some((id) => draft[id]?.status !== "purchased");
+  const hasPurchasedItems = Object.values(draft).some((item) => item.status === "purchased");
+  if (invalidAmounts) blockers.push(`还有 ${invalidAmounts} 条实际金额未填写或格式不正确。`);
+  if (requestTotals.length && spending.length !== 1) blockers.push("整单总额不能与按条目金额同时记录。");
+  if (requestTotals.length && !hasPurchasedItems) blockers.push("没有已购买条目时不能记录整单实际金额。");
+  if (duplicateBilling) blockers.push("同一个条目不能重复计入多笔实际金额。");
+  if (invalidBilling) blockers.push("实际金额只能关联已购买的条目。");
+  return blockers;
 }

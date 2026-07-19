@@ -15,6 +15,8 @@ import {
   availableActions,
   displayAttributes,
   groupProcurementItems,
+  processingCompletionBlockers,
+  processingSaveBlockers,
   procurementCapabilities,
   type ProcurementCatalogSnapshot,
   type ProcurementStatus,
@@ -194,10 +196,12 @@ function SpendingSummary({ request }: { request: ProcurementDetail }) {
 function ProcessingPanel({
   request,
   busy,
+  feedback,
   onRun,
 }: {
   request: ProcurementDetail;
   busy: boolean;
+  feedback: string;
   onRun(action: () => Promise<unknown>, success: string): Promise<boolean>;
 }) {
   const [draft, setDraft] = useState(
@@ -207,18 +211,21 @@ function ProcessingPanel({
   const [selectedForGroup, setSelectedForGroup] = useState<string[]>([]);
   const [groupAmount, setGroupAmount] = useState("");
   const [groupNote, setGroupNote] = useState("");
+  const [attemptedAction, setAttemptedAction] = useState<"save" | "complete" | null>(null);
+  const [actionFailed, setActionFailed] = useState(false);
   useEffect(() => {
     setDraft(Object.fromEntries((request.items ?? []).map((item) => [item.id, { status: item.processing_status ?? "pending", rejectionReason: item.rejection_reason ?? "" }])));
     setSpending((request.spending_entries ?? []).map((entry) => ({ key: entry.id, scope: entry.scope, amount: entry.amount.toFixed(2), note: entry.note, itemIds: entry.item_ids })));
     setSelectedForGroup([]);
     setGroupAmount("");
     setGroupNote("");
+    setAttemptedAction(null);
+    setActionFailed(false);
   }, [request]);
 
   const items = request.items ?? [];
   const groups = groupProcurementItems(items);
   const completedCount = items.filter((item) => draft[item.id]?.status !== "pending").length;
-  const allDone = items.length > 0 && completedCount === items.length;
   const requestTotal = spending.find((entry) => entry.scope === "request_total");
   const itemSpending = spending.filter((entry) => entry.scope === "items");
   const assignedItemIds = new Set(itemSpending.flatMap((entry) => entry.itemIds));
@@ -244,10 +251,8 @@ function ProcessingPanel({
     setSelectedForGroup([]); setGroupAmount(""); setGroupNote("");
   };
   const setItemMode = () => { setSpending([]); setSelectedForGroup([]); setGroupAmount(""); setGroupNote(""); };
-  const spendingValid = spending.every((entry) => {
-    const amount = Number(entry.amount);
-    return entry.amount !== "" && Number.isFinite(amount) && amount >= 0 && Math.abs(Math.round(amount * 100) - amount * 100) < 1e-8;
-  });
+  const completionBlockers = processingCompletionBlockers(items.map((item) => item.id), draft, spending);
+  const saveBlockers = processingSaveBlockers(items.map((item) => item.id), draft, spending);
   const processingBody = () => ({
     items: items.map((item) => ({
       itemId: item.id,
@@ -258,11 +263,24 @@ function ProcessingPanel({
       ? { scope: entry.scope, amount: Number(entry.amount), note: entry.note }
       : { scope: entry.scope, itemIds: entry.itemIds, amount: Number(entry.amount), note: entry.note }),
   });
-  const save = () => onRun(() => saveProcurementProcessing(request.id, processingBody()), "采购处理进度已保存。");
-  const complete = () => onRun(async () => {
-    await saveProcurementProcessing(request.id, processingBody());
-    await completeProcurementProcessing(request.id);
-  }, "采购申请处理完成。");
+  const save = async () => {
+    setAttemptedAction("save");
+    setActionFailed(false);
+    if (saveBlockers.length) return false;
+    const succeeded = await onRun(() => saveProcurementProcessing(request.id, processingBody()), "采购处理进度已保存。");
+    setActionFailed(!succeeded);
+    if (succeeded) setAttemptedAction(null);
+    return succeeded;
+  };
+  const complete = async () => {
+    setAttemptedAction("complete");
+    setActionFailed(false);
+    if (completionBlockers.length) return false;
+    const succeeded = await onRun(() => completeProcurementProcessing(request.id, processingBody()), "采购申请处理完成。");
+    setActionFailed(!succeeded);
+    if (succeeded) setAttemptedAction(null);
+    return succeeded;
+  };
 
   return (
     <section className="mt-6 border-t border-slate-200 pt-5">
@@ -388,10 +406,11 @@ function ProcessingPanel({
       </section>
 
       <div className="sticky bottom-0 mt-5 flex flex-wrap items-center gap-3 border-t border-slate-300 bg-white py-4">
-        <button className={secondary} disabled={busy || !spendingValid} onClick={() => void save()} type="button">保存当前进度</button>
-        <button className={primary} disabled={busy || !spendingValid || !allDone || items.some((item) => draft[item.id]?.status === "rejected" && !draft[item.id]?.rejectionReason.trim())} onClick={() => void complete()} type="button">完成处理</button>
-        {!spendingValid ? <p className="text-xs font-semibold text-red-700">请补全实际金额，最多保留两位小数。</p> : null}
-        {!allDone ? <p className="text-xs text-slate-500">所有条目都标记为已购买或已驳回后，才能完成处理。</p> : null}
+        <button className={secondary} disabled={busy} onClick={() => void save()} type="button">{busy && attemptedAction === "save" ? "正在保存..." : "保存当前进度"}</button>
+        <button className={primary} disabled={busy} onClick={() => void complete()} type="button">{busy && attemptedAction === "complete" ? "正在完成..." : "完成处理"}</button>
+        {completionBlockers.length ? <div className="basis-full border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-950" role="status"><p className="font-bold">当前还不能完成处理：</p><ul className="mt-1 list-disc space-y-1 pl-5">{completionBlockers.map((blocker) => <li key={blocker}>{blocker}</li>)}</ul></div> : <p className="basis-full text-xs font-semibold text-emerald-700">全部条目已处理，可完成当前采购请求。</p>}
+        {attemptedAction === "save" && saveBlockers.length ? <div className="basis-full border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800" role="alert"><p className="font-bold">当前进度还不能保存：</p><ul className="mt-1 list-disc space-y-1 pl-5">{saveBlockers.map((blocker) => <li key={blocker}>{blocker}</li>)}</ul></div> : null}
+        {actionFailed && feedback ? <p className="basis-full border border-red-300 bg-red-50 px-3 py-2 text-xs font-semibold text-red-800" role="alert">{feedback}</p> : null}
       </div>
     </section>
   );
@@ -537,8 +556,8 @@ export function ProcurementConsole({ permissions, userId }: Props) {
                   <span className={`px-3 py-2 text-sm font-bold ${statusStyles[selected.status]}`}>{statusLabels[selected.status]}</span>
                 </div>
 
-                {capability.purchase && ["submitted", "purchasing"].includes(selected.status) ? (
-                  <ProcessingPanel busy={busy} onRun={run} request={selected} />
+                {capability.purchase && ["submitted", "approved", "purchasing"].includes(selected.status) ? (
+                  <ProcessingPanel busy={busy} feedback={message} onRun={run} request={selected} />
                 ) : (
                   <section className="mt-6">
                     <div className="mb-4 flex items-center justify-between"><h3 className="text-lg font-bold text-blue-950">采购清单</h3><span className="text-xs text-slate-500">{selected.items?.length ?? 0} 项</span></div>

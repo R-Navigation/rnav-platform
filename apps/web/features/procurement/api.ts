@@ -2,7 +2,13 @@ import type { ProcurementAction } from "./model";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api/procurements${path}`, { cache: "no-store", ...init });
-  if (!response.ok) { const payload = await response.json().catch(() => ({})); throw new Error(typeof payload.error === "string" ? payload.error : "采购服务请求失败。"); }
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({})) as { error?: unknown; issues?: unknown };
+    const issues = Array.isArray(payload.issues)
+      ? payload.issues.map((issue) => issue && typeof issue === "object" && "message" in issue ? String(issue.message) : "").filter(Boolean).join("；")
+      : "";
+    throw new Error(issues || (typeof payload.error === "string" ? payload.error : "采购服务请求失败。"));
+  }
   return response.json();
 }
 
@@ -32,5 +38,5 @@ export const createCatalogItem = (body: unknown) => request("/catalog/items", { 
 export const updateCatalogItem = (id: string, body: unknown) => request(`/catalog/items/${encodeURIComponent(id)}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 export const deleteCatalogItem = (id: string) => request(`/catalog/items/${encodeURIComponent(id)}`, { method: "DELETE" });
 export const saveProcurementProcessing = (id: string, body: unknown) => request(`/${encodeURIComponent(id)}/processing`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-export const completeProcurementProcessing = (id: string) => request(`/${encodeURIComponent(id)}/processing/complete`, { method: "POST" });
+export const completeProcurementProcessing = (id: string, body: unknown) => request(`/${encodeURIComponent(id)}/processing/complete`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 export const confirmProcurementReceived = (id: string) => request(`/${encodeURIComponent(id)}/received`, { method: "POST" });

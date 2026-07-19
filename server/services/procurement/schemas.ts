@@ -71,6 +71,7 @@ export const processingSaveSchema = z.object({
   if (!value.spendingEntries) return;
   const requestTotals = value.spendingEntries.filter((entry) => entry.scope === "request_total");
   if (requestTotals.length && value.spendingEntries.length !== 1) context.addIssue({ code: "custom", path: ["spendingEntries"], message: "Request total cannot be combined with item amounts" });
+  if (requestTotals.length && !value.items.some((item) => item.status === "purchased")) context.addIssue({ code: "custom", path: ["spendingEntries"], message: "Request total requires at least one purchased item" });
   const itemIds = value.spendingEntries.flatMap((entry) => entry.scope === "items" ? entry.itemIds : []);
   if (new Set(itemIds).size !== itemIds.length) context.addIssue({ code: "custom", path: ["spendingEntries"], message: "Each item can belong to only one spending entry" });
 });
