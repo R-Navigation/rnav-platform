@@ -98,7 +98,14 @@ function createTestApp(repository: MemoryAuthRepository) {
   const app = express();
   const authMiddleware = createAuthMiddleware(repository);
   app.use(createAuthRouter({ repository, authMiddleware }));
-  app.use(createConsoleRouter({ authMiddleware }));
+  app.use(createConsoleRouter({
+    authMiddleware,
+    dashboardService: {
+      async getDashboard() {
+        throw new Error("Dashboard is not used by auth route tests");
+      },
+    },
+  }));
   return app;
 }
 

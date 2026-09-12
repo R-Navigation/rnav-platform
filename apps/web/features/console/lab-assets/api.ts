@@ -49,3 +49,24 @@ export async function mutateLabAssets(endpoint: string, method: "POST" | "PUT" |
   if (typeof payload.revision !== "string") throw new Error("资产服务未返回有效修订版本。");
   return payload.revision;
 }
+
+export function batchLabAssets(body: Record<string, unknown>) {
+  return mutateLabAssets("/assets/batch", "POST", body);
+}
+
+export type AssetImportReport = {
+  summary: { total: number; valid: number; warnings: number; errors: number };
+  rows: Array<{ index: number; row: Record<string, string>; issues: Array<{ field: string; message: string; severity: "error" | "warning" }> }>;
+};
+
+export async function validateLabAssetImport(body: Record<string, unknown>) {
+  const response = await fetch("/api/lab-assets/assets/import/validate", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  if (!response.ok) throw new LabAssetsRequestError(await readLabAssetsError(response), response.status);
+  const report = await response.json() as AssetImportReport;
+  if (!report?.summary || !Array.isArray(report.rows)) throw new Error("资产导入服务未返回有效校验结果。");
+  return report;
+}
+
+export function commitLabAssetImport(body: Record<string, unknown>) {
+  return mutateLabAssets("/assets/import/commit", "POST", body);
+}

@@ -1,5 +1,5 @@
-import{PermissionManagement}from"@/features/console/permissions/PermissionManagement";
+import { permanentRedirect } from "next/navigation";
 
 export default function PermissionsPage() {
-  return <PermissionManagement/>;
+  permanentRedirect("/console/members");
 }

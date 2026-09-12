@@ -46,6 +46,7 @@ const assetShape = {
   assignedUserId: z.string().uuid().nullable(),
   borrowerName: text(500),
   borrowerContact: text(500),
+  storageLocation: text(500).nullable().default(null),
 };
 const validateAssetState = (value: z.infer<z.ZodObject<typeof assetShape>>, context: z.RefinementCtx) => {
   if (value.status === "mounted" && !value.currentPlatformCode) context.addIssue({ code: "custom", path: ["currentPlatformCode"], message: "已装载设备必须选择平台" });
@@ -95,6 +96,27 @@ export const assetRequestSchema = z.object({ ...assetShape, expectedRevision: re
 export const noteRequestSchema = withRevision(noteSchema.shape);
 export const deleteRequestSchema = z.object({ expectedRevision: revisionSchema }).strict();
 export const pageRequestSchema = z.object({ page: pageSchema, expectedRevision: revisionSchema }).strict();
+const batchBase = { assetCodes: z.array(codeSchema).min(1).max(1_000).refine((codes) => new Set(codes).size === codes.length, "Duplicate assets are not allowed"), expectedRevision: revisionSchema };
+export const assetBatchRequestSchema = z.discriminatedUnion("action", [
+  z.object({ ...batchBase, action: z.literal("set_status"), value: z.enum(["idle", "maintenance", "retired"]) }).strict(),
+  z.object({ ...batchBase, action: z.literal("set_device_type"), value: codeSchema }).strict(),
+  z.object({ ...batchBase, action: z.literal("set_platform"), value: codeSchema.nullable() }).strict(),
+  z.object({ ...batchBase, action: z.literal("set_location"), value: text(500).nullable() }).strict(),
+]);
+export const assetImportRowSchema = z.object({
+  code: codeSchema,
+  nameZh: text(500).refine((value) => value.length > 0, "设备名称不能为空"),
+  nameEn: text(500),
+  model: text(500),
+  deviceTypeCode: codeSchema,
+  vendorSerial: text(500),
+  storageLocation: text(500),
+  status: text(50),
+  platformCode: text(191),
+  descriptionZh: text(5_000),
+  procurementRequestId: z.string().uuid().optional(),
+}).strict();
+export const assetImportRequestSchema = z.object({ rows: z.array(assetImportRowSchema).min(1).max(1_000), expectedRevision: revisionSchema, createMissingDeviceTypes: z.boolean().optional() }).strict();
 
 export type LocalizedText = z.infer<typeof localizedTextSchema>;
 export type LabPlatformType = z.infer<typeof platformTypeSchema>;
@@ -104,3 +126,6 @@ export type LabAsset = z.infer<typeof assetSchema>;
 export type LabNote = z.infer<typeof noteSchema>;
 export type UsageRequestInput = z.infer<typeof usageRequestSchema>;
 export type UsageReviewInput = z.infer<typeof usageReviewSchema>;
+export type AssetBatchInput = z.infer<typeof assetBatchRequestSchema>;
+export type AssetImportRow = z.infer<typeof assetImportRowSchema>;
+export type AssetImportInput = z.infer<typeof assetImportRequestSchema>;

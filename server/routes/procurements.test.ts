@@ -25,6 +25,9 @@ test("normal members can list their own requests and create one", async () => {
   const created = await request("POST", "/api/procurements", { user: identity(["procurements.create"]), origin: true, body: { title: "相机", reason: "实验", items: [{ itemName: "D455", quantity: 1 }] } });
   assert.equal(created.status, 200);
   assert.deepEqual(created.calls, ["createRequest"]);
+  const revised = await request("PUT", "/api/procurements/00000000-0000-4000-8000-000000000099", { user: identity(["procurements.create"]), origin: true, body: { title: "相机（修订）", reason: "补充型号", items: [{ itemName: "D455", quantity: 1 }] } });
+  assert.equal(revised.status, 200);
+  assert.deepEqual(revised.calls, ["reviseRequest"]);
 });
 
 test("members can browse the catalog while catalog changes require purchase permission", async () => {
@@ -48,6 +51,7 @@ test("all-scope and approval actions require their advanced permissions", async 
   assert.equal((await request("GET", "/api/procurements?scope=all", { user: identity(["procurements.read_own"]) })).status, 403);
   assert.equal((await request("POST", "/api/procurements/00000000-0000-4000-8000-000000000099/transition", { user: identity(["procurements.read_own"]), origin: true, body: { action: "approve" } })).status, 403);
   assert.equal((await request("POST", "/api/procurements/00000000-0000-4000-8000-000000000099/transition", { user: identity(["procurements.review"]), origin: true, body: { action: "approve" } })).status, 200);
+  assert.equal((await request("POST", "/api/procurements/00000000-0000-4000-8000-000000000099/transition", { user: identity(["procurements.review"]), origin: true, body: { action: "request_revision", note: "补充型号" } })).status, 200);
 });
 
 test("purchase managers can maintain subcategories and process request lines", async () => {

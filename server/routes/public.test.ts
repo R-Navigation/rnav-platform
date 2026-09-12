@@ -7,11 +7,12 @@ import type { PublicSiteService } from "../services/public-site/service.js";
 const methods = {
   bootstrap: "getBootstrap",
   home: "getHome",
+  homepage: "getHomepage",
   research: "getResearch",
   news: "getNews",
   team: "getTeam",
   facilities: "getFacilities",
-  contact: "getContact"
+  contact: "getContact",
 } as const;
 
 async function request(path: string, service: PublicSiteService) {
@@ -21,23 +22,53 @@ async function request(path: string, service: PublicSiteService) {
   let statusCode = 200;
   await new Promise<void>((resolve, reject) => {
     const response = {
-      setHeader() { return this; },
-      getHeader() { return undefined; },
+      setHeader() {
+        return this;
+      },
+      getHeader() {
+        return undefined;
+      },
       removeHeader() {},
-      writeHead(code: number) { statusCode = code; return this; },
-      write(chunk: string | Buffer) { chunks.push(Buffer.from(chunk)); return true; },
-      end(chunk?: string | Buffer) { if (chunk) chunks.push(Buffer.from(chunk)); resolve(); }
+      writeHead(code: number) {
+        statusCode = code;
+        return this;
+      },
+      write(chunk: string | Buffer) {
+        chunks.push(Buffer.from(chunk));
+        return true;
+      },
+      end(chunk?: string | Buffer) {
+        if (chunk) chunks.push(Buffer.from(chunk));
+        resolve();
+      },
     };
-    (app as unknown as { handle(req: unknown, res: unknown, next: (error?: unknown) => void): void })
-      .handle({ method: "GET", url: path, headers: {}, socket: {} }, response, (error?: unknown) => error ? reject(error) : resolve());
+    (
+      app as unknown as {
+        handle(
+          req: unknown,
+          res: unknown,
+          next: (error?: unknown) => void,
+        ): void;
+      }
+    ).handle(
+      { method: "GET", url: path, headers: {}, socket: {} },
+      response,
+      (error?: unknown) => (error ? reject(error) : resolve()),
+    );
   });
-  return { statusCode, body: JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown };
+  return {
+    statusCode,
+    body: JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown,
+  };
 }
 
 for (const [route, method] of Object.entries(methods)) {
   test(`GET /api/public/${route} returns the ${route} payload`, async () => {
     const service = Object.fromEntries(
-      Object.values(methods).map((name) => [name, async () => ({ source: name })])
+      Object.values(methods).map((name) => [
+        name,
+        async () => ({ source: name }),
+      ]),
     ) as unknown as PublicSiteService;
     const response = await request(`/api/public/${route}`, service);
     assert.equal(response.statusCode, 200);

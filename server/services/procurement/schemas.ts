@@ -47,9 +47,11 @@ export const procurementListQuerySchema = z.object({
 }).strict();
 
 export const transitionSchema = z.object({
-  action: z.enum(["approve", "reject", "start_purchase", "mark_purchased", "mark_received", "close", "cancel"]),
+  action: z.enum(["request_revision", "approve", "reject", "start_purchase", "mark_purchased", "mark_received", "close", "cancel"]),
   note: text(2_000).optional().default(""),
-}).strict();
+}).strict().superRefine((value, context) => {
+  if (value.action === "request_revision" && !value.note) context.addIssue({ code: "custom", path: ["note"], message: "Revision requests require a reason" });
+});
 
 export const processingItemSchema = z.object({
   itemId: z.string().uuid(),

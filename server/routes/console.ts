@@ -1,5 +1,7 @@
 import { Router, type RequestHandler } from "express";
 import { requireLogin } from "../middleware/auth.js";
+import { requirePasswordChanged } from "../middleware/requirePasswordChanged.js";
+import type { ConsoleDashboardService } from "../services/console-dashboard/consoleDashboardService.js";
 import {
   deriveDisplayTier,
   getConsoleModules
@@ -7,6 +9,7 @@ import {
 
 type ConsoleRouterOptions = {
   authMiddleware: RequestHandler;
+  dashboardService: ConsoleDashboardService;
 };
 
 export function createConsoleRouter(options: ConsoleRouterOptions) {
@@ -32,6 +35,20 @@ export function createConsoleRouter(options: ConsoleRouterOptions) {
           : getConsoleModules(user.permissions, user.baseTier)
       });
     }
+  );
+
+  router.get(
+    "/api/console/dashboard",
+    options.authMiddleware,
+    requireLogin,
+    requirePasswordChanged,
+    async (request, response, next) => {
+      try {
+        response.json(await options.dashboardService.getDashboard(request.authUser!));
+      } catch (error) {
+        next(error);
+      }
+    },
   );
 
   return router;

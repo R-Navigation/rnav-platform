@@ -9,6 +9,7 @@ import { loadEnv } from "./config/env.js";
 import { hashSessionToken, createAuthMiddleware, createPostgresAuthRepository, sessionCookieName } from "./middleware/auth.js";
 import { createAuthRouter } from "./routes/auth.js";
 import { createConsoleRouter } from "./routes/console.js";
+import { createConsoleDashboardService } from "./services/console-dashboard/consoleDashboardService.js";
 import { createLabAssetsRouter } from "./routes/labAssets.js";
 import { createMonitorRouter } from "./routes/monitor.js";
 import { createProcurementRouter } from "./routes/procurements.js";
@@ -65,7 +66,7 @@ const app = createApp({
     createPermissionsRouter({ authMiddleware, service: createPermissionAdminService(pool), trustProxy: true }),
     createMediaRouter({ authMiddleware, service: createMediaService(pool, createCosGateway({ secretId: env.cosSecretId, secretKey: env.cosSecretKey, region: env.cosRegion, bucket: env.cosBucket }),), trustProxy: true, maxBytes: env.mediaMaxUploadBytes, publicBaseUrl: env.cosPublicBaseUrl ?? `${env.publicBaseUrl}/media`, pathPrefix: env.cosPathPrefix }),
     createSettingsRouter({ authMiddleware, service: createSettingsService(pool), trustProxy: true }),
-    createConsoleRouter({ authMiddleware }), createPublicRouter({ service: publicService }),
+    createConsoleRouter({ authMiddleware, dashboardService: createConsoleDashboardService(pool) }), createPublicRouter({ service: publicService }),
     createSiteAdminRouter({ authMiddleware, service: siteAdminService, trustProxy: true }),
     createLabAssetsRouter({ authMiddleware, service: createLabAssetsService(pool), trustProxy: true }),
     createMonitorRouter({ authMiddleware, service: monitorService, trustProxy: true }),

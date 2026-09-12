@@ -13,3 +13,7 @@ test("lab assets errors provide useful auth and availability fallbacks", () => {
   assert.equal(parseLabAssetsError({}, 403), "当前账号没有执行此操作的权限。");
   assert.equal(parseLabAssetsError({}, 502), "实验室资产服务暂时不可用，请稍后重试。");
 });
+
+test("lab assets import validation errors keep row-level guidance", () => {
+  assert.equal(parseLabAssetsError({ error: "Asset import validation failed" }, 422), "Asset import validation failed");
+});

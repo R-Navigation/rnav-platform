@@ -82,6 +82,7 @@ test("lab_assets.write permission can read and write", async () => {
       assignedUserId: null,
       borrowerName: "",
       borrowerContact: "",
+      storageLocation: null,
     },
   });
   assert.equal(response.statusCode, 200);
@@ -113,6 +114,7 @@ test("domain conflicts map to 409 responses", async () => {
     deviceTypeCode: "camera", expectedRevision: "0", model: "D455",
     name: { en: "Camera", zh: "相机" }, status: "idle", vendorSerial: "",
     assignedUserId: null, borrowerName: "", borrowerContact: "",
+    storageLocation: null,
   };
   const duplicate = await request("POST", "/api/lab-assets/assets", {
     user: user(["lab_assets.write"]), origin: "same-origin", body,
@@ -127,6 +129,29 @@ test("domain conflicts map to 409 responses", async () => {
   });
   assert.equal(revision.statusCode, 409);
   assert.deepEqual(revision.body, { error: "Lab assets revision conflict" });
+});
+
+test("batch asset updates require write permission and use one service operation", async () => {
+  const denied = await request("POST", "/api/lab-assets/assets/batch", {
+    user: user(["lab_assets.read"]), origin: "same-origin",
+    body: { assetCodes: ["CAM-1"], action: "set_location", value: "507", expectedRevision: "0" },
+  });
+  assert.equal(denied.statusCode, 403);
+  const updated = await request("POST", "/api/lab-assets/assets/batch", {
+    user: user(["lab_assets.write"]), origin: "same-origin",
+    body: { assetCodes: ["CAM-1", "CAM-2"], action: "set_location", value: "507", expectedRevision: "0" },
+  });
+  assert.equal(updated.statusCode, 200);
+  assert.deepEqual(updated.calls, ["batchAssets"]);
+});
+
+test("asset import validation and commit require write permission", async () => {
+  const body = { rows: [{ code: "CAM-2", nameZh: "相机", nameEn: "", model: "D455", deviceTypeCode: "camera", vendorSerial: "SN-2", storageLocation: "507", status: "idle", platformCode: "", descriptionZh: "" }], expectedRevision: "0" };
+  assert.equal((await request("POST", "/api/lab-assets/assets/import/validate", { user: user(["lab_assets.read"]), origin: "same-origin", body })).statusCode, 403);
+  const validated = await request("POST", "/api/lab-assets/assets/import/validate", { user: user(["lab_assets.write"]), origin: "same-origin", body });
+  assert.equal(validated.statusCode, 200); assert.deepEqual(validated.calls, ["validateAssetImport"]);
+  const committed = await request("POST", "/api/lab-assets/assets/import/commit", { user: user(["lab_assets.write"]), origin: "same-origin", body });
+  assert.equal(committed.statusCode, 200); assert.deepEqual(committed.calls, ["commitAssetImport"]);
 });
 
 test("members can request devices while only asset managers can review", async () => {

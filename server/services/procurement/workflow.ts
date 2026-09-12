@@ -1,12 +1,13 @@
 export const procurementStatuses = [
-  "draft", "submitted", "approved", "rejected", "purchasing",
+  "draft", "submitted", "revision_requested", "approved", "rejected", "purchasing",
   "purchased", "received", "closed", "cancelled",
 ] as const;
 
 export type ProcurementStatus = (typeof procurementStatuses)[number];
-export type ProcurementAction = "approve" | "reject" | "start_purchase" | "mark_purchased" | "mark_received" | "close" | "cancel";
+export type ProcurementAction = "request_revision" | "approve" | "reject" | "start_purchase" | "mark_purchased" | "mark_received" | "close" | "cancel";
 
 const transitions: Record<ProcurementAction, Partial<Record<ProcurementStatus, ProcurementStatus>>> = {
+  request_revision: { submitted: "revision_requested" },
   approve: { submitted: "approved" },
   reject: { submitted: "rejected" },
   start_purchase: { approved: "purchasing" },
@@ -23,7 +24,7 @@ export function validateTransition(status: ProcurementStatus, action: Procuremen
 }
 
 export function requiredPermissionForTransition(action: Exclude<ProcurementAction, "cancel">) {
-  if (action === "approve" || action === "reject") return "procurements.review";
+  if (action === "request_revision" || action === "approve" || action === "reject") return "procurements.review";
   if (action === "close") return "procurements.close";
   return "procurements.purchase";
 }

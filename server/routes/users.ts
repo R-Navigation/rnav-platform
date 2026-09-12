@@ -33,13 +33,11 @@ export function createUsersRouter({
   });
   const handle = (e: unknown, res: any, next: any) => {
     if (e instanceof ZodError)
-      res
-        .status(400)
-        .json({
-          code: "VALIDATION_ERROR",
-          error: "Validation failed",
-          issues: e.issues,
-        });
+      res.status(400).json({
+        code: "VALIDATION_ERROR",
+        error: "Validation failed",
+        issues: e.issues,
+      });
     else if (e instanceof UserAdminError)
       res.status(e.status).json({ code: e.code, error: e.message });
     else next(e);
@@ -54,6 +52,15 @@ export function createUsersRouter({
     try {
       res.json({
         users: await service.listUsers(userListSchema.parse(r.query)),
+      });
+    } catch (e) {
+      handle(e, res, next);
+    }
+  });
+  router.get("/api/users/:id/audit", canList, async (r, res, next) => {
+    try {
+      res.json({
+        audit: await service.getUserAudit(userIdSchema.parse(r.params.id)),
       });
     } catch (e) {
       handle(e, res, next);

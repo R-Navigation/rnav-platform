@@ -3,36 +3,783 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { loadProcurementCatalog } from "./api";
 import { CatalogImage } from "./CatalogImage";
-import { addCatalogItem, cartEstimatedTotal, displayAttributes, updateCartQuantity, type CartItem, type CatalogAttribute, type CatalogItem, type CatalogSubcategory, type CustomItemDraft } from "./model";
+import {
+  addCatalogItem,
+  cartEstimatedTotal,
+  displayAttributes,
+  updateCartQuantity,
+  type CartItem,
+  type CatalogAttribute,
+  type CatalogItem,
+  type CatalogSubcategory,
+  type CustomItemDraft,
+} from "./model";
 
-type Category={id:string;code:string;nameZh:string;descriptionZh:string;isActive:boolean};
-type CatalogResponse={categories:Category[];subcategories:CatalogSubcategory[];attributes:CatalogAttribute[];items:CatalogItem[];total:number};
-type Props={busy:boolean;onCancel():void;onSubmit(body:unknown):Promise<boolean>};
-const field="w-full border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 focus:border-cyan-700 focus:outline-none";
-const primary="bg-blue-950 px-4 py-2 text-sm font-bold text-white disabled:bg-slate-400";
-const secondary="border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:border-cyan-700";
-const emptyCustom=():CustomItemDraft=>({itemName:"",spec:"",unit:"件",quantity:1,estimatedUnitPrice:null,vendor:null,url:null,remark:null});
+type Category = {
+  id: string;
+  code: string;
+  nameZh: string;
+  descriptionZh: string;
+  isActive: boolean;
+};
+type CatalogResponse = {
+  categories: Category[];
+  subcategories: CatalogSubcategory[];
+  attributes: CatalogAttribute[];
+  items: CatalogItem[];
+  total: number;
+};
+type Props = {
+  busy: boolean;
+  initialDraft?: {
+    title: string;
+    reason: string;
+    items: CartItem[];
+    mode: "create" | "copy" | "revise";
+  };
+  onCancel(): void;
+  onSubmit(body: unknown): Promise<boolean>;
+};
+const field =
+  "w-full border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 focus:border-cyan-700 focus:outline-none";
+const primary =
+  "bg-blue-950 px-4 py-2 text-sm font-bold text-white disabled:bg-slate-400";
+const secondary =
+  "border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:border-cyan-700";
+const emptyCustom = (): CustomItemDraft => ({
+  itemName: "",
+  spec: "",
+  unit: "件",
+  quantity: 1,
+  estimatedUnitPrice: null,
+  vendor: null,
+  url: null,
+  remark: null,
+});
 
-function ViewToggle({value,onChange}:{value:"list"|"card";onChange(value:"list"|"card"):void}){return <div className="flex border border-slate-300 bg-white p-1" aria-label="目录视图"><button aria-label="列表视图" className={`h-8 w-9 text-lg ${value==="list"?"bg-blue-950 text-white":"text-slate-600"}`} onClick={()=>onChange("list")} title="列表视图" type="button">☷</button><button aria-label="卡片视图" className={`h-8 w-9 text-lg ${value==="card"?"bg-blue-950 text-white":"text-slate-600"}`} onClick={()=>onChange("card")} title="卡片视图" type="button">▦</button></div>}
-function AttributeTags({item,definitions}:{item:CatalogItem;definitions:CatalogAttribute[]}){return <div className="mt-2 flex flex-wrap gap-1.5">{displayAttributes(item.specMetadata,definitions).map((attribute)=><span className="border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] text-slate-600" key={attribute.key}><b>{attribute.label}</b> {attribute.value}{attribute.unit}</span>)}</div>}
+function ViewToggle({
+  value,
+  onChange,
+}: {
+  value: "list" | "card";
+  onChange(value: "list" | "card"): void;
+}) {
+  return (
+    <div
+      className="flex border border-slate-300 bg-white p-1"
+      aria-label="目录视图"
+    >
+      <button
+        aria-label="列表视图"
+        className={`h-8 w-9 text-lg ${value === "list" ? "bg-blue-950 text-white" : "text-slate-600"}`}
+        onClick={() => onChange("list")}
+        title="列表视图"
+        type="button"
+      >
+        ☷
+      </button>
+      <button
+        aria-label="卡片视图"
+        className={`h-8 w-9 text-lg ${value === "card" ? "bg-blue-950 text-white" : "text-slate-600"}`}
+        onClick={() => onChange("card")}
+        title="卡片视图"
+        type="button"
+      >
+        ▦
+      </button>
+    </div>
+  );
+}
+function AttributeTags({
+  item,
+  definitions,
+}: {
+  item: CatalogItem;
+  definitions: CatalogAttribute[];
+}) {
+  return (
+    <div className="mt-2 flex flex-wrap gap-1.5">
+      {displayAttributes(item.specMetadata, definitions).map((attribute) => (
+        <span
+          className="border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] text-slate-600"
+          key={attribute.key}
+        >
+          <b>{attribute.label}</b> {attribute.value}
+          {attribute.unit}
+        </span>
+      ))}
+    </div>
+  );
+}
 
-export function ProcurementOrderBuilder({busy,onCancel,onSubmit}:Props){
-  const[catalog,setCatalog]=useState<CatalogResponse>({categories:[],subcategories:[],attributes:[],items:[],total:0});const[loading,setLoading]=useState(true);const[error,setError]=useState("");
-  const[categoryId,setCategoryId]=useState("");const[subcategoryId,setSubcategoryId]=useState("");const[filters,setFilters]=useState<Record<string,string[]>>({});const[search,setSearch]=useState("");const[page,setPage]=useState(0);const[view,setView]=useState<"list"|"card">("card");
-  const[cart,setCart]=useState<CartItem[]>([]);const[title,setTitle]=useState("");const[reason,setReason]=useState("");const[custom,setCustom]=useState<CustomItemDraft|null>(null);const pageSize=60;
-  useEffect(()=>{let active=true;const timeout=window.setTimeout(()=>{setLoading(true);void loadProcurementCatalog({search:search.trim(),categoryId:categoryId||undefined,subcategoryId:subcategoryId||undefined,attributes:filters,limit:pageSize,offset:page*pageSize}).then((value)=>{if(active)setCatalog(value as unknown as CatalogResponse)}).catch((value)=>{if(active)setError(value instanceof Error?value.message:"无法加载标准件目录。")}).finally(()=>{if(active)setLoading(false)});},250);return()=>{active=false;window.clearTimeout(timeout)}},[categoryId,filters,page,search,subcategoryId]);
-  const subcategories=useMemo(()=>catalog.subcategories.filter((item)=>!categoryId||item.categoryId===categoryId),[catalog.subcategories,categoryId]);
-  const quantityFor=(id:string)=>cart.find((item)=>item.key===`catalog:${id}`)?.quantity??0;
-  const changeCatalogQuantity=(item:CatalogItem,direction:number)=>{const current=quantityFor(item.id);setCart(current===0&&direction>0?addCatalogItem(cart,item):updateCartQuantity(cart,`catalog:${item.id}`,current+direction*item.packSize));};
-  const chooseCategory=(id:string)=>{setCategoryId(id);setSubcategoryId("");setFilters({});setPage(0)};const chooseSubcategory=(id:string)=>{setSubcategoryId(id);setFilters({});setPage(0)};
-  const toggleFilter=(key:string,value:string)=>setFilters((current)=>{const selected=new Set(current[key]??[]);if(selected.has(value))selected.delete(value);else selected.add(value);const next={...current,[key]:[...selected]};if(!next[key].length)delete next[key];return next;});
-  const addCustom=(event:FormEvent)=>{event.preventDefault();if(!custom?.itemName.trim())return;setCart([...cart,{...custom,key:`custom:${crypto.randomUUID()}`,sourceType:"custom"}]);setCustom(null)};
-  const submit=async(event:FormEvent)=>{event.preventDefault();if(!cart.length){setError("请先向采购清单添加至少一个项目。");return;}await onSubmit({title,reason,items:cart.map((item)=>item.sourceType==="catalog"?{sourceType:"catalog",catalogItemId:item.catalogItemId,quantity:item.quantity,remark:item.remark||null}:{sourceType:"custom",itemName:item.itemName,spec:item.spec,unit:item.unit,quantity:item.quantity,estimatedUnitPrice:item.estimatedUnitPrice,vendor:item.vendor,url:item.url,remark:item.remark})});};
-  return <section className="mt-6 border-t-4 border-cyan-700 bg-white shadow-sm"><header className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 px-5 py-4"><div><p className="text-sm font-semibold text-cyan-800">新建采购申请</p><h2 className="mt-1 text-xl font-bold text-blue-950">按分类和型号挑选标准件</h2></div><button className={secondary} onClick={onCancel} type="button">关闭</button></header>{error?<p className="mx-5 mt-4 border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800" role="alert">{error}</p>:null}
-    <div className="grid min-h-[640px] xl:grid-cols-[160px_210px_minmax(0,1fr)_350px]"><nav aria-label="一级分类" className="border-b border-slate-200 bg-slate-50 p-3 xl:border-b-0 xl:border-r"><p className="px-3 pb-2 text-xs font-bold text-slate-500">一级分类</p><button className={`w-full px-3 py-2 text-left text-sm font-semibold ${!categoryId?"bg-blue-950 text-white":"text-slate-700 hover:bg-white"}`} onClick={()=>chooseCategory("")} type="button">全部标准件</button>{catalog.categories.map((category)=><button className={`mt-1 w-full px-3 py-2 text-left text-sm ${categoryId===category.id?"bg-blue-950 font-semibold text-white":"text-slate-700 hover:bg-white"}`} key={category.id} onClick={()=>chooseCategory(category.id)} type="button">{category.nameZh}</button>)}<button className="mt-5 w-full border border-dashed border-cyan-700 px-3 py-2 text-left text-sm font-semibold text-cyan-800" onClick={()=>setCustom(emptyCustom())} type="button">+ 自定义项目</button></nav>
-      <nav aria-label="二级分类" className="border-b border-slate-200 bg-white p-3 xl:border-b-0 xl:border-r"><p className="px-3 pb-2 text-xs font-bold text-slate-500">二级分类</p><button className={`w-full px-3 py-2 text-left text-sm ${!subcategoryId?"bg-cyan-700 font-semibold text-white":"text-slate-700 hover:bg-slate-50"}`} onClick={()=>chooseSubcategory("")} type="button">全部类型</button>{subcategories.map((subcategory)=><button className={`mt-1 w-full px-3 py-2 text-left text-sm ${subcategoryId===subcategory.id?"bg-cyan-700 font-semibold text-white":"text-slate-700 hover:bg-slate-50"}`} key={subcategory.id} onClick={()=>chooseSubcategory(subcategory.id)} type="button">{subcategory.nameZh}</button>)}</nav>
-      <div className="min-w-0 border-b border-slate-200 p-4 xl:border-b-0 xl:border-r"><div className="flex gap-3"><input className={field} onChange={(event)=>{setSearch(event.target.value);setPage(0)}} placeholder="搜索名称、规格、SKU 或关键词" value={search}/><ViewToggle onChange={setView} value={view}/></div>{catalog.attributes.length?<section className="mt-4 border-y border-slate-200 py-3"><div className="flex items-center justify-between"><h3 className="text-sm font-bold text-blue-950">型号筛选</h3>{Object.keys(filters).length?<button className="text-xs font-semibold text-cyan-800 underline" onClick={()=>setFilters({})} type="button">清除筛选</button>:null}</div><div className="mt-3 space-y-3">{catalog.attributes.map((attribute)=><div className="grid gap-2 sm:grid-cols-[90px_1fr]" key={attribute.attributeKey}><span className="text-xs font-semibold text-slate-500">{attribute.labelZh}</span><div className="flex flex-wrap gap-1.5">{attribute.values.slice(0,60).map((value)=><button className={`border px-2 py-1 text-xs ${filters[attribute.attributeKey]?.includes(value)?"border-cyan-700 bg-cyan-50 font-semibold text-cyan-900":"border-slate-200 text-slate-600"}`} key={value} onClick={()=>toggleFilter(attribute.attributeKey,value)} type="button">{value}{attribute.unit}</button>)}</div></div>)}</div></section>:subcategoryId?<p className="mt-4 text-xs text-slate-500">该二级分类暂未配置型号筛选属性。</p>:<p className="mt-4 text-xs text-slate-500">选择二级分类后可按尺寸、长度、材料等型号属性筛选。</p>}
-        <div className="mt-3 flex items-center justify-between text-xs text-slate-500"><span>找到 {catalog.total} 个项目</span><span>第 {catalog.total?page+1:0} / {Math.ceil(catalog.total/pageSize)} 页</span></div><div className={view==="card"?"mt-3 grid gap-3 md:grid-cols-2":"mt-3 divide-y divide-slate-200 border border-slate-200"}>{catalog.items.map((item)=>{const quantity=quantityFor(item.id);return <article className={view==="card"?"border border-slate-200 bg-white p-4":"grid min-h-32 grid-cols-[80px_minmax(0,1fr)_116px] items-center gap-3 px-4 py-3"} key={item.id}><div className={view==="card"?"flex gap-4":"contents"}><CatalogImage alt={`${item.nameZh} ${item.spec}`} src={item.imageUrl}/><div className="min-w-0 flex-1"><p className="text-[11px] text-cyan-800">{item.categoryNameZh} / {item.subcategoryNameZh}</p><h3 className="mt-1 font-semibold text-slate-950">{item.nameZh}</h3><p className="mt-1 text-sm text-slate-700"><strong>{item.spec||"通用规格"}</strong></p><AttributeTags definitions={catalog.attributes} item={item}/><p className="mt-2 text-xs text-slate-500">{item.sku||"无 SKU"} · {item.vendor||"供应商未设置"} · {item.packSize}{item.unit}/次</p>{item.url?<a className="mt-2 inline-block text-xs font-semibold text-cyan-800 underline" href={item.url} rel="noreferrer" target="_blank">打开商品页面 ↗</a>:<span className="mt-2 block text-xs text-amber-700">未设置购买链接</span>}</div></div><div className={view==="card"?"mt-4 grid h-9 grid-cols-3 border border-slate-300":"grid h-9 grid-cols-3 border border-slate-300"}><button disabled={!quantity} onClick={()=>changeCatalogQuantity(item,-1)} type="button">−</button><output className="grid place-items-center border-x border-slate-300 text-sm font-semibold">{quantity}</output><button className="bg-blue-950 text-lg text-white" onClick={()=>changeCatalogQuantity(item,1)} type="button">+</button></div></article>})}{loading?<p className="p-5 text-sm text-slate-500">正在加载目录...</p>:!catalog.items.length?<p className="p-5 text-sm text-slate-500">没有匹配项目，可调整筛选或添加自定义项目。</p>:null}</div>{catalog.total>pageSize?<div className="mt-3 flex justify-end gap-2"><button className={secondary} disabled={page===0||loading} onClick={()=>setPage((value)=>value-1)} type="button">上一页</button><button className={secondary} disabled={(page+1)*pageSize>=catalog.total||loading} onClick={()=>setPage((value)=>value+1)} type="button">下一页</button></div>:null}</div>
-      <form className="flex min-h-0 flex-col bg-slate-50" onSubmit={submit}><div className="border-b border-slate-200 px-4 py-3"><div className="flex items-center justify-between"><h3 className="font-bold text-blue-950">采购清单</h3><span className="text-xs text-slate-500">{cart.length} 项</span></div></div><div className="max-h-[500px] flex-1 overflow-y-auto p-3"><div className="space-y-2">{cart.map((item)=><div className="border border-slate-200 bg-white p-3" key={item.key}><div className="flex items-start justify-between gap-3"><div className="min-w-0"><strong className="text-sm">{item.sourceType==="catalog"?item.name:item.itemName}</strong><p className="mt-1 text-xs text-slate-500">{item.spec||"未填写规格"}</p>{item.url?<a className="mt-1 inline-block text-xs text-cyan-800 underline" href={item.url} rel="noreferrer" target="_blank">商品链接 ↗</a>:null}</div><button aria-label="从清单移除" className="text-lg text-slate-400 hover:text-red-700" onClick={()=>setCart(cart.filter((entry)=>entry.key!==item.key))} type="button">×</button></div><div className="mt-3 flex items-center justify-between gap-3"><div className="grid h-8 w-28 grid-cols-3 border border-slate-300"><button onClick={()=>setCart(updateCartQuantity(cart,item.key,item.quantity-(item.sourceType==="catalog"?item.packSize:1)))} type="button">−</button><input aria-label="采购数量" className="min-w-0 border-x border-slate-300 text-center text-xs outline-none" min="0.01" onChange={(event)=>setCart(updateCartQuantity(cart,item.key,Number(event.target.value)))} step="0.01" type="number" value={item.quantity}/><button onClick={()=>setCart(updateCartQuantity(cart,item.key,item.quantity+(item.sourceType==="catalog"?item.packSize:1)))} type="button">+</button></div><strong className="text-sm text-blue-950">{item.quantity}{item.unit}</strong></div></div>)}{!cart.length?<p className="border border-dashed border-slate-300 p-5 text-center text-sm text-slate-500">从目录选择项目，或添加自定义项目。</p>:null}</div></div><div className="mt-auto border-t border-slate-200 bg-white p-4"><div className="mb-4 flex justify-between text-sm"><span className="text-slate-600">预计合计</span><strong>¥{cartEstimatedTotal(cart).toFixed(2)}</strong></div><label className="text-sm font-semibold">申请标题<input className={`${field} mt-1`} maxLength={200} onChange={(event)=>setTitle(event.target.value)} required value={title}/></label><label className="mt-3 block text-sm font-semibold">申请理由<textarea className={`${field} mt-1 min-h-20`} maxLength={4000} onChange={(event)=>setReason(event.target.value)} required value={reason}/></label><button className={`${primary} mt-4 w-full`} disabled={busy||!cart.length} type="submit">{busy?"提交中...":"提交采购申请"}</button></div></form></div>
-    {custom?<div aria-modal="true" className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-4" role="dialog"><form className="w-full max-w-2xl border-t-4 border-cyan-700 bg-white p-6 shadow-2xl" onSubmit={addCustom}><div className="flex items-start justify-between"><h2 className="text-2xl font-bold text-blue-950">添加自定义项目</h2><button aria-label="关闭" className="text-2xl" onClick={()=>setCustom(null)} type="button">×</button></div><div className="mt-5 grid gap-4 sm:grid-cols-2"><label className="text-sm font-semibold">名称<input autoFocus className={`${field} mt-1`} onChange={(event)=>setCustom({...custom,itemName:event.target.value})} required value={custom.itemName}/></label><label className="text-sm font-semibold">规格<input className={`${field} mt-1`} onChange={(event)=>setCustom({...custom,spec:event.target.value})} value={custom.spec}/></label><label className="text-sm font-semibold">数量<input className={`${field} mt-1`} min="0.01" onChange={(event)=>setCustom({...custom,quantity:Number(event.target.value)})} required step="0.01" type="number" value={custom.quantity}/></label><label className="text-sm font-semibold">单位<input className={`${field} mt-1`} onChange={(event)=>setCustom({...custom,unit:event.target.value})} required value={custom.unit}/></label><label className="text-sm font-semibold sm:col-span-2">商品链接<input className={`${field} mt-1`} onChange={(event)=>setCustom({...custom,url:event.target.value||null})} type="url" value={custom.url??""}/></label><label className="text-sm font-semibold sm:col-span-2">备注<textarea className={`${field} mt-1 min-h-20`} onChange={(event)=>setCustom({...custom,remark:event.target.value||null})} value={custom.remark??""}/></label></div><div className="mt-6 flex justify-end gap-3"><button className={secondary} onClick={()=>setCustom(null)} type="button">取消</button><button className={primary} type="submit">加入清单</button></div></form></div>:null}</section>;
+export function ProcurementOrderBuilder({
+  busy,
+  initialDraft,
+  onCancel,
+  onSubmit,
+}: Props) {
+  const [catalog, setCatalog] = useState<CatalogResponse>({
+    categories: [],
+    subcategories: [],
+    attributes: [],
+    items: [],
+    total: 0,
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [categoryId, setCategoryId] = useState("");
+  const [subcategoryId, setSubcategoryId] = useState("");
+  const [filters, setFilters] = useState<Record<string, string[]>>({});
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(0);
+  const [view, setView] = useState<"list" | "card">("card");
+  const [cart, setCart] = useState<CartItem[]>(initialDraft?.items ?? []);
+  const [title, setTitle] = useState(initialDraft?.title ?? "");
+  const [reason, setReason] = useState(initialDraft?.reason ?? "");
+  const [custom, setCustom] = useState<CustomItemDraft | null>(null);
+  const pageSize = 60;
+  useEffect(() => {
+    let active = true;
+    const timeout = window.setTimeout(() => {
+      setLoading(true);
+      void loadProcurementCatalog({
+        search: search.trim(),
+        categoryId: categoryId || undefined,
+        subcategoryId: subcategoryId || undefined,
+        attributes: filters,
+        limit: pageSize,
+        offset: page * pageSize,
+      })
+        .then((value) => {
+          if (active) setCatalog(value as unknown as CatalogResponse);
+        })
+        .catch((value) => {
+          if (active)
+            setError(
+              value instanceof Error ? value.message : "无法加载标准件目录。",
+            );
+        })
+        .finally(() => {
+          if (active) setLoading(false);
+        });
+    }, 250);
+    return () => {
+      active = false;
+      window.clearTimeout(timeout);
+    };
+  }, [categoryId, filters, page, search, subcategoryId]);
+  const subcategories = useMemo(
+    () =>
+      catalog.subcategories.filter(
+        (item) => !categoryId || item.categoryId === categoryId,
+      ),
+    [catalog.subcategories, categoryId],
+  );
+  const quantityFor = (id: string) =>
+    cart.find((item) => item.key === `catalog:${id}`)?.quantity ?? 0;
+  const changeCatalogQuantity = (item: CatalogItem, direction: number) => {
+    const current = quantityFor(item.id);
+    setCart(
+      current === 0 && direction > 0
+        ? addCatalogItem(cart, item)
+        : updateCartQuantity(
+            cart,
+            `catalog:${item.id}`,
+            current + direction * item.packSize,
+          ),
+    );
+  };
+  const chooseCategory = (id: string) => {
+    setCategoryId(id);
+    setSubcategoryId("");
+    setFilters({});
+    setPage(0);
+  };
+  const chooseSubcategory = (id: string) => {
+    setSubcategoryId(id);
+    setFilters({});
+    setPage(0);
+  };
+  const toggleFilter = (key: string, value: string) =>
+    setFilters((current) => {
+      const selected = new Set(current[key] ?? []);
+      if (selected.has(value)) selected.delete(value);
+      else selected.add(value);
+      const next = { ...current, [key]: [...selected] };
+      if (!next[key].length) delete next[key];
+      return next;
+    });
+  const addCustom = (event: FormEvent) => {
+    event.preventDefault();
+    if (!custom?.itemName.trim()) return;
+    setCart([
+      ...cart,
+      { ...custom, key: `custom:${crypto.randomUUID()}`, sourceType: "custom" },
+    ]);
+    setCustom(null);
+  };
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!cart.length) {
+      setError("请先向采购清单添加至少一个项目。");
+      return;
+    }
+    await onSubmit({
+      title,
+      reason,
+      items: cart.map((item) =>
+        item.sourceType === "catalog"
+          ? {
+              sourceType: "catalog",
+              catalogItemId: item.catalogItemId,
+              quantity: item.quantity,
+              remark: item.remark || null,
+            }
+          : {
+              sourceType: "custom",
+              itemName: item.itemName,
+              spec: item.spec,
+              unit: item.unit,
+              quantity: item.quantity,
+              estimatedUnitPrice: item.estimatedUnitPrice,
+              vendor: item.vendor,
+              url: item.url,
+              remark: item.remark,
+            },
+      ),
+    });
+  };
+  return (
+    <section className="mt-6 border-t-4 border-cyan-700 bg-white shadow-sm">
+      <header className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+        <div>
+          <p className="text-sm font-semibold text-cyan-800">
+            {initialDraft?.mode === "revise"
+              ? "修改采购申请"
+              : initialDraft?.mode === "copy"
+                ? "复用历史申请"
+                : "新建采购申请"}
+          </p>
+          <h2 className="mt-1 text-xl font-bold text-blue-950">
+            按分类和型号挑选标准件
+          </h2>
+        </div>
+        <button className={secondary} onClick={onCancel} type="button">
+          关闭
+        </button>
+      </header>
+      {error ? (
+        <p
+          className="mx-5 mt-4 border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+          role="alert"
+        >
+          {error}
+        </p>
+      ) : null}
+      <div className="grid min-h-[640px] xl:grid-cols-[160px_210px_minmax(0,1fr)_350px]">
+        <nav
+          aria-label="一级分类"
+          className="border-b border-slate-200 bg-slate-50 p-3 xl:border-b-0 xl:border-r"
+        >
+          <p className="px-3 pb-2 text-xs font-bold text-slate-500">一级分类</p>
+          <button
+            className={`w-full px-3 py-2 text-left text-sm font-semibold ${!categoryId ? "bg-blue-950 text-white" : "text-slate-700 hover:bg-white"}`}
+            onClick={() => chooseCategory("")}
+            type="button"
+          >
+            全部标准件
+          </button>
+          {catalog.categories.map((category) => (
+            <button
+              className={`mt-1 w-full px-3 py-2 text-left text-sm ${categoryId === category.id ? "bg-blue-950 font-semibold text-white" : "text-slate-700 hover:bg-white"}`}
+              key={category.id}
+              onClick={() => chooseCategory(category.id)}
+              type="button"
+            >
+              {category.nameZh}
+            </button>
+          ))}
+          <button
+            className="mt-5 w-full border border-dashed border-cyan-700 px-3 py-2 text-left text-sm font-semibold text-cyan-800"
+            onClick={() => setCustom(emptyCustom())}
+            type="button"
+          >
+            + 自定义项目
+          </button>
+        </nav>
+        <nav
+          aria-label="二级分类"
+          className="border-b border-slate-200 bg-white p-3 xl:border-b-0 xl:border-r"
+        >
+          <p className="px-3 pb-2 text-xs font-bold text-slate-500">二级分类</p>
+          <button
+            className={`w-full px-3 py-2 text-left text-sm ${!subcategoryId ? "bg-cyan-700 font-semibold text-white" : "text-slate-700 hover:bg-slate-50"}`}
+            onClick={() => chooseSubcategory("")}
+            type="button"
+          >
+            全部类型
+          </button>
+          {subcategories.map((subcategory) => (
+            <button
+              className={`mt-1 w-full px-3 py-2 text-left text-sm ${subcategoryId === subcategory.id ? "bg-cyan-700 font-semibold text-white" : "text-slate-700 hover:bg-slate-50"}`}
+              key={subcategory.id}
+              onClick={() => chooseSubcategory(subcategory.id)}
+              type="button"
+            >
+              {subcategory.nameZh}
+            </button>
+          ))}
+        </nav>
+        <div className="min-w-0 border-b border-slate-200 p-4 xl:border-b-0 xl:border-r">
+          <div className="flex gap-3">
+            <input
+              className={field}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setPage(0);
+              }}
+              placeholder="搜索名称、规格、SKU 或关键词"
+              value={search}
+            />
+            <ViewToggle onChange={setView} value={view} />
+          </div>
+          {catalog.attributes.length ? (
+            <section className="mt-4 border-y border-slate-200 py-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-blue-950">型号筛选</h3>
+                {Object.keys(filters).length ? (
+                  <button
+                    className="text-xs font-semibold text-cyan-800 underline"
+                    onClick={() => setFilters({})}
+                    type="button"
+                  >
+                    清除筛选
+                  </button>
+                ) : null}
+              </div>
+              <div className="mt-3 space-y-3">
+                {catalog.attributes.map((attribute) => (
+                  <div
+                    className="grid gap-2 sm:grid-cols-[90px_1fr]"
+                    key={attribute.attributeKey}
+                  >
+                    <span className="text-xs font-semibold text-slate-500">
+                      {attribute.labelZh}
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {attribute.values.slice(0, 60).map((value) => (
+                        <button
+                          className={`border px-2 py-1 text-xs ${filters[attribute.attributeKey]?.includes(value) ? "border-cyan-700 bg-cyan-50 font-semibold text-cyan-900" : "border-slate-200 text-slate-600"}`}
+                          key={value}
+                          onClick={() =>
+                            toggleFilter(attribute.attributeKey, value)
+                          }
+                          type="button"
+                        >
+                          {value}
+                          {attribute.unit}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : subcategoryId ? (
+            <p className="mt-4 text-xs text-slate-500">
+              该二级分类暂未配置型号筛选属性。
+            </p>
+          ) : (
+            <p className="mt-4 text-xs text-slate-500">
+              选择二级分类后可按尺寸、长度、材料等型号属性筛选。
+            </p>
+          )}
+          <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
+            <span>找到 {catalog.total} 个项目</span>
+            <span>
+              第 {catalog.total ? page + 1 : 0} /{" "}
+              {Math.ceil(catalog.total / pageSize)} 页
+            </span>
+          </div>
+          <div
+            className={
+              view === "card"
+                ? "mt-3 grid gap-3 md:grid-cols-2"
+                : "mt-3 divide-y divide-slate-200 border border-slate-200"
+            }
+          >
+            {catalog.items.map((item) => {
+              const quantity = quantityFor(item.id);
+              return (
+                <article
+                  className={
+                    view === "card"
+                      ? "border border-slate-200 bg-white p-4"
+                      : "grid min-h-32 grid-cols-[80px_minmax(0,1fr)_116px] items-center gap-3 px-4 py-3"
+                  }
+                  key={item.id}
+                >
+                  <div className={view === "card" ? "flex gap-4" : "contents"}>
+                    <CatalogImage
+                      alt={`${item.nameZh} ${item.spec}`}
+                      src={item.imageUrl}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] text-cyan-800">
+                        {item.categoryNameZh} / {item.subcategoryNameZh}
+                      </p>
+                      <h3 className="mt-1 font-semibold text-slate-950">
+                        {item.nameZh}
+                      </h3>
+                      <p className="mt-1 text-sm text-slate-700">
+                        <strong>{item.spec || "通用规格"}</strong>
+                      </p>
+                      <AttributeTags
+                        definitions={catalog.attributes}
+                        item={item}
+                      />
+                      <p className="mt-2 text-xs text-slate-500">
+                        {item.sku || "无 SKU"} · {item.vendor || "供应商未设置"}{" "}
+                        · {item.packSize}
+                        {item.unit}/次
+                      </p>
+                      {item.url ? (
+                        <a
+                          className="mt-2 inline-block text-xs font-semibold text-cyan-800 underline"
+                          href={item.url}
+                          rel="noreferrer"
+                          target="_blank"
+                        >
+                          打开商品页面 ↗
+                        </a>
+                      ) : (
+                        <span className="mt-2 block text-xs text-amber-700">
+                          未设置购买链接
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div
+                    className={
+                      view === "card"
+                        ? "mt-4 grid h-9 grid-cols-3 border border-slate-300"
+                        : "grid h-9 grid-cols-3 border border-slate-300"
+                    }
+                  >
+                    <button
+                      disabled={!quantity}
+                      onClick={() => changeCatalogQuantity(item, -1)}
+                      type="button"
+                    >
+                      −
+                    </button>
+                    <output className="grid place-items-center border-x border-slate-300 text-sm font-semibold">
+                      {quantity}
+                    </output>
+                    <button
+                      className="bg-blue-950 text-lg text-white"
+                      onClick={() => changeCatalogQuantity(item, 1)}
+                      type="button"
+                    >
+                      +
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
+            {loading ? (
+              <p className="p-5 text-sm text-slate-500">正在加载目录...</p>
+            ) : !catalog.items.length ? (
+              <p className="p-5 text-sm text-slate-500">
+                没有匹配项目，可调整筛选或添加自定义项目。
+              </p>
+            ) : null}
+          </div>
+          {catalog.total > pageSize ? (
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                className={secondary}
+                disabled={page === 0 || loading}
+                onClick={() => setPage((value) => value - 1)}
+                type="button"
+              >
+                上一页
+              </button>
+              <button
+                className={secondary}
+                disabled={(page + 1) * pageSize >= catalog.total || loading}
+                onClick={() => setPage((value) => value + 1)}
+                type="button"
+              >
+                下一页
+              </button>
+            </div>
+          ) : null}
+        </div>
+        <form className="flex min-h-0 flex-col bg-slate-50" onSubmit={submit}>
+          <div className="border-b border-slate-200 px-4 py-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-blue-950">采购清单</h3>
+              <span className="text-xs text-slate-500">{cart.length} 项</span>
+            </div>
+          </div>
+          <div className="max-h-[500px] flex-1 overflow-y-auto p-3">
+            <div className="space-y-2">
+              {cart.map((item) => (
+                <div
+                  className="border border-slate-200 bg-white p-3"
+                  key={item.key}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <strong className="text-sm">
+                        {item.sourceType === "catalog"
+                          ? item.name
+                          : item.itemName}
+                      </strong>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {item.spec || "未填写规格"}
+                      </p>
+                      {item.url ? (
+                        <a
+                          className="mt-1 inline-block text-xs text-cyan-800 underline"
+                          href={item.url}
+                          rel="noreferrer"
+                          target="_blank"
+                        >
+                          商品链接 ↗
+                        </a>
+                      ) : null}
+                    </div>
+                    <button
+                      aria-label="从清单移除"
+                      className="text-lg text-slate-400 hover:text-red-700"
+                      onClick={() =>
+                        setCart(cart.filter((entry) => entry.key !== item.key))
+                      }
+                      type="button"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between gap-3">
+                    <div className="grid h-8 w-28 grid-cols-3 border border-slate-300">
+                      <button
+                        onClick={() =>
+                          setCart(
+                            updateCartQuantity(
+                              cart,
+                              item.key,
+                              item.quantity -
+                                (item.sourceType === "catalog"
+                                  ? item.packSize
+                                  : 1),
+                            ),
+                          )
+                        }
+                        type="button"
+                      >
+                        −
+                      </button>
+                      <input
+                        aria-label="采购数量"
+                        className="min-w-0 border-x border-slate-300 text-center text-xs outline-none"
+                        min="0.01"
+                        onChange={(event) =>
+                          setCart(
+                            updateCartQuantity(
+                              cart,
+                              item.key,
+                              Number(event.target.value),
+                            ),
+                          )
+                        }
+                        step="0.01"
+                        type="number"
+                        value={item.quantity}
+                      />
+                      <button
+                        onClick={() =>
+                          setCart(
+                            updateCartQuantity(
+                              cart,
+                              item.key,
+                              item.quantity +
+                                (item.sourceType === "catalog"
+                                  ? item.packSize
+                                  : 1),
+                            ),
+                          )
+                        }
+                        type="button"
+                      >
+                        +
+                      </button>
+                    </div>
+                    <strong className="text-sm text-blue-950">
+                      {item.quantity}
+                      {item.unit}
+                    </strong>
+                  </div>
+                </div>
+              ))}
+              {!cart.length ? (
+                <p className="border border-dashed border-slate-300 p-5 text-center text-sm text-slate-500">
+                  从目录选择项目，或添加自定义项目。
+                </p>
+              ) : null}
+            </div>
+          </div>
+          <div className="mt-auto border-t border-slate-200 bg-white p-4">
+            <div className="mb-4 flex justify-between text-sm">
+              <span className="text-slate-600">预计合计</span>
+              <strong>¥{cartEstimatedTotal(cart).toFixed(2)}</strong>
+            </div>
+            <label className="text-sm font-semibold">
+              申请标题
+              <input
+                className={`${field} mt-1`}
+                maxLength={200}
+                onChange={(event) => setTitle(event.target.value)}
+                required
+                value={title}
+              />
+            </label>
+            <label className="mt-3 block text-sm font-semibold">
+              申请理由
+              <textarea
+                className={`${field} mt-1 min-h-20`}
+                maxLength={4000}
+                onChange={(event) => setReason(event.target.value)}
+                required
+                value={reason}
+              />
+            </label>
+            <button
+              className={`${primary} mt-4 w-full`}
+              disabled={busy || !cart.length}
+              type="submit"
+            >
+              {busy
+                ? "提交中..."
+                : initialDraft?.mode === "revise"
+                  ? "修改并重新提交"
+                  : "提交采购申请"}
+            </button>
+          </div>
+        </form>
+      </div>
+      {custom ? (
+        <div
+          aria-modal="true"
+          className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-4"
+          role="dialog"
+        >
+          <form
+            className="w-full max-w-2xl border-t-4 border-cyan-700 bg-white p-6 shadow-2xl"
+            onSubmit={addCustom}
+          >
+            <div className="flex items-start justify-between">
+              <h2 className="text-2xl font-bold text-blue-950">
+                添加自定义项目
+              </h2>
+              <button
+                aria-label="关闭"
+                className="text-2xl"
+                onClick={() => setCustom(null)}
+                type="button"
+              >
+                ×
+              </button>
+            </div>
+            <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              <label className="text-sm font-semibold">
+                名称
+                <input
+                  autoFocus
+                  className={`${field} mt-1`}
+                  onChange={(event) =>
+                    setCustom({ ...custom, itemName: event.target.value })
+                  }
+                  required
+                  value={custom.itemName}
+                />
+              </label>
+              <label className="text-sm font-semibold">
+                规格
+                <input
+                  className={`${field} mt-1`}
+                  onChange={(event) =>
+                    setCustom({ ...custom, spec: event.target.value })
+                  }
+                  value={custom.spec}
+                />
+              </label>
+              <label className="text-sm font-semibold">
+                数量
+                <input
+                  className={`${field} mt-1`}
+                  min="0.01"
+                  onChange={(event) =>
+                    setCustom({
+                      ...custom,
+                      quantity: Number(event.target.value),
+                    })
+                  }
+                  required
+                  step="0.01"
+                  type="number"
+                  value={custom.quantity}
+                />
+              </label>
+              <label className="text-sm font-semibold">
+                单位
+                <input
+                  className={`${field} mt-1`}
+                  onChange={(event) =>
+                    setCustom({ ...custom, unit: event.target.value })
+                  }
+                  required
+                  value={custom.unit}
+                />
+              </label>
+              <label className="text-sm font-semibold sm:col-span-2">
+                商品链接
+                <input
+                  className={`${field} mt-1`}
+                  onChange={(event) =>
+                    setCustom({ ...custom, url: event.target.value || null })
+                  }
+                  type="url"
+                  value={custom.url ?? ""}
+                />
+              </label>
+              <label className="text-sm font-semibold sm:col-span-2">
+                备注
+                <textarea
+                  className={`${field} mt-1 min-h-20`}
+                  onChange={(event) =>
+                    setCustom({ ...custom, remark: event.target.value || null })
+                  }
+                  value={custom.remark ?? ""}
+                />
+              </label>
+            </div>
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                className={secondary}
+                onClick={() => setCustom(null)}
+                type="button"
+              >
+                取消
+              </button>
+              <button className={primary} type="submit">
+                加入清单
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
+    </section>
+  );
 }

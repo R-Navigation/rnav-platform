@@ -1,7 +1,11 @@
 import { getConsoleBootstrap } from "@/features/console/bootstrap";
 import { LabAssetsConsole } from "@/features/console/lab-assets/LabAssetsConsole";
 
-export default async function LabAssetsPage() {
+export default async function LabAssetsPage({ searchParams }: { searchParams: Promise<{ view?: string }> }) {
   const result = await getConsoleBootstrap();
-  return result.status === "authenticated" ? <LabAssetsConsole permissions={result.data.permissions} userId={result.data.user.id} /> : null;
+  const requestedView = (await searchParams).view;
+  const initialView = ["overview", "platforms", "assets", "requests"].includes(requestedView ?? "")
+    ? requestedView as "overview" | "platforms" | "assets" | "requests"
+    : "overview";
+  return result.status === "authenticated" ? <LabAssetsConsole initialView={initialView} permissions={result.data.permissions} userId={result.data.user.id} /> : null;
 }

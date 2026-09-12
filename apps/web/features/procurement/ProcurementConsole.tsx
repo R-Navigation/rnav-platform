@@ -9,6 +9,7 @@ import {
   loadProcurement,
   loadProcurements,
   saveProcurementProcessing,
+  reviseProcurement,
   transitionProcurement,
 } from "./api";
 import {
@@ -19,12 +20,18 @@ import {
   processingSaveBlockers,
   procurementCapabilities,
   type ProcurementCatalogSnapshot,
+  type CartItem,
   type ProcurementStatus,
 } from "./model";
 import { ProcurementCatalogManager } from "./ProcurementCatalogManager";
+import { ProcurementAssetDraftDialog } from "./ProcurementAssetDraftDialog";
 import { ProcurementOrderBuilder } from "./ProcurementOrderBuilder";
 
-type Props = { permissions: string[]; userId: string };
+type Props = {
+  initialMode?: "default" | "mine" | "create" | "review" | "purchase";
+  permissions: string[];
+  userId: string;
+};
 type RequestSummary = {
   id: string;
   requestNo: string;
@@ -34,19 +41,36 @@ type RequestSummary = {
   reason: string;
   status: ProcurementStatus;
   totalEstimatedAmount: number;
+  itemCount: number;
+  submittedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
 type ProcessingStatus = "pending" | "purchased" | "rejected";
-type SpendingEntry = { id: string; scope: "items" | "request_total"; amount: number; note: string; item_ids: string[] };
-type SpendingDraft = { key: string; scope: "items" | "request_total"; amount: string; note: string; itemIds: string[] };
+type SpendingEntry = {
+  id: string;
+  scope: "items" | "request_total";
+  amount: number;
+  note: string;
+  item_ids: string[];
+};
+type SpendingDraft = {
+  key: string;
+  scope: "items" | "request_total";
+  amount: string;
+  note: string;
+  itemIds: string[];
+};
 type ProcurementItem = {
   id: string;
+  catalog_item_id?: string | null;
   item_name: string;
   spec: string;
   unit?: string;
   quantity: number;
   estimated_unit_price: number | null;
+  vendor?: string | null;
+  remark?: string | null;
   source_type?: "catalog" | "custom";
   url?: string | null;
   catalog_snapshot?: ProcurementCatalogSnapshot;
@@ -66,15 +90,24 @@ type ProcurementDetail = {
   items?: ProcurementItem[];
   spending_entries?: SpendingEntry[];
 };
+type BuilderDraft = {
+  requestId?: string;
+  title: string;
+  reason: string;
+  items: CartItem[];
+  mode: "create" | "copy" | "revise";
+};
 
 const field =
   "mt-1 w-full border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 focus:border-cyan-700 focus:outline-none";
-const primary = "bg-blue-950 px-4 py-2 text-sm font-bold text-white disabled:bg-slate-400";
+const primary =
+  "bg-blue-950 px-4 py-2 text-sm font-bold text-white disabled:bg-slate-400";
 const secondary =
   "border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:border-cyan-700";
 const statusLabels: Record<ProcurementStatus, string> = {
   draft: "草稿",
   submitted: "待处理",
+  revision_requested: "待修改",
   approved: "已批准",
   rejected: "已驳回",
   purchasing: "处理中",
@@ -86,6 +119,7 @@ const statusLabels: Record<ProcurementStatus, string> = {
 const statusStyles: Record<ProcurementStatus, string> = {
   draft: "bg-slate-100 text-slate-700",
   submitted: "bg-amber-100 text-amber-800",
+  revision_requested: "bg-orange-100 text-orange-800",
   approved: "bg-cyan-100 text-cyan-800",
   rejected: "bg-red-100 text-red-800",
   purchasing: "bg-blue-100 text-blue-800",
@@ -103,9 +137,61 @@ function itemTags(item: ProcurementItem) {
   return displayAttributes(item.catalog_snapshot?.specMetadata ?? {});
 }
 
+function builderDraftFromRequest(
+  request: ProcurementDetail,
+  mode: "copy" | "revise",
+): BuilderDraft {
+  return {
+    requestId: mode === "revise" ? request.id : undefined,
+    title: mode === "copy" ? `再次采购：${request.title}` : request.title,
+    reason: request.reason,
+    mode,
+    items: (request.items ?? []).map((item, index) => {
+      if (item.source_type === "catalog" && item.catalog_item_id) {
+        return {
+          key: `catalog:${item.catalog_item_id}`,
+          sourceType: "catalog" as const,
+          catalogItemId: item.catalog_item_id,
+          name: item.item_name,
+          spec: item.spec,
+          unit: item.unit || "件",
+          packSize: 1,
+          quantity: Number(item.quantity),
+          estimatedUnitPrice:
+            item.estimated_unit_price === null
+              ? null
+              : Number(item.estimated_unit_price),
+          remark: item.remark || "",
+          url: linkFor(item),
+        };
+      }
+      return {
+        key: `custom:${item.id || index}`,
+        sourceType: "custom" as const,
+        itemName: item.item_name,
+        spec: item.spec || "",
+        unit: item.unit || "件",
+        quantity: Number(item.quantity),
+        estimatedUnitPrice:
+          item.estimated_unit_price === null
+            ? null
+            : Number(item.estimated_unit_price),
+        vendor: item.vendor ?? null,
+        url: linkFor(item),
+        remark: item.remark ?? null,
+      };
+    }),
+  };
+}
+
 function ItemTags({ item }: { item: ProcurementItem }) {
   const tags = itemTags(item);
-  if (!tags.length) return <span className="text-xs text-slate-500">{item.spec || "未填写规格"}</span>;
+  if (!tags.length)
+    return (
+      <span className="text-xs text-slate-500">
+        {item.spec || "未填写规格"}
+      </span>
+    );
   return (
     <div className="flex flex-wrap gap-1.5">
       {tags.map((tag) => (
@@ -113,7 +199,8 @@ function ItemTags({ item }: { item: ProcurementItem }) {
           className="border border-cyan-200 bg-cyan-50 px-2 py-1 text-xs font-semibold text-cyan-950"
           key={tag.key}
         >
-          <span className="text-cyan-700">{tag.label}</span> {tag.value}{tag.unit}
+          <span className="text-cyan-700">{tag.label}</span> {tag.value}
+          {tag.unit}
         </span>
       ))}
     </div>
@@ -130,36 +217,67 @@ function GroupedItems({ items }: { items: ProcurementItem[] }) {
             {group.category}
           </h3>
           {group.subcategories.map((subcategory) => (
-            <div className="border-b border-slate-200 last:border-b-0" key={subcategory.subcategory}>
+            <div
+              className="border-b border-slate-200 last:border-b-0"
+              key={subcategory.subcategory}
+            >
               <div className="flex items-center justify-between bg-slate-50 px-4 py-2">
-                <h4 className="text-sm font-bold text-slate-800">{subcategory.subcategory}</h4>
-                <span className="text-xs text-slate-500">{subcategory.items.length} 项</span>
+                <h4 className="text-sm font-bold text-slate-800">
+                  {subcategory.subcategory}
+                </h4>
+                <span className="text-xs text-slate-500">
+                  {subcategory.items.length} 项
+                </span>
               </div>
               <div className="divide-y divide-slate-200">
                 {subcategory.items.map((item) => {
                   const url = linkFor(item);
                   return (
-                    <article className="grid gap-3 p-4 md:grid-cols-[minmax(0,1fr)_140px]" key={item.id}>
+                    <article
+                      className="grid gap-3 p-4 md:grid-cols-[minmax(0,1fr)_140px]"
+                      key={item.id}
+                    >
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <strong>{item.item_name}</strong>
-                          <span className="text-xs text-slate-400">{item.source_type === "catalog" ? "目录" : "自定义"}</span>
+                          <span className="text-xs text-slate-400">
+                            {item.source_type === "catalog" ? "目录" : "自定义"}
+                          </span>
                         </div>
-                        <div className="mt-2"><ItemTags item={item} /></div>
+                        <div className="mt-2">
+                          <ItemTags item={item} />
+                        </div>
                         {url ? (
-                          <a className="mt-2 inline-block text-xs font-semibold text-cyan-800 underline" href={url} rel="noreferrer" target="_blank">
+                          <a
+                            className="mt-2 inline-block text-xs font-semibold text-cyan-800 underline"
+                            href={url}
+                            rel="noreferrer"
+                            target="_blank"
+                          >
                             前往购物平台购买 ↗
                           </a>
                         ) : null}
-                        {item.processing_status && item.processing_status !== "pending" ? (
-                          <p className={`mt-2 text-xs font-semibold ${item.processing_status === "purchased" ? "text-emerald-700" : "text-red-700"}`}>
-                            {item.processing_status === "purchased" ? "已购买" : `已驳回：${item.rejection_reason || ""}`}
+                        {item.processing_status &&
+                        item.processing_status !== "pending" ? (
+                          <p
+                            className={`mt-2 text-xs font-semibold ${item.processing_status === "purchased" ? "text-emerald-700" : "text-red-700"}`}
+                          >
+                            {item.processing_status === "purchased"
+                              ? "已购买"
+                              : `已驳回：${item.rejection_reason || ""}`}
                           </p>
                         ) : null}
                       </div>
                       <div className="md:text-right">
-                        <p className="text-xs font-semibold text-slate-500">采购数量</p>
-                        <p className="mt-1 text-2xl font-black text-blue-950">{item.quantity}<span className="ml-1 text-sm">{item.unit || "件"}</span></p>
+                        <p className="text-xs font-semibold text-slate-500">
+                          采购数量
+                        </p>
+                        <p className="mt-1 text-2xl font-black text-blue-950">
+                          {item.quantity}
+                          <span className="ml-1 text-sm">
+                            {item.unit || "件"}
+                          </span>
+                        </p>
                       </div>
                     </article>
                   );
@@ -180,12 +298,40 @@ function SpendingSummary({ request }: { request: ProcurementDetail }) {
   const total = entries.reduce((sum, entry) => sum + entry.amount, 0);
   return (
     <section className="mt-6 border border-slate-300 bg-slate-50 p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="font-bold text-blue-950">实际采购金额</h3><strong className="text-lg text-blue-950">合计：¥{total.toFixed(2)}</strong></div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h3 className="font-bold text-blue-950">实际采购金额</h3>
+        <strong className="text-lg text-blue-950">
+          合计：¥{total.toFixed(2)}
+        </strong>
+      </div>
       <div className="mt-3 divide-y divide-slate-200 border border-slate-200 bg-white">
         {entries.map((entry) => (
-          <div className="grid gap-2 p-3 md:grid-cols-[minmax(0,1fr)_140px]" key={entry.id}>
-            <div><p className="text-sm font-bold text-slate-800">{entry.scope === "request_total" ? "整张采购清单" : entry.item_ids.map((id) => { const item = items.find((candidate) => candidate.id === id); return item ? `${item.item_name}${item.spec ? `（${item.spec}）` : ""}` : "未知条目" }).join("、")}</p>{entry.note ? <p className="mt-1 text-xs text-slate-500">{entry.note}</p> : null}</div>
-            <p className="text-xl font-black text-blue-950 md:text-right">¥{entry.amount.toFixed(2)}</p>
+          <div
+            className="grid gap-2 p-3 md:grid-cols-[minmax(0,1fr)_140px]"
+            key={entry.id}
+          >
+            <div>
+              <p className="text-sm font-bold text-slate-800">
+                {entry.scope === "request_total"
+                  ? "整张采购清单"
+                  : entry.item_ids
+                      .map((id) => {
+                        const item = items.find(
+                          (candidate) => candidate.id === id,
+                        );
+                        return item
+                          ? `${item.item_name}${item.spec ? `（${item.spec}）` : ""}`
+                          : "未知条目";
+                      })
+                      .join("、")}
+              </p>
+              {entry.note ? (
+                <p className="mt-1 text-xs text-slate-500">{entry.note}</p>
+              ) : null}
+            </div>
+            <p className="text-xl font-black text-blue-950 md:text-right">
+              ¥{entry.amount.toFixed(2)}
+            </p>
           </div>
         ))}
       </div>
@@ -205,17 +351,57 @@ function ProcessingPanel({
   onRun(action: () => Promise<unknown>, success: string): Promise<boolean>;
 }) {
   const [draft, setDraft] = useState(
-    () => Object.fromEntries((request.items ?? []).map((item) => [item.id, { status: item.processing_status ?? "pending", rejectionReason: item.rejection_reason ?? "" }])) as Record<string, { status: ProcessingStatus; rejectionReason: string }>,
+    () =>
+      Object.fromEntries(
+        (request.items ?? []).map((item) => [
+          item.id,
+          {
+            status: item.processing_status ?? "pending",
+            rejectionReason: item.rejection_reason ?? "",
+          },
+        ]),
+      ) as Record<
+        string,
+        { status: ProcessingStatus; rejectionReason: string }
+      >,
   );
-  const [spending, setSpending] = useState<SpendingDraft[]>(() => (request.spending_entries ?? []).map((entry) => ({ key: entry.id, scope: entry.scope, amount: entry.amount.toFixed(2), note: entry.note, itemIds: entry.item_ids })));
+  const [spending, setSpending] = useState<SpendingDraft[]>(() =>
+    (request.spending_entries ?? []).map((entry) => ({
+      key: entry.id,
+      scope: entry.scope,
+      amount: entry.amount.toFixed(2),
+      note: entry.note,
+      itemIds: entry.item_ids,
+    })),
+  );
   const [selectedForGroup, setSelectedForGroup] = useState<string[]>([]);
   const [groupAmount, setGroupAmount] = useState("");
   const [groupNote, setGroupNote] = useState("");
-  const [attemptedAction, setAttemptedAction] = useState<"save" | "complete" | null>(null);
+  const [attemptedAction, setAttemptedAction] = useState<
+    "save" | "complete" | null
+  >(null);
   const [actionFailed, setActionFailed] = useState(false);
   useEffect(() => {
-    setDraft(Object.fromEntries((request.items ?? []).map((item) => [item.id, { status: item.processing_status ?? "pending", rejectionReason: item.rejection_reason ?? "" }])));
-    setSpending((request.spending_entries ?? []).map((entry) => ({ key: entry.id, scope: entry.scope, amount: entry.amount.toFixed(2), note: entry.note, itemIds: entry.item_ids })));
+    setDraft(
+      Object.fromEntries(
+        (request.items ?? []).map((item) => [
+          item.id,
+          {
+            status: item.processing_status ?? "pending",
+            rejectionReason: item.rejection_reason ?? "",
+          },
+        ]),
+      ),
+    );
+    setSpending(
+      (request.spending_entries ?? []).map((entry) => ({
+        key: entry.id,
+        scope: entry.scope,
+        amount: entry.amount.toFixed(2),
+        note: entry.note,
+        itemIds: entry.item_ids,
+      })),
+    );
     setSelectedForGroup([]);
     setGroupAmount("");
     setGroupNote("");
@@ -225,49 +411,132 @@ function ProcessingPanel({
 
   const items = request.items ?? [];
   const groups = groupProcurementItems(items);
-  const completedCount = items.filter((item) => draft[item.id]?.status !== "pending").length;
-  const requestTotal = spending.find((entry) => entry.scope === "request_total");
+  const completedCount = items.filter(
+    (item) => draft[item.id]?.status !== "pending",
+  ).length;
+  const requestTotal = spending.find(
+    (entry) => entry.scope === "request_total",
+  );
   const itemSpending = spending.filter((entry) => entry.scope === "items");
-  const assignedItemIds = new Set(itemSpending.flatMap((entry) => entry.itemIds));
-  const actualTotal = spending.reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0);
+  const assignedItemIds = new Set(
+    itemSpending.flatMap((entry) => entry.itemIds),
+  );
+  const actualTotal = spending.reduce(
+    (sum, entry) => sum + (Number(entry.amount) || 0),
+    0,
+  );
   const setStatus = (id: string, status: ProcessingStatus) => {
-    setDraft((current) => ({ ...current, [id]: { status, rejectionReason: status === "rejected" ? current[id]?.rejectionReason ?? "" : "" } }));
+    setDraft((current) => ({
+      ...current,
+      [id]: {
+        status,
+        rejectionReason:
+          status === "rejected" ? (current[id]?.rejectionReason ?? "") : "",
+      },
+    }));
     if (status !== "purchased") {
-      setSpending((current) => current.map((entry) => ({ ...entry, itemIds: entry.itemIds.filter((itemId) => itemId !== id) })).filter((entry) => entry.scope === "request_total" || entry.itemIds.length));
-      setSelectedForGroup((current) => current.filter((itemId) => itemId !== id));
+      setSpending((current) =>
+        current
+          .map((entry) => ({
+            ...entry,
+            itemIds: entry.itemIds.filter((itemId) => itemId !== id),
+          }))
+          .filter(
+            (entry) => entry.scope === "request_total" || entry.itemIds.length,
+          ),
+      );
+      setSelectedForGroup((current) =>
+        current.filter((itemId) => itemId !== id),
+      );
     }
   };
   const addSingleSpending = (itemId: string) => {
-    setSpending((current) => [...current, { key: crypto.randomUUID(), scope: "items", amount: "", note: "", itemIds: [itemId] }]);
+    setSpending((current) => [
+      ...current,
+      {
+        key: crypto.randomUUID(),
+        scope: "items",
+        amount: "",
+        note: "",
+        itemIds: [itemId],
+      },
+    ]);
     setSelectedForGroup((current) => current.filter((id) => id !== itemId));
   };
   const addGroupedSpending = () => {
     if (!selectedForGroup.length || groupAmount === "") return;
-    setSpending((current) => [...current, { key: crypto.randomUUID(), scope: "items", amount: groupAmount, note: groupNote, itemIds: selectedForGroup }]);
-    setSelectedForGroup([]); setGroupAmount(""); setGroupNote("");
+    setSpending((current) => [
+      ...current,
+      {
+        key: crypto.randomUUID(),
+        scope: "items",
+        amount: groupAmount,
+        note: groupNote,
+        itemIds: selectedForGroup,
+      },
+    ]);
+    setSelectedForGroup([]);
+    setGroupAmount("");
+    setGroupNote("");
   };
   const setRequestTotalMode = () => {
-    setSpending([{ key: crypto.randomUUID(), scope: "request_total", amount: "", note: "", itemIds: [] }]);
-    setSelectedForGroup([]); setGroupAmount(""); setGroupNote("");
+    setSpending([
+      {
+        key: crypto.randomUUID(),
+        scope: "request_total",
+        amount: "",
+        note: "",
+        itemIds: [],
+      },
+    ]);
+    setSelectedForGroup([]);
+    setGroupAmount("");
+    setGroupNote("");
   };
-  const setItemMode = () => { setSpending([]); setSelectedForGroup([]); setGroupAmount(""); setGroupNote(""); };
-  const completionBlockers = processingCompletionBlockers(items.map((item) => item.id), draft, spending);
-  const saveBlockers = processingSaveBlockers(items.map((item) => item.id), draft, spending);
+  const setItemMode = () => {
+    setSpending([]);
+    setSelectedForGroup([]);
+    setGroupAmount("");
+    setGroupNote("");
+  };
+  const completionBlockers = processingCompletionBlockers(
+    items.map((item) => item.id),
+    draft,
+    spending,
+  );
+  const saveBlockers = processingSaveBlockers(
+    items.map((item) => item.id),
+    draft,
+    spending,
+  );
   const processingBody = () => ({
     items: items.map((item) => ({
       itemId: item.id,
       status: draft[item.id]?.status ?? "pending",
-      rejectionReason: draft[item.id]?.status === "rejected" ? draft[item.id]?.rejectionReason || null : null,
+      rejectionReason:
+        draft[item.id]?.status === "rejected"
+          ? draft[item.id]?.rejectionReason || null
+          : null,
     })),
-    spendingEntries: spending.map((entry) => entry.scope === "request_total"
-      ? { scope: entry.scope, amount: Number(entry.amount), note: entry.note }
-      : { scope: entry.scope, itemIds: entry.itemIds, amount: Number(entry.amount), note: entry.note }),
+    spendingEntries: spending.map((entry) =>
+      entry.scope === "request_total"
+        ? { scope: entry.scope, amount: Number(entry.amount), note: entry.note }
+        : {
+            scope: entry.scope,
+            itemIds: entry.itemIds,
+            amount: Number(entry.amount),
+            note: entry.note,
+          },
+    ),
   });
   const save = async () => {
     setAttemptedAction("save");
     setActionFailed(false);
     if (saveBlockers.length) return false;
-    const succeeded = await onRun(() => saveProcurementProcessing(request.id, processingBody()), "采购处理进度已保存。");
+    const succeeded = await onRun(
+      () => saveProcurementProcessing(request.id, processingBody()),
+      "采购处理进度已保存。",
+    );
     setActionFailed(!succeeded);
     if (succeeded) setAttemptedAction(null);
     return succeeded;
@@ -276,7 +545,10 @@ function ProcessingPanel({
     setAttemptedAction("complete");
     setActionFailed(false);
     if (completionBlockers.length) return false;
-    const succeeded = await onRun(() => completeProcurementProcessing(request.id, processingBody()), "采购申请处理完成。");
+    const succeeded = await onRun(
+      () => completeProcurementProcessing(request.id, processingBody()),
+      "采购申请处理完成。",
+    );
     setActionFailed(!succeeded);
     if (succeeded) setAttemptedAction(null);
     return succeeded;
@@ -287,11 +559,25 @@ function ProcessingPanel({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="text-lg font-bold text-blue-950">逐条采购处理</h3>
-          <p className="mt-1 text-xs text-slate-500">清单已按一级分类和二级分类归组。</p>
+          <p className="mt-1 text-xs text-slate-500">
+            清单已按一级分类和二级分类归组。
+          </p>
         </div>
         <div className="min-w-40">
-          <div className="flex items-center justify-between text-xs font-semibold text-slate-600"><span>处理进度</span><span>{completedCount} / {items.length}</span></div>
-          <div className="mt-1 h-2 overflow-hidden bg-slate-200"><div className="h-full bg-cyan-700" style={{ width: `${items.length ? completedCount / items.length * 100 : 0}%` }} /></div>
+          <div className="flex items-center justify-between text-xs font-semibold text-slate-600">
+            <span>处理进度</span>
+            <span>
+              {completedCount} / {items.length}
+            </span>
+          </div>
+          <div className="mt-1 h-2 overflow-hidden bg-slate-200">
+            <div
+              className="h-full bg-cyan-700"
+              style={{
+                width: `${items.length ? (completedCount / items.length) * 100 : 0}%`,
+              }}
+            />
+          </div>
         </div>
       </div>
 
@@ -300,49 +586,151 @@ function ProcessingPanel({
           <section className="border border-slate-200" key={group.category}>
             <div className="flex items-center justify-between border-b border-slate-200 bg-blue-950 px-4 py-3 text-white">
               <h4 className="font-bold">{group.category}</h4>
-              <span className="text-xs text-blue-100">{group.subcategories.reduce((sum, item) => sum + item.items.length, 0)} 项</span>
+              <span className="text-xs text-blue-100">
+                {group.subcategories.reduce(
+                  (sum, item) => sum + item.items.length,
+                  0,
+                )}{" "}
+                项
+              </span>
             </div>
             {group.subcategories.map((subcategory) => (
-              <div className="border-b border-slate-200 last:border-b-0" key={subcategory.subcategory}>
+              <div
+                className="border-b border-slate-200 last:border-b-0"
+                key={subcategory.subcategory}
+              >
                 <div className="flex items-center justify-between bg-slate-50 px-4 py-2.5">
-                  <h5 className="text-sm font-bold text-slate-800">{subcategory.subcategory}</h5>
-                  <span className="text-xs text-slate-500">{subcategory.items.length} 项</span>
+                  <h5 className="text-sm font-bold text-slate-800">
+                    {subcategory.subcategory}
+                  </h5>
+                  <span className="text-xs text-slate-500">
+                    {subcategory.items.length} 项
+                  </span>
                 </div>
                 <div className="divide-y divide-slate-200">
                   {subcategory.items.map((item) => {
-                    const state = draft[item.id] ?? { status: "pending" as const, rejectionReason: "" };
+                    const state = draft[item.id] ?? {
+                      status: "pending" as const,
+                      rejectionReason: "",
+                    };
                     const url = linkFor(item);
                     return (
-                      <article className={`p-4 ${state.status === "purchased" ? "bg-emerald-50" : state.status === "rejected" ? "bg-red-50" : "bg-white"}`} key={item.id}>
+                      <article
+                        className={`p-4 ${state.status === "purchased" ? "bg-emerald-50" : state.status === "rejected" ? "bg-red-50" : "bg-white"}`}
+                        key={item.id}
+                      >
                         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_130px_104px] lg:items-start">
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
-                              <strong className="text-slate-950">{item.item_name}</strong>
-                              <span className="text-xs text-slate-400">{item.source_type === "catalog" ? "目录" : "自定义"}</span>
+                              <strong className="text-slate-950">
+                                {item.item_name}
+                              </strong>
+                              <span className="text-xs text-slate-400">
+                                {item.source_type === "catalog"
+                                  ? "目录"
+                                  : "自定义"}
+                              </span>
                             </div>
-                            <div className="mt-2"><ItemTags item={item} /></div>
-                            {item.spec && itemTags(item).length ? <p className="mt-2 text-xs text-slate-500">规格摘要：{item.spec}</p> : null}
+                            <div className="mt-2">
+                              <ItemTags item={item} />
+                            </div>
+                            {item.spec && itemTags(item).length ? (
+                              <p className="mt-2 text-xs text-slate-500">
+                                规格摘要：{item.spec}
+                              </p>
+                            ) : null}
                             {url ? (
-                              <a className="mt-3 inline-block text-sm font-bold text-cyan-800 underline" href={url} rel="noreferrer" target="_blank">前往购物平台购买 ↗</a>
-                            ) : <p className="mt-3 text-xs font-semibold text-amber-700">该条目没有购买链接</p>}
+                              <a
+                                className="mt-3 inline-block text-sm font-bold text-cyan-800 underline"
+                                href={url}
+                                rel="noreferrer"
+                                target="_blank"
+                              >
+                                前往购物平台购买 ↗
+                              </a>
+                            ) : (
+                              <p className="mt-3 text-xs font-semibold text-amber-700">
+                                该条目没有购买链接
+                              </p>
+                            )}
                           </div>
                           <div className="border-l-4 border-cyan-700 pl-3 lg:text-right">
-                            <p className="text-xs font-semibold text-slate-500">采购数量</p>
-                            <p className="mt-1 text-3xl font-black text-blue-950">{item.quantity}<span className="ml-1 text-base">{item.unit || "件"}</span></p>
+                            <p className="text-xs font-semibold text-slate-500">
+                              采购数量
+                            </p>
+                            <p className="mt-1 text-3xl font-black text-blue-950">
+                              {item.quantity}
+                              <span className="ml-1 text-base">
+                                {item.unit || "件"}
+                              </span>
+                            </p>
                           </div>
                           <div className="flex gap-2 lg:justify-end">
-                            <button aria-label="标记已购买" className={`grid h-12 w-12 place-items-center border text-2xl font-bold ${state.status === "purchased" ? "border-emerald-700 bg-emerald-700 text-white" : "border-slate-300 bg-white text-emerald-700"}`} onClick={() => setStatus(item.id, state.status === "purchased" ? "pending" : "purchased")} title="已购买/取消" type="button">✓</button>
-                            <button aria-label="标记驳回" className={`grid h-12 w-12 place-items-center border text-2xl font-bold ${state.status === "rejected" ? "border-red-700 bg-red-700 text-white" : "border-slate-300 bg-white text-red-700"}`} onClick={() => setStatus(item.id, state.status === "rejected" ? "pending" : "rejected")} title="驳回/取消" type="button">×</button>
+                            <button
+                              aria-label="标记已购买"
+                              className={`grid h-12 w-12 place-items-center border text-2xl font-bold ${state.status === "purchased" ? "border-emerald-700 bg-emerald-700 text-white" : "border-slate-300 bg-white text-emerald-700"}`}
+                              onClick={() =>
+                                setStatus(
+                                  item.id,
+                                  state.status === "purchased"
+                                    ? "pending"
+                                    : "purchased",
+                                )
+                              }
+                              title="已购买/取消"
+                              type="button"
+                            >
+                              ✓
+                            </button>
+                            <button
+                              aria-label="标记驳回"
+                              className={`grid h-12 w-12 place-items-center border text-2xl font-bold ${state.status === "rejected" ? "border-red-700 bg-red-700 text-white" : "border-slate-300 bg-white text-red-700"}`}
+                              onClick={() =>
+                                setStatus(
+                                  item.id,
+                                  state.status === "rejected"
+                                    ? "pending"
+                                    : "rejected",
+                                )
+                              }
+                              title="驳回/取消"
+                              type="button"
+                            >
+                              ×
+                            </button>
                           </div>
                         </div>
                         {state.status === "purchased" && !requestTotal ? (
                           <div className="mt-4 border-t border-emerald-200 pt-3">
                             {assignedItemIds.has(item.id) ? (
-                              <p className="text-xs font-semibold text-emerald-800">已加入实际金额记录</p>
+                              <p className="text-xs font-semibold text-emerald-800">
+                                已加入实际金额记录
+                              </p>
                             ) : (
                               <div className="flex flex-wrap items-center gap-3">
-                                <label className="flex items-center gap-2 text-xs font-semibold text-slate-700"><input checked={selectedForGroup.includes(item.id)} onChange={(event) => setSelectedForGroup((current) => event.target.checked ? [...current, item.id] : current.filter((id) => id !== item.id))} type="checkbox" />加入组合金额</label>
-                                <button className="text-xs font-bold text-cyan-800 underline" onClick={() => addSingleSpending(item.id)} type="button">填写该条金额</button>
+                                <label className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+                                  <input
+                                    checked={selectedForGroup.includes(item.id)}
+                                    onChange={(event) =>
+                                      setSelectedForGroup((current) =>
+                                        event.target.checked
+                                          ? [...current, item.id]
+                                          : current.filter(
+                                              (id) => id !== item.id,
+                                            ),
+                                      )
+                                    }
+                                    type="checkbox"
+                                  />
+                                  加入组合金额
+                                </label>
+                                <button
+                                  className="text-xs font-bold text-cyan-800 underline"
+                                  onClick={() => addSingleSpending(item.id)}
+                                  type="button"
+                                >
+                                  填写该条金额
+                                </button>
                               </div>
                             )}
                           </div>
@@ -350,7 +738,22 @@ function ProcessingPanel({
                         {state.status === "rejected" ? (
                           <label className="mt-4 block text-xs font-semibold text-red-800">
                             驳回意见
-                            <textarea className={`${field} min-h-16 border-red-300`} maxLength={2000} onChange={(event) => setDraft((current) => ({ ...current, [item.id]: { ...current[item.id], rejectionReason: event.target.value } }))} placeholder="说明不同意购买或无法购买的原因" required value={state.rejectionReason} />
+                            <textarea
+                              className={`${field} min-h-16 border-red-300`}
+                              maxLength={2000}
+                              onChange={(event) =>
+                                setDraft((current) => ({
+                                  ...current,
+                                  [item.id]: {
+                                    ...current[item.id],
+                                    rejectionReason: event.target.value,
+                                  },
+                                }))
+                              }
+                              placeholder="说明不同意购买或无法购买的原因"
+                              required
+                              value={state.rejectionReason}
+                            />
                           </label>
                         ) : null}
                       </article>
@@ -365,117 +768,381 @@ function ProcessingPanel({
 
       <section className="mt-6 border border-slate-300 bg-slate-50 p-4">
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div><h3 className="font-bold text-blue-950">实际采购金额</h3><p className="mt-1 text-xs text-slate-500">可按单条、组合付款或整张清单记录，金额允许稍后补充。</p></div>
+          <div>
+            <h3 className="font-bold text-blue-950">实际采购金额</h3>
+            <p className="mt-1 text-xs text-slate-500">
+              可按单条、组合付款或整张清单记录，金额允许稍后补充。
+            </p>
+          </div>
           <div className="flex border border-slate-300 bg-white p-1">
-            <button className={`px-3 py-2 text-xs font-bold ${!requestTotal ? "bg-blue-950 text-white" : "text-slate-600"}`} onClick={setItemMode} type="button">按条目 / 组合</button>
-            <button className={`px-3 py-2 text-xs font-bold ${requestTotal ? "bg-blue-950 text-white" : "text-slate-600"}`} onClick={setRequestTotalMode} type="button">整单总额</button>
+            <button
+              className={`px-3 py-2 text-xs font-bold ${!requestTotal ? "bg-blue-950 text-white" : "text-slate-600"}`}
+              onClick={setItemMode}
+              type="button"
+            >
+              按条目 / 组合
+            </button>
+            <button
+              className={`px-3 py-2 text-xs font-bold ${requestTotal ? "bg-blue-950 text-white" : "text-slate-600"}`}
+              onClick={setRequestTotalMode}
+              type="button"
+            >
+              整单总额
+            </button>
           </div>
         </div>
 
         {requestTotal ? (
           <div className="mt-4 grid gap-3 md:grid-cols-[180px_minmax(0,1fr)]">
-            <label className="text-xs font-semibold">整单实际金额（元）<input className={field} min="0" onChange={(event) => setSpending([{ ...requestTotal, amount: event.target.value }])} placeholder="0.00" step="0.01" type="number" value={requestTotal.amount} /></label>
-            <label className="text-xs font-semibold">备注<input className={field} maxLength={500} onChange={(event) => setSpending([{ ...requestTotal, note: event.target.value }])} placeholder="例如：京东合并付款" value={requestTotal.note} /></label>
+            <label className="text-xs font-semibold">
+              整单实际金额（元）
+              <input
+                className={field}
+                min="0"
+                onChange={(event) =>
+                  setSpending([{ ...requestTotal, amount: event.target.value }])
+                }
+                placeholder="0.00"
+                step="0.01"
+                type="number"
+                value={requestTotal.amount}
+              />
+            </label>
+            <label className="text-xs font-semibold">
+              备注
+              <input
+                className={field}
+                maxLength={500}
+                onChange={(event) =>
+                  setSpending([{ ...requestTotal, note: event.target.value }])
+                }
+                placeholder="例如：京东合并付款"
+                value={requestTotal.note}
+              />
+            </label>
           </div>
         ) : (
           <>
             {selectedForGroup.length ? (
               <div className="mt-4 border border-cyan-200 bg-white p-3">
-                <p className="text-sm font-bold text-blue-950">已选择 {selectedForGroup.length} 个条目</p>
+                <p className="text-sm font-bold text-blue-950">
+                  已选择 {selectedForGroup.length} 个条目
+                </p>
                 <div className="mt-3 grid gap-3 md:grid-cols-[180px_minmax(0,1fr)_auto] md:items-end">
-                  <label className="text-xs font-semibold">组合实际金额（元）<input className={field} min="0" onChange={(event) => setGroupAmount(event.target.value)} placeholder="0.00" step="0.01" type="number" value={groupAmount} /></label>
-                  <label className="text-xs font-semibold">备注<input className={field} maxLength={500} onChange={(event) => setGroupNote(event.target.value)} placeholder="例如：同一订单合并付款" value={groupNote} /></label>
-                  <button className={primary} disabled={groupAmount === ""} onClick={addGroupedSpending} type="button">添加组合金额</button>
+                  <label className="text-xs font-semibold">
+                    组合实际金额（元）
+                    <input
+                      className={field}
+                      min="0"
+                      onChange={(event) => setGroupAmount(event.target.value)}
+                      placeholder="0.00"
+                      step="0.01"
+                      type="number"
+                      value={groupAmount}
+                    />
+                  </label>
+                  <label className="text-xs font-semibold">
+                    备注
+                    <input
+                      className={field}
+                      maxLength={500}
+                      onChange={(event) => setGroupNote(event.target.value)}
+                      placeholder="例如：同一订单合并付款"
+                      value={groupNote}
+                    />
+                  </label>
+                  <button
+                    className={primary}
+                    disabled={groupAmount === ""}
+                    onClick={addGroupedSpending}
+                    type="button"
+                  >
+                    添加组合金额
+                  </button>
                 </div>
               </div>
             ) : null}
             <div className="mt-4 space-y-2">
               {itemSpending.map((entry) => (
-                <div className="grid gap-3 border border-slate-200 bg-white p-3 md:grid-cols-[minmax(0,1fr)_160px_minmax(180px,1fr)_auto] md:items-end" key={entry.key}>
-                  <div><p className="text-xs font-semibold text-slate-500">计费条目</p><p className="mt-1 text-sm font-bold text-slate-800">{entry.itemIds.map((id) => { const item = items.find((candidate) => candidate.id === id); return item ? `${item.item_name}${item.spec ? `（${item.spec}）` : ""}` : "未知条目" }).join("、")}</p></div>
-                  <label className="text-xs font-semibold">实际金额（元）<input className={field} min="0" onChange={(event) => setSpending((current) => current.map((item) => item.key === entry.key ? { ...item, amount: event.target.value } : item))} placeholder="0.00" step="0.01" type="number" value={entry.amount} /></label>
-                  <label className="text-xs font-semibold">备注<input className={field} maxLength={500} onChange={(event) => setSpending((current) => current.map((item) => item.key === entry.key ? { ...item, note: event.target.value } : item))} placeholder="订单或付款说明" value={entry.note} /></label>
-                  <button className="h-9 px-2 text-xs font-bold text-red-700 underline" onClick={() => setSpending((current) => current.filter((item) => item.key !== entry.key))} type="button">删除</button>
+                <div
+                  className="grid gap-3 border border-slate-200 bg-white p-3 md:grid-cols-[minmax(0,1fr)_160px_minmax(180px,1fr)_auto] md:items-end"
+                  key={entry.key}
+                >
+                  <div>
+                    <p className="text-xs font-semibold text-slate-500">
+                      计费条目
+                    </p>
+                    <p className="mt-1 text-sm font-bold text-slate-800">
+                      {entry.itemIds
+                        .map((id) => {
+                          const item = items.find(
+                            (candidate) => candidate.id === id,
+                          );
+                          return item
+                            ? `${item.item_name}${item.spec ? `（${item.spec}）` : ""}`
+                            : "未知条目";
+                        })
+                        .join("、")}
+                    </p>
+                  </div>
+                  <label className="text-xs font-semibold">
+                    实际金额（元）
+                    <input
+                      className={field}
+                      min="0"
+                      onChange={(event) =>
+                        setSpending((current) =>
+                          current.map((item) =>
+                            item.key === entry.key
+                              ? { ...item, amount: event.target.value }
+                              : item,
+                          ),
+                        )
+                      }
+                      placeholder="0.00"
+                      step="0.01"
+                      type="number"
+                      value={entry.amount}
+                    />
+                  </label>
+                  <label className="text-xs font-semibold">
+                    备注
+                    <input
+                      className={field}
+                      maxLength={500}
+                      onChange={(event) =>
+                        setSpending((current) =>
+                          current.map((item) =>
+                            item.key === entry.key
+                              ? { ...item, note: event.target.value }
+                              : item,
+                          ),
+                        )
+                      }
+                      placeholder="订单或付款说明"
+                      value={entry.note}
+                    />
+                  </label>
+                  <button
+                    className="h-9 px-2 text-xs font-bold text-red-700 underline"
+                    onClick={() =>
+                      setSpending((current) =>
+                        current.filter((item) => item.key !== entry.key),
+                      )
+                    }
+                    type="button"
+                  >
+                    删除
+                  </button>
                 </div>
               ))}
-              {!itemSpending.length ? <p className="text-xs text-slate-500">将条目标记为已购买后，可为单个条目填写金额，或勾选多个条目填写合计。</p> : null}
+              {!itemSpending.length ? (
+                <p className="text-xs text-slate-500">
+                  将条目标记为已购买后，可为单个条目填写金额，或勾选多个条目填写合计。
+                </p>
+              ) : null}
             </div>
           </>
         )}
-        <div className="mt-4 flex items-center justify-between border-t border-slate-200 pt-3"><span className="text-xs text-slate-500">已记录 {spending.length} 笔</span><strong className="text-lg text-blue-950">实际支出合计：¥{actualTotal.toFixed(2)}</strong></div>
+        <div className="mt-4 flex items-center justify-between border-t border-slate-200 pt-3">
+          <span className="text-xs text-slate-500">
+            已记录 {spending.length} 笔
+          </span>
+          <strong className="text-lg text-blue-950">
+            实际支出合计：¥{actualTotal.toFixed(2)}
+          </strong>
+        </div>
       </section>
 
       <div className="sticky bottom-0 mt-5 flex flex-wrap items-center gap-3 border-t border-slate-300 bg-white py-4">
-        <button className={secondary} disabled={busy} onClick={() => void save()} type="button">{busy && attemptedAction === "save" ? "正在保存..." : "保存当前进度"}</button>
-        <button className={primary} disabled={busy} onClick={() => void complete()} type="button">{busy && attemptedAction === "complete" ? "正在完成..." : "完成处理"}</button>
-        {completionBlockers.length ? <div className="basis-full border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-950" role="status"><p className="font-bold">当前还不能完成处理：</p><ul className="mt-1 list-disc space-y-1 pl-5">{completionBlockers.map((blocker) => <li key={blocker}>{blocker}</li>)}</ul></div> : <p className="basis-full text-xs font-semibold text-emerald-700">全部条目已处理，可完成当前采购请求。</p>}
-        {attemptedAction === "save" && saveBlockers.length ? <div className="basis-full border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800" role="alert"><p className="font-bold">当前进度还不能保存：</p><ul className="mt-1 list-disc space-y-1 pl-5">{saveBlockers.map((blocker) => <li key={blocker}>{blocker}</li>)}</ul></div> : null}
-        {actionFailed && feedback ? <p className="basis-full border border-red-300 bg-red-50 px-3 py-2 text-xs font-semibold text-red-800" role="alert">{feedback}</p> : null}
+        <button
+          className={secondary}
+          disabled={busy}
+          onClick={() => void save()}
+          type="button"
+        >
+          {busy && attemptedAction === "save" ? "正在保存..." : "保存当前进度"}
+        </button>
+        <button
+          className={primary}
+          disabled={busy}
+          onClick={() => void complete()}
+          type="button"
+        >
+          {busy && attemptedAction === "complete" ? "正在完成..." : "完成处理"}
+        </button>
+        {completionBlockers.length ? (
+          <div
+            className="basis-full border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-950"
+            role="status"
+          >
+            <p className="font-bold">当前还不能完成处理：</p>
+            <ul className="mt-1 list-disc space-y-1 pl-5">
+              {completionBlockers.map((blocker) => (
+                <li key={blocker}>{blocker}</li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <p className="basis-full text-xs font-semibold text-emerald-700">
+            全部条目已处理，可完成当前采购请求。
+          </p>
+        )}
+        {attemptedAction === "save" && saveBlockers.length ? (
+          <div
+            className="basis-full border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800"
+            role="alert"
+          >
+            <p className="font-bold">当前进度还不能保存：</p>
+            <ul className="mt-1 list-disc space-y-1 pl-5">
+              {saveBlockers.map((blocker) => (
+                <li key={blocker}>{blocker}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        {actionFailed && feedback ? (
+          <p
+            className="basis-full border border-red-300 bg-red-50 px-3 py-2 text-xs font-semibold text-red-800"
+            role="alert"
+          >
+            {feedback}
+          </p>
+        ) : null}
       </div>
     </section>
   );
 }
 
-function RequestList({ requests, selectedId, loading, onSelect }: { requests: RequestSummary[]; selectedId?: string; loading: boolean; onSelect(id: string): void }) {
+function RequestList({
+  requests,
+  selectedId,
+  loading,
+  onSelect,
+}: {
+  requests: RequestSummary[];
+  selectedId?: string;
+  loading: boolean;
+  onSelect(id: string): void;
+}) {
   return (
     <aside className="border border-slate-200 bg-white xl:sticky xl:top-6 xl:max-h-[calc(100vh-3rem)] xl:overflow-y-auto">
       <div className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-4 py-3">
-        <div className="flex items-center justify-between"><h2 className="font-bold text-blue-950">采购请求</h2><span className="text-xs text-slate-500">{requests.length} 条</span></div>
+        <div className="flex items-center justify-between">
+          <h2 className="font-bold text-blue-950">采购请求</h2>
+          <span className="text-xs text-slate-500">{requests.length} 条</span>
+        </div>
       </div>
       <div className="divide-y divide-slate-200">
         {requests.map((request) => {
           const selected = selectedId === request.id;
           return (
-            <button className={`w-full border-l-4 px-4 py-4 text-left transition-colors ${selected ? "border-cyan-700 bg-cyan-50" : "border-transparent hover:bg-slate-50"}`} key={request.id} onClick={() => onSelect(request.id)} type="button">
+            <button
+              className={`w-full border-l-4 px-4 py-4 text-left transition-colors ${selected ? "border-cyan-700 bg-cyan-50" : "border-transparent hover:bg-slate-50"}`}
+              key={request.id}
+              onClick={() => onSelect(request.id)}
+              type="button"
+            >
               <div className="flex items-start justify-between gap-2">
-                <strong className="line-clamp-2 text-sm text-slate-950">{request.title}</strong>
-                <span className={`shrink-0 px-2 py-1 text-[11px] font-bold ${statusStyles[request.status]}`}>{statusLabels[request.status]}</span>
+                <strong className="line-clamp-2 text-sm text-slate-950">
+                  {request.title}
+                </strong>
+                <span
+                  className={`shrink-0 px-2 py-1 text-[11px] font-bold ${statusStyles[request.status]}`}
+                >
+                  {statusLabels[request.status]}
+                </span>
               </div>
-              <p className="mt-1 font-mono text-[11px] text-slate-500">{request.requestNo}</p>
+              <p className="mt-1 font-mono text-[11px] text-slate-500">
+                {request.requestNo}
+              </p>
+              <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-600">
+                {request.reason || "未填写申请理由"}
+              </p>
               <div className="mt-3 flex items-end justify-between gap-2 text-xs text-slate-500">
-                <span className="truncate">{request.requesterName}</span>
-                <strong className="shrink-0 text-sm text-blue-950">¥{request.totalEstimatedAmount.toFixed(2)}</strong>
+                <span className="truncate">
+                  {request.requesterName} · {request.itemCount} 项
+                </span>
+                <strong className="shrink-0 text-sm text-blue-950">
+                  ¥{request.totalEstimatedAmount.toFixed(2)}
+                </strong>
               </div>
             </button>
           );
         })}
       </div>
-      {loading ? <p className="p-5 text-sm text-slate-500">正在加载...</p> : !requests.length ? <p className="p-5 text-sm text-slate-500">暂无采购申请。</p> : null}
+      {loading ? (
+        <p className="p-5 text-sm text-slate-500">正在加载...</p>
+      ) : !requests.length ? (
+        <p className="p-5 text-sm text-slate-500">暂无采购申请。</p>
+      ) : null}
     </aside>
   );
 }
 
-export function ProcurementConsole({ permissions, userId }: Props) {
+export function ProcurementConsole({
+  initialMode = "default",
+  permissions,
+  userId,
+}: Props) {
   const capability = procurementCapabilities(permissions);
-  const [scope, setScope] = useState<"mine" | "all">(capability.readAll ? "all" : "mine");
+  const [scope, setScope] = useState<"mine" | "all">(
+    initialMode === "mine" || initialMode === "create" || !capability.readAll
+      ? "mine"
+      : "all",
+  );
+  const [queue, setQueue] = useState<"all" | "review" | "purchase">(
+    initialMode === "review" && capability.review
+      ? "review"
+      : initialMode === "purchase" && capability.purchase
+        ? "purchase"
+        : "all",
+  );
   const [requests, setRequests] = useState<RequestSummary[]>([]);
   const [selected, setSelected] = useState<ProcurementDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedLoading, setSelectedLoading] = useState(false);
   const [message, setMessage] = useState("");
-  const [showForm, setShowForm] = useState(false);
+  const [showForm, setShowForm] = useState(
+    initialMode === "create" && capability.create,
+  );
+  const [builderDraft, setBuilderDraft] = useState<BuilderDraft | undefined>(
+    initialMode === "create"
+      ? { title: "", reason: "", items: [], mode: "create" }
+      : undefined,
+  );
   const [busy, setBusy] = useState(false);
   const [view, setView] = useState<"requests" | "catalog">("requests");
   const [comment, setComment] = useState("");
   const [note, setNote] = useState("");
+  const [assetDraftRequest, setAssetDraftRequest] =
+    useState<ProcurementDetail | null>(null);
+  const canCreateAssets = permissions.includes("lab_assets.write");
 
-  const refresh = useCallback(async (nextScope = scope) => {
-    setLoading(true);
-    try {
-      setRequests(await loadProcurements(nextScope) as RequestSummary[]);
-      setMessage("");
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "无法加载采购申请。");
-    } finally {
-      setLoading(false);
-    }
-  }, [scope]);
-  useEffect(() => { void refresh() }, [refresh]);
+  const refresh = useCallback(
+    async (nextScope = scope) => {
+      setLoading(true);
+      try {
+        setRequests((await loadProcurements(nextScope)) as RequestSummary[]);
+        setMessage("");
+      } catch (error) {
+        setMessage(
+          error instanceof Error ? error.message : "无法加载采购申请。",
+        );
+      } finally {
+        setLoading(false);
+      }
+    },
+    [scope],
+  );
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
 
   async function openRequest(id: string) {
     setSelectedLoading(true);
     try {
-      setSelected(await loadProcurement(id) as ProcurementDetail);
+      setSelected((await loadProcurement(id)) as ProcurementDetail);
       setNote("");
       setMessage("");
     } catch (error) {
@@ -486,7 +1153,8 @@ export function ProcurementConsole({ permissions, userId }: Props) {
   }
   async function reloadSelected(messageText: string) {
     await refresh();
-    if (selected?.id) setSelected(await loadProcurement(selected.id) as ProcurementDetail);
+    if (selected?.id)
+      setSelected((await loadProcurement(selected.id)) as ProcurementDetail);
     setMessage(messageText);
   }
   async function run(action: () => Promise<unknown>, success: string) {
@@ -503,89 +1171,479 @@ export function ProcurementConsole({ permissions, userId }: Props) {
     }
   }
   async function submit(body: unknown) {
-    const succeeded = await run(() => createProcurement(body), "采购申请已提交。");
-    if (succeeded) setShowForm(false);
+    const succeeded = await run(
+      () =>
+        builderDraft?.requestId
+          ? reviseProcurement(builderDraft.requestId, body)
+          : createProcurement(body),
+      builderDraft?.requestId
+        ? "采购申请已修改并重新提交。"
+        : "采购申请已提交。",
+    );
+    if (succeeded) {
+      setShowForm(false);
+      setBuilderDraft(undefined);
+    }
     return succeeded;
   }
 
-  const actions = useMemo(() => selected ? availableActions(
-    selected.status,
-    capability,
-    selected.requester_id === userId || selected.requesterId === userId,
-  ).filter((action) => action.action === "cancel" || !capability.purchase || !["submitted", "purchasing", "purchased"].includes(selected.status)) : [], [capability, selected, userId]);
+  async function reuseRequest(
+    request: ProcurementDetail | RequestSummary,
+    mode: "copy" | "revise",
+  ) {
+    setSelectedLoading(true);
+    try {
+      const detail = (
+        "items" in request && request.items
+          ? request
+          : await loadProcurement(request.id)
+      ) as ProcurementDetail;
+      setBuilderDraft(builderDraftFromRequest(detail, mode));
+      setShowForm(true);
+      setMessage(
+        mode === "revise"
+          ? "已载入退回内容，请修改后重新提交。"
+          : "已复制历史申请，可调整清单后提交。",
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "无法载入历史申请。");
+    } finally {
+      setSelectedLoading(false);
+    }
+  }
+
+  const actions = useMemo(
+    () =>
+      selected
+        ? availableActions(
+            selected.status,
+            capability,
+            selected.requester_id === userId || selected.requesterId === userId,
+          )
+        : [],
+    [capability, selected, userId],
+  );
+  const visibleRequests = useMemo(
+    () =>
+      requests.filter((request) => {
+        if (queue === "review")
+          return (
+            request.status === "submitted" && request.requesterId !== userId
+          );
+        if (queue === "purchase")
+          return ["approved", "purchasing"].includes(request.status);
+        return true;
+      }),
+    [queue, requests, userId],
+  );
+  const recentPurchases = useMemo(
+    () =>
+      requests
+        .filter(
+          (request) =>
+            request.requesterId === userId &&
+            ["purchased", "received", "closed"].includes(request.status),
+        )
+        .slice(0, 3),
+    [requests, userId],
+  );
 
   return (
     <section aria-labelledby="procurement-heading">
       <header className="flex flex-wrap items-end justify-between gap-5 border-b border-slate-300 pb-5">
         <div>
           <p className="text-sm font-semibold text-cyan-800">内部业务</p>
-          <h1 className="mt-2 font-serif text-3xl font-bold text-slate-950" id="procurement-heading">零件采购</h1>
-          <p className="mt-2 text-sm text-slate-600">成员提交清单，采购管理员逐条处理并跟踪收货</p>
+          <h1
+            className="mt-2 font-serif text-3xl font-bold text-slate-950"
+            id="procurement-heading"
+          >
+            零件采购
+          </h1>
+          <p className="mt-2 text-sm text-slate-600">
+            成员提交清单，采购管理员逐条处理并跟踪收货
+          </p>
         </div>
-        {capability.create ? <button className={primary} onClick={() => setShowForm(true)} type="button">新建申请</button> : null}
+        {capability.create ? (
+          <button
+            className={primary}
+            onClick={() => {
+              setBuilderDraft({
+                title: "",
+                reason: "",
+                items: [],
+                mode: "create",
+              });
+              setShowForm(true);
+            }}
+            type="button"
+          >
+            新建申请
+          </button>
+        ) : null}
       </header>
-      <nav aria-label="采购模块视图" className="mt-5 flex gap-1 border-b border-slate-300">
-        <button className={`border-b-2 px-3 py-2.5 text-sm font-semibold ${view === "requests" ? "border-cyan-700 text-cyan-800" : "border-transparent text-slate-600"}`} onClick={() => setView("requests")} type="button">采购申请</button>
-        {capability.purchase ? <button className={`border-b-2 px-3 py-2.5 text-sm font-semibold ${view === "catalog" ? "border-cyan-700 text-cyan-800" : "border-transparent text-slate-600"}`} onClick={() => setView("catalog")} type="button">标准件目录</button> : null}
+      <nav
+        aria-label="采购模块视图"
+        className="mt-5 flex gap-1 border-b border-slate-300"
+      >
+        <button
+          className={`border-b-2 px-3 py-2.5 text-sm font-semibold ${view === "requests" ? "border-cyan-700 text-cyan-800" : "border-transparent text-slate-600"}`}
+          onClick={() => setView("requests")}
+          type="button"
+        >
+          采购申请
+        </button>
+        {capability.purchase ? (
+          <button
+            className={`border-b-2 px-3 py-2.5 text-sm font-semibold ${view === "catalog" ? "border-cyan-700 text-cyan-800" : "border-transparent text-slate-600"}`}
+            onClick={() => setView("catalog")}
+            type="button"
+          >
+            标准件目录
+          </button>
+        ) : null}
       </nav>
-      {message ? <p className="mt-4 border border-cyan-200 bg-white px-4 py-3 text-sm text-slate-700" role="status">{message}</p> : null}
+      {message ? (
+        <p
+          className="mt-4 border border-cyan-200 bg-white px-4 py-3 text-sm text-slate-700"
+          role="status"
+        >
+          {message}
+        </p>
+      ) : null}
 
-      {view === "catalog" && capability.purchase ? <ProcurementCatalogManager /> : (
+      {view === "catalog" && capability.purchase ? (
+        <ProcurementCatalogManager />
+      ) : (
         <>
-          {showForm ? <ProcurementOrderBuilder busy={busy} onCancel={() => setShowForm(false)} onSubmit={submit} /> : null}
+          {showForm ? (
+            <ProcurementOrderBuilder
+              busy={busy}
+              initialDraft={builderDraft}
+              key={`${builderDraft?.mode ?? "create"}:${builderDraft?.requestId ?? "new"}:${showForm}`}
+              onCancel={() => {
+                setShowForm(false);
+                setBuilderDraft(undefined);
+              }}
+              onSubmit={submit}
+            />
+          ) : null}
+          {!showForm && capability.create && recentPurchases.length ? (
+            <section className="mt-5 border border-slate-200 bg-white p-4">
+              <h2 className="font-bold text-blue-950">最近购买</h2>
+              <p className="mt-1 text-xs text-slate-500">
+                直接复用历史清单，减少重复填写。
+              </p>
+              <div className="mt-3 grid gap-3 md:grid-cols-3">
+                {recentPurchases.map((request) => (
+                  <button
+                    className="border border-slate-200 p-3 text-left hover:border-cyan-700 hover:bg-cyan-50"
+                    key={request.id}
+                    onClick={() => void reuseRequest(request, "copy")}
+                    type="button"
+                  >
+                    <strong className="line-clamp-1 text-sm text-slate-900">
+                      {request.title}
+                    </strong>
+                    <span className="mt-2 block text-xs text-slate-500">
+                      {request.itemCount} 项 · ¥
+                      {request.totalEstimatedAmount.toFixed(2)}
+                    </span>
+                    <span className="mt-2 block text-xs font-bold text-cyan-800">
+                      再买一次 →
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          ) : null}
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
             <div className="flex border border-slate-300 bg-white p-1">
-              <button className={`px-3 py-2 text-sm font-semibold ${scope === "mine" ? "bg-blue-950 text-white" : "text-slate-600"}`} onClick={() => { setScope("mine"); setSelected(null) }} type="button">我的申请</button>
-              {capability.readAll ? <button className={`px-3 py-2 text-sm font-semibold ${scope === "all" ? "bg-blue-950 text-white" : "text-slate-600"}`} onClick={() => { setScope("all"); setSelected(null) }} type="button">全部申请</button> : null}
+              <button
+                className={`px-3 py-2 text-sm font-semibold ${scope === "mine" ? "bg-blue-950 text-white" : "text-slate-600"}`}
+                onClick={() => {
+                  setScope("mine");
+                  setQueue("all");
+                  setSelected(null);
+                }}
+                type="button"
+              >
+                我的申请
+              </button>
+              {capability.readAll ? (
+                <button
+                  className={`px-3 py-2 text-sm font-semibold ${scope === "all" && queue === "all" ? "bg-blue-950 text-white" : "text-slate-600"}`}
+                  onClick={() => {
+                    setScope("all");
+                    setQueue("all");
+                    setSelected(null);
+                  }}
+                  type="button"
+                >
+                  全部申请
+                </button>
+              ) : null}
+              {capability.review ? (
+                <button
+                  className={`px-3 py-2 text-sm font-semibold ${queue === "review" ? "bg-blue-950 text-white" : "text-slate-600"}`}
+                  onClick={() => {
+                    setScope("all");
+                    setQueue("review");
+                    setSelected(null);
+                  }}
+                  type="button"
+                >
+                  待审批
+                </button>
+              ) : null}
+              {capability.purchase ? (
+                <button
+                  className={`px-3 py-2 text-sm font-semibold ${queue === "purchase" ? "bg-blue-950 text-white" : "text-slate-600"}`}
+                  onClick={() => {
+                    setScope("all");
+                    setQueue("purchase");
+                    setSelected(null);
+                  }}
+                  type="button"
+                >
+                  待采购
+                </button>
+              ) : null}
             </div>
-            <button className={secondary} onClick={() => void refresh()} type="button">刷新</button>
+            <button
+              className={secondary}
+              onClick={() => void refresh()}
+              type="button"
+            >
+              刷新
+            </button>
           </div>
 
           <div className="mt-6 grid items-start gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
-            <RequestList loading={loading} onSelect={(id) => void openRequest(id)} requests={requests} selectedId={selected?.id} />
+            <RequestList
+              loading={loading}
+              onSelect={(id) => void openRequest(id)}
+              requests={visibleRequests}
+              selectedId={selected?.id}
+            />
             {selectedLoading ? (
-              <main className="grid min-h-96 place-items-center border border-slate-200 bg-white p-8 text-sm text-slate-500">正在加载采购请求...</main>
+              <main className="grid min-h-96 place-items-center border border-slate-200 bg-white p-8 text-sm text-slate-500">
+                正在加载采购请求...
+              </main>
             ) : selected ? (
               <main className="min-w-0 border border-slate-200 bg-white p-5 lg:p-7">
                 <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 pb-5">
                   <div className="min-w-0">
-                    <p className="font-mono text-xs text-slate-500">{selected.request_no || selected.requestNo}</p>
-                    <h2 className="mt-2 text-2xl font-bold text-slate-950">{selected.title}</h2>
-                    <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">{selected.reason}</p>
+                    <p className="font-mono text-xs text-slate-500">
+                      {selected.request_no || selected.requestNo}
+                    </p>
+                    <h2 className="mt-2 text-2xl font-bold text-slate-950">
+                      {selected.title}
+                    </h2>
+                    <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+                      {selected.reason}
+                    </p>
                   </div>
-                  <span className={`px-3 py-2 text-sm font-bold ${statusStyles[selected.status]}`}>{statusLabels[selected.status]}</span>
+                  <span
+                    className={`px-3 py-2 text-sm font-bold ${statusStyles[selected.status]}`}
+                  >
+                    {statusLabels[selected.status]}
+                  </span>
                 </div>
+                {capability.create &&
+                (selected.requester_id === userId ||
+                  selected.requesterId === userId) ? (
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {selected.status === "revision_requested" ? (
+                      <button
+                        className={primary}
+                        onClick={() => void reuseRequest(selected, "revise")}
+                        type="button"
+                      >
+                        修改并重新提交
+                      </button>
+                    ) : null}
+                    {["purchased", "received", "closed"].includes(
+                      selected.status,
+                    ) ? (
+                      <button
+                        className={secondary}
+                        onClick={() => void reuseRequest(selected, "copy")}
+                        type="button"
+                      >
+                        再买一次
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
 
-                {capability.purchase && ["submitted", "approved", "purchasing"].includes(selected.status) ? (
-                  <ProcessingPanel busy={busy} feedback={message} onRun={run} request={selected} />
+                {capability.purchase &&
+                ["submitted", "approved", "purchasing"].includes(
+                  selected.status,
+                ) &&
+                !(
+                  selected.status === "submitted" &&
+                  capability.review &&
+                  selected.requester_id !== userId &&
+                  selected.requesterId !== userId
+                ) ? (
+                  <ProcessingPanel
+                    busy={busy}
+                    feedback={message}
+                    onRun={run}
+                    request={selected}
+                  />
                 ) : (
                   <section className="mt-6">
-                    <div className="mb-4 flex items-center justify-between"><h3 className="text-lg font-bold text-blue-950">采购清单</h3><span className="text-xs text-slate-500">{selected.items?.length ?? 0} 项</span></div>
+                    <div className="mb-4 flex items-center justify-between">
+                      <h3 className="text-lg font-bold text-blue-950">
+                        采购清单
+                      </h3>
+                      <span className="text-xs text-slate-500">
+                        {selected.items?.length ?? 0} 项
+                      </span>
+                    </div>
                     <GroupedItems items={selected.items ?? []} />
                     <SpendingSummary request={selected} />
                   </section>
                 )}
 
                 {capability.purchase && selected.status === "purchased" ? (
-                  <div className="mt-5 border-t border-slate-200 pt-4"><button className={primary} disabled={busy} onClick={() => void run(() => confirmProcurementReceived(selected.id), "已确认全部收货，采购申请完成。")} type="button">确认全部收货并完成</button></div>
-                ) : null}
-                {actions.length ? (
                   <div className="mt-5 border-t border-slate-200 pt-4">
-                    <label className="text-sm font-semibold">处理备注<textarea className={`${field} min-h-20`} value={note} onChange={(event) => setNote(event.target.value)} /></label>
-                    <div className="mt-3 flex flex-wrap gap-2">{actions.map((action) => <button className={action.action === "reject" || action.action === "cancel" ? "border border-red-300 bg-white px-3 py-2 text-sm font-semibold text-red-700" : primary} disabled={busy} key={action.action} onClick={() => void run(() => transitionProcurement(selected.id, action.action, note), `${action.label}成功。`).then((succeeded) => { if (succeeded) setNote("") })} type="button">{action.label}</button>)}</div>
+                    <button
+                      className={primary}
+                      disabled={busy}
+                      onClick={() =>
+                        void run(
+                          () => confirmProcurementReceived(selected.id),
+                          "已确认全部收货，可由负责人关闭归档。",
+                        )
+                      }
+                      type="button"
+                    >
+                      确认全部收货
+                    </button>
                   </div>
                 ) : null}
-                <form className="mt-5 border-t border-slate-200 pt-4" onSubmit={(event) => { event.preventDefault(); if (!comment.trim()) return; void run(() => addProcurementComment(selected.id, comment), "评论已添加。").then((succeeded) => { if (succeeded) setComment("") }) }}>
-                  <label className="text-sm font-semibold">添加评论<textarea className={`${field} min-h-20`} value={comment} onChange={(event) => setComment(event.target.value)} /></label>
-                  <button className={`${secondary} mt-2`} disabled={busy} type="submit">发送评论</button>
+                {canCreateAssets &&
+                ["received", "closed"].includes(selected.status) ? (
+                  <div className="mt-5 border border-cyan-200 bg-cyan-50 p-4">
+                    <h3 className="font-bold text-blue-950">设备资产登记</h3>
+                    <p className="mt-1 text-sm text-slate-600">
+                      从本次已到货清单生成资产草稿，补齐编号、类型、序列号和位置后批量入库。
+                    </p>
+                    <button
+                      className={`${primary} mt-3`}
+                      onClick={() => setAssetDraftRequest(selected)}
+                      type="button"
+                    >
+                      将本次采购设备加入实验室资产
+                    </button>
+                  </div>
+                ) : null}
+                {actions.length ? (
+                  <div className="sticky bottom-0 z-20 mt-5 border-t border-slate-300 bg-white/95 py-4 backdrop-blur">
+                    <label className="text-sm font-semibold">
+                      {actions.some(
+                        (action) => action.action === "request_revision",
+                      )
+                        ? "审批意见（退回修改时必填）"
+                        : "处理备注"}
+                      <textarea
+                        className={`${field} min-h-20`}
+                        value={note}
+                        onChange={(event) => setNote(event.target.value)}
+                      />
+                    </label>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {actions.map((action) => (
+                        <button
+                          className={
+                            action.action === "reject" ||
+                            action.action === "cancel" ||
+                            action.action === "request_revision"
+                              ? "border border-red-300 bg-white px-3 py-2 text-sm font-semibold text-red-700"
+                              : primary
+                          }
+                          disabled={
+                            busy ||
+                            (action.action === "request_revision" &&
+                              !note.trim())
+                          }
+                          key={action.action}
+                          onClick={() =>
+                            void run(
+                              () =>
+                                transitionProcurement(
+                                  selected.id,
+                                  action.action,
+                                  note,
+                                ),
+                              `${action.label}成功。`,
+                            ).then((succeeded) => {
+                              if (succeeded) setNote("");
+                            })
+                          }
+                          type="button"
+                        >
+                          {action.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                <form
+                  className="mt-5 border-t border-slate-200 pt-4"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    if (!comment.trim()) return;
+                    void run(
+                      () => addProcurementComment(selected.id, comment),
+                      "评论已添加。",
+                    ).then((succeeded) => {
+                      if (succeeded) setComment("");
+                    });
+                  }}
+                >
+                  <label className="text-sm font-semibold">
+                    添加评论
+                    <textarea
+                      className={`${field} min-h-20`}
+                      value={comment}
+                      onChange={(event) => setComment(event.target.value)}
+                    />
+                  </label>
+                  <button
+                    className={`${secondary} mt-2`}
+                    disabled={busy}
+                    type="submit"
+                  >
+                    发送评论
+                  </button>
                 </form>
               </main>
             ) : (
               <main className="grid min-h-96 place-items-center border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
-                <div><p className="text-lg font-bold text-slate-700">请选择一个采购请求开始处理</p><p className="mt-2 text-sm text-slate-500">从左侧列表选择请求后，采购清单和逐条处理操作将在这里显示。</p></div>
+                <div>
+                  <p className="text-lg font-bold text-slate-700">
+                    请选择一个采购请求开始处理
+                  </p>
+                  <p className="mt-2 text-sm text-slate-500">
+                    从左侧列表选择请求后，采购清单和逐条处理操作将在这里显示。
+                  </p>
+                </div>
               </main>
             )}
           </div>
+          {assetDraftRequest ? (
+            <ProcurementAssetDraftDialog
+              onClose={() => setAssetDraftRequest(null)}
+              onImported={(count) => {
+                setAssetDraftRequest(null);
+                setMessage(`已创建 ${count} 台资产，并保留采购来源。`);
+              }}
+              request={assetDraftRequest}
+            />
+          ) : null}
         </>
       )}
     </section>
