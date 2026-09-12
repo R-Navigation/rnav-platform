@@ -37,6 +37,8 @@ import { createMediaRouter } from "./routes/media.js";
 import { createSettingsService } from "./services/settings/settingsService.js";
 import { createSettingsRouter } from "./routes/settings.js";
 import { resolveWebDir } from "./webDir.js";
+import { createNotificationService } from "./services/notifications/notificationService.js";
+import { createNotificationsRouter } from "./routes/notifications.js";
 
 const env = loadEnv();
 const pool = new pg.Pool({ connectionString: env.databaseUrl });
@@ -49,6 +51,7 @@ await web.prepare();
 
 const publicService = createPublicSiteService(createPostgresPublicSiteRepository(pool));
 const siteAdminService = createSiteAdminService(createPostgresSiteAdminRepository(pool));
+const profileService = createProfileService(pool);
 let hub: ReturnType<typeof createMonitorWebSocketHub>;
 const monitorService = createMonitorService(pool, { deviceTokenPepper: env.deviceTokenPepper, broadcast: (type, payload, audience) => hub.broadcast(type, payload, audience), onRealtimeError: (error) => console.error("Monitor realtime error", error) });
 hub = createMonitorWebSocketHub({ publicPath: env.monitorWsPath, consolePath: `${env.monitorWsPath}/console`, authorizeConsole: async (request) => {
@@ -61,11 +64,12 @@ const app = createApp({
   health: { database: async () => { await pool.query("SELECT 1"); return true; } },
   routers: [
     createAuthRouter({ repository: authRepository, authMiddleware, cookieSecure: env.cookieSecure, accountService: createAccountService(pool), trustProxy: true }),
-    createProfileRouter({ authMiddleware, service: createProfileService(pool), trustProxy: true }),
-    createUsersRouter({ authMiddleware, service: createUserAdminService(pool), trustProxy: true }),
+    createProfileRouter({ authMiddleware, service: profileService, trustProxy: true }),
+    createUsersRouter({ authMiddleware, service: createUserAdminService(pool), profileService, trustProxy: true }),
     createPermissionsRouter({ authMiddleware, service: createPermissionAdminService(pool), trustProxy: true }),
     createMediaRouter({ authMiddleware, service: createMediaService(pool, createCosGateway({ secretId: env.cosSecretId, secretKey: env.cosSecretKey, region: env.cosRegion, bucket: env.cosBucket }),), trustProxy: true, maxBytes: env.mediaMaxUploadBytes, publicBaseUrl: env.cosPublicBaseUrl ?? `${env.publicBaseUrl}/media`, pathPrefix: env.cosPathPrefix }),
     createSettingsRouter({ authMiddleware, service: createSettingsService(pool), trustProxy: true }),
+    createNotificationsRouter({ authMiddleware, service: createNotificationService(pool), trustProxy: true }),
     createConsoleRouter({ authMiddleware, dashboardService: createConsoleDashboardService(pool) }), createPublicRouter({ service: publicService }),
     createSiteAdminRouter({ authMiddleware, service: siteAdminService, trustProxy: true }),
     createLabAssetsRouter({ authMiddleware, service: createLabAssetsService(pool), trustProxy: true }),

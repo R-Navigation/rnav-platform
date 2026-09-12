@@ -106,6 +106,10 @@ test("getMigrationFiles returns SQL migrations in lexical order", async () => {
       "024_lab_assets_location_and_batch.sql",
       "025_procurement_revision_requested.sql",
       "026_asset_procurement_source.sql",
+      "027_member_governance.sql",
+      "028_notifications.sql",
+      "029_asset_inventory.sql",
+      "030_procurement_experience.sql",
     ],
   );
 });

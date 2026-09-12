@@ -12,16 +12,17 @@ export function MonitorMap({ devices, onSelect, selectedKey, settings }: { devic
 
   useEffect(() => {
     let active = true;
-    void import("maplibre-gl").then(({ default: maplibregl }) => {
+    void import("maplibre-gl").then((maplibregl) => {
       if (!active || !containerRef.current || mapRef.current) return;
-      mapRef.current = new maplibregl.Map({
+      const map = new maplibregl.Map({
         container: containerRef.current,
         center: [settings.defaultCenterLng, settings.defaultCenterLat],
         zoom: settings.defaultZoom,
         attributionControl: false,
         style: { version: 8, sources: { osm: { type: "raster", tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"], tileSize: 256, attribution: "OpenStreetMap" } }, layers: [{ id: "osm", type: "raster", source: "osm", paint: { "raster-saturation": -0.72, "raster-brightness-max": 0.55 } }] },
       });
-      mapRef.current.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+      mapRef.current=map;
+      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
       setMapReady(true);
     });
     return () => {
@@ -37,7 +38,7 @@ export function MonitorMap({ devices, onSelect, selectedKey, settings }: { devic
   useEffect(() => {
     if (!shouldSyncMarkers(mapReady) || !mapRef.current) return;
     let active = true;
-    void import("maplibre-gl").then(({ default: maplibregl }) => {
+    void import("maplibre-gl").then((maplibregl) => {
       if (!active || !mapRef.current) return;
       markersRef.current.forEach((marker) => marker.remove()); markersRef.current = [];
       for (const device of devices) {

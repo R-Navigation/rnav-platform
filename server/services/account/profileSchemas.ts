@@ -17,7 +17,7 @@ export const personalLinkSchema = z.object({
   path: ["labelZh"],
 });
 
-export const profileUpdateSchema = z.object({
+const profileUpdateObject = z.object({
   version: z.coerce.number().int().positive(),
   memberStatus: z.enum(["current", "alumni"]),
   degreeLevel: z.enum(["", "faculty", "postdoc", "undergrad", "master", "phd"]),
@@ -43,7 +43,8 @@ export const profileUpdateSchema = z.object({
   avatarZoom: z.coerce.number().min(1).max(3),
   personalLinks: z.array(personalLinkSchema).max(12),
   publicFields: z.array(z.enum(publicProfileFields)).max(publicProfileFields.length),
-}).strict().superRefine((value, context) => {
+}).strict();
+function validateProfile(value: z.output<typeof profileUpdateObject>, context: z.RefinementCtx) {
   if (new Set(value.publicFields).size !== value.publicFields.length) {
     context.addIssue({ code: "custom", path: ["publicFields"], message: "Duplicate public field" });
   }
@@ -51,6 +52,13 @@ export const profileUpdateSchema = z.object({
   if (new Set(urls).size !== urls.length) {
     context.addIssue({ code: "custom", path: ["personalLinks"], message: "Duplicate personal link" });
   }
-});
+}
+export const profileUpdateSchema = profileUpdateObject.superRefine(validateProfile);
+
+export const adminProfileUpdateSchema = profileUpdateObject.extend({
+  memberCategory: z.enum(["advisor", "postdoc", "phd", "master", "undergrad", "alumni"]),
+  publicVisible: z.boolean(),
+}).strict().superRefine(validateProfile);
 
 export type ProfileUpdate = z.output<typeof profileUpdateSchema>;
+export type AdminProfileUpdate = z.output<typeof adminProfileUpdateSchema>;

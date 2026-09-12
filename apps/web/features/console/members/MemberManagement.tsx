@@ -8,8 +8,11 @@ import {
   type FormEvent,
 } from "react";
 import { consoleApi } from "@/lib/consoleApi";
+import { MemberProfileEditor } from "./MemberProfileEditor";
+import { MemberImportDialog } from "./MemberImportDialog";
+import { AccountEmailEditor } from "./AccountEmailEditor";
 
-type Member = {
+export type Member = {
   id: string;
   username: string;
   email: string;
@@ -29,6 +32,11 @@ type Member = {
   researchInterestsZh: string;
   homepageUrl: string;
   templateKeys: string[];
+  publicEmail: string; phone: string; bioZh: string; bioEn: string; researchInterestsEn: string;
+  enrollmentYear: string; graduationYear: string; majorZh: string; majorEn: string; thesisZh: string; thesisEn: string;
+  destinationZh: string; destinationEn: string; avatarAssetId: string | null; avatarPositionX: number; avatarPositionY: number;
+  avatarZoom: number; personalLinks: Array<{labelZh:string;labelEn:string;url:string}>; publicFields: string[]; version: number;
+  profileContentUpdatedAt: string; completeness: { complete: boolean; publishable: boolean; missing: string[] };
 };
 type Catalog = {
   permissions: Array<{
@@ -95,14 +103,17 @@ export function MemberManagement({
   actorTier,
   initialMemberId,
   permissions,
+  initialProfileFilter,
 }: {
   actorId: string;
   actorTier: string;
   initialMemberId?: string;
   permissions: string[];
+  initialProfileFilter?: string;
 }) {
   const canWriteUsers = permissions.includes("users.write");
   const canWritePermissions = permissions.includes("permissions.write");
+  const canWriteMembers = permissions.includes("site.members.write");
   const [members, setMembers] = useState<Member[]>([]);
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [selectedId, setSelectedId] = useState(initialMemberId ?? "");
@@ -111,6 +122,9 @@ export function MemberManagement({
   const [status, setStatus] = useState("");
   const [memberCategory, setMemberCategory] = useState("");
   const [role, setRole] = useState("");
+  const [profileFilter,setProfileFilter]=useState(["complete","incomplete","stale"].includes(initialProfileFilter??"")?initialProfileFilter!:"");
+  const [visibilityFilter,setVisibilityFilter]=useState("");
+  const [loginFilter,setLoginFilter]=useState("");
   const [detail, setDetail] = useState<PermissionDetail | null>(null);
   const [templates, setTemplates] = useState<string[]>([]);
   const [decisions, setDecisions] = useState<
@@ -122,6 +136,7 @@ export function MemberManagement({
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [showCreate, setShowCreate] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [temporaryPassword, setTemporaryPassword] = useState<string | null>(
     null,
   );
@@ -130,12 +145,15 @@ export function MemberManagement({
     const query = new URLSearchParams();
     if (search) query.set("search", search);
     if (status) query.set("status", status);
+    if(profileFilter)query.set("profile",profileFilter);
+    if(visibilityFilter)query.set("publicVisibility",visibilityFilter);
+    if(loginFilter)query.set("login",loginFilter);
     const result = await consoleApi<{ users: Member[] }>(`/api/users?${query}`);
     setMembers(result.users);
     setSelectedId(
       (current) => current || initialMemberId || result.users[0]?.id || "",
     );
-  }, [initialMemberId, search, status]);
+  }, [initialMemberId, search, status,profileFilter,visibilityFilter,loginFilter]);
 
   useEffect(() => {
     void Promise.all([
@@ -269,15 +287,7 @@ export function MemberManagement({
             围绕成员统一管理账号生命周期与岗位职责；成员自行维护的学术资料仅供查看。
           </p>
         </div>
-        {canWriteUsers ? (
-          <button
-            className={primary}
-            onClick={() => setShowCreate(true)}
-            type="button"
-          >
-            + 创建成员
-          </button>
-        ) : null}
+        {canWriteUsers ? <div className="flex gap-2"><button className={secondary} onClick={()=>setShowImport(true)} type="button">批量导入</button><button className={primary} onClick={() => setShowCreate(true)} type="button">+ 创建成员</button></div> : null}
       </header>
       {error ? (
         <p
@@ -312,6 +322,9 @@ export function MemberManagement({
           <option value="disabled">停用</option>
           <option value="invited">待首次登录</option>
         </select>
+        <select className={input} value={profileFilter} onChange={(event)=>setProfileFilter(event.target.value)}><option value="">全部资料状态</option><option value="complete">资料完整</option><option value="incomplete">资料待完善</option><option value="stale">超过一年未复核</option></select>
+        <select className={input} value={visibilityFilter} onChange={(event)=>setVisibilityFilter(event.target.value)}><option value="">全部公开状态</option><option value="public">官网展示</option><option value="private">官网隐藏</option></select>
+        <select className={input} value={loginFilter} onChange={(event)=>setLoginFilter(event.target.value)}><option value="">全部登录状态</option><option value="never">从未登录</option><option value="active">半年内登录</option><option value="stale">半年未登录</option></select>
         <select
           className={input}
           onChange={(event) => setMemberCategory(event.target.value)}
@@ -448,54 +461,12 @@ export function MemberManagement({
             </nav>
             <div className="p-5 lg:p-6">
               {tab === "profile" ? (
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Info label="中文姓名" value={selected.nameZh} />
-                  <Info label="英文姓名" value={selected.nameEn} />
-                  <Info label="学历阶段" value={selected.degreeLevel} />
-                  <Info
-                    label="成员类别"
-                    value={
-                      categories[selected.memberCategory] ??
-                      selected.memberCategory
-                    }
-                  />
-                  <Info label="研究方向" value={selected.researchInterestsZh} />
-                  <Info label="个人主页" value={selected.homepageUrl} />
-                  {canWriteUsers ? (
-                    <label className="flex items-center gap-3 border border-slate-200 p-4 text-sm font-semibold sm:col-span-2">
-                      <input
-                        checked={selected.publicVisible}
-                        disabled={
-                          busy ||
-                          (selected.baseTier === "super" &&
-                            actorTier !== "super")
-                        }
-                        onChange={(event) =>
-                          void run(
-                            () =>
-                              consoleApi(
-                                `/api/users/${selected.id}/public-profile`,
-                                {
-                                  method: "PUT",
-                                  body: JSON.stringify({
-                                    publicVisible: event.target.checked,
-                                  }),
-                                },
-                              ),
-                            "官网展示状态已更新。",
-                          )
-                        }
-                        type="checkbox"
-                      />
-                      在官网公开展示该成员
-                    </label>
-                  ) : null}
-                </div>
+                <MemberProfileEditor busy={busy} canEdit={canWriteMembers} member={selected} onConvert={()=>run(()=>consoleApi(`/api/users/${selected.id}/convert-alumni`,{method:"POST",body:JSON.stringify({confirm:true})}),"已转换为校友，岗位权限和旧会话已清理。")} onSave={(body)=>run(()=>consoleApi(`/api/users/${selected.id}/profile`,{method:"PUT",body:JSON.stringify(body)}),"成员资料已保存。")} />
               ) : null}
               {tab === "account" ? (
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Info label="用户名" value={selected.username} />
-                  <Info label="邮箱" value={selected.email} />
+                  <AccountEmailEditor busy={busy} canEdit={canWriteUsers} email={selected.email} onSave={(email)=>run(()=>consoleApi(`/api/users/${selected.id}/account-email`,{method:"PUT",body:JSON.stringify({email})}),"账号邮箱已更新。")} />
                   <Info label="账号状态" value={selected.status} />
                   <Info
                     label="首次登录改密"
@@ -771,6 +742,7 @@ export function MemberManagement({
           </main>
         )}
       </div>
+      {showImport?<MemberImportDialog busy={busy} onClose={()=>setShowImport(false)} onImport={(rows)=>run(async()=>{const result=await consoleApi<{imported:number;credentials:Array<{username:string;temporaryPassword:string}>}>("/api/users/import",{method:"POST",body:JSON.stringify({rows})});setTemporaryPassword(result.credentials.map((item)=>`${item.username}: ${item.temporaryPassword}`).join("\n"));setShowImport(false);},"成员已批量导入；临时密码仅显示本次。")}/>:null}
       {showCreate ? (
         <div
           className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-4"
@@ -844,7 +816,7 @@ export function MemberManagement({
             <p className="mt-3 text-sm text-slate-600">
               请通过安全渠道交给成员。关闭后无法再次查看。
             </p>
-            <code className="mt-5 block break-all border border-slate-300 bg-slate-50 p-4 text-lg">
+            <code className="mt-5 block whitespace-pre-wrap break-all border border-slate-300 bg-slate-50 p-4 text-lg">
               {temporaryPassword}
             </code>
             <button

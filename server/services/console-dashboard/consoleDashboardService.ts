@@ -22,6 +22,8 @@ export type ConsoleDashboard = {
     procurementReviews: number;
     procurementPurchases: number;
     labUsageReviews: number;
+    incompleteProfiles: number;
+    staleProfiles: number;
   };
   mine: {
     procurementOpen: number;
@@ -40,6 +42,8 @@ type MetricRow = {
   procurement_open: string | number;
   procurement_purchases: string | number;
   procurement_reviews: string | number;
+  incomplete_profiles: string | number;
+  stale_profiles: string | number;
 };
 
 type RecentRow = {
@@ -82,6 +86,7 @@ export function createConsoleDashboardService(pool: DashboardPool) {
       const canReviewProcurements = permissions.has("procurements.review");
       const canPurchase = permissions.has("procurements.purchase");
       const canReviewLabUsage = permissions.has("lab_assets.write");
+      const canManageMembers = permissions.has("site.members.write");
 
       const [metricsResult, recentResult] = await Promise.all([
         pool.query<MetricRow>(
@@ -103,8 +108,10 @@ export function createConsoleDashboardService(pool: DashboardPool) {
              ELSE 0 END procurement_purchases,
              CASE WHEN $4::boolean THEN
                (SELECT count(*) FROM lab_asset_usage_requests WHERE status='pending')
-             ELSE 0 END lab_usage_reviews`,
-          [user.id, canReviewProcurements, canPurchase, canReviewLabUsage],
+             ELSE 0 END lab_usage_reviews,
+             CASE WHEN $5::boolean THEN (SELECT count(*) FROM user_profiles WHERE COALESCE(NULLIF(name_zh,''),NULLIF(name_en,'')) IS NULL OR avatar_asset_id IS NULL OR degree_level='' OR COALESCE(NULLIF(major_zh,''),NULLIF(major_en,'')) IS NULL OR COALESCE(NULLIF(research_interests_zh,''),NULLIF(research_interests_en,'')) IS NULL) ELSE 0 END incomplete_profiles,
+             CASE WHEN $5::boolean THEN (SELECT count(*) FROM user_profiles WHERE profile_content_updated_at < now()-interval '1 year') ELSE 0 END stale_profiles`,
+          [user.id, canReviewProcurements, canPurchase, canReviewLabUsage,canManageMembers],
         ),
         pool.query<RecentRow>(
           `WITH visible_procurements AS (
@@ -153,6 +160,8 @@ export function createConsoleDashboardService(pool: DashboardPool) {
           procurementReviews: canReviewProcurements ? numeric(metrics?.procurement_reviews) : 0,
           procurementPurchases: canPurchase ? numeric(metrics?.procurement_purchases) : 0,
           labUsageReviews: canReviewLabUsage ? numeric(metrics?.lab_usage_reviews) : 0,
+          incompleteProfiles: canManageMembers ? numeric(metrics?.incomplete_profiles) : 0,
+          staleProfiles: canManageMembers ? numeric(metrics?.stale_profiles) : 0,
         },
         mine: {
           procurementOpen: numeric(metrics?.procurement_open),

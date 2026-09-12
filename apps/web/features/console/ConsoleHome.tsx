@@ -39,11 +39,14 @@ function DashboardContent({ dashboard, permissions }: { dashboard: ConsoleDashbo
   const canReview = permissions.includes("procurements.review");
   const canPurchase = permissions.includes("procurements.purchase");
   const canReviewUsage = permissions.includes("lab_assets.write");
-  const taskCount = dashboard.tasks.procurementReviews + dashboard.tasks.procurementPurchases + dashboard.tasks.labUsageReviews;
+  const canManageMembers=permissions.includes("site.members.write");
+  const taskCount = dashboard.tasks.procurementReviews + dashboard.tasks.procurementPurchases + dashboard.tasks.labUsageReviews + dashboard.tasks.incompleteProfiles + dashboard.tasks.staleProfiles;
   const taskCards = [
     canReview ? { count: dashboard.tasks.procurementReviews, href: "/console/procurements?view=review", label: "待审核采购", detail: "查看申请理由与采购清单" } : null,
     canPurchase ? { count: dashboard.tasks.procurementPurchases, href: "/console/procurements?view=purchase", label: "待采购申请", detail: "继续处理已批准采购" } : null,
     canReviewUsage ? { count: dashboard.tasks.labUsageReviews, href: "/console/lab-assets?view=requests", label: "设备申请审批", detail: "处理成员的设备使用申请" } : null,
+    canManageMembers ? { count: dashboard.tasks.incompleteProfiles, href: "/console/members?profile=incomplete", label: "资料待完善", detail: "补齐成员官网展示资料" } : null,
+    canManageMembers ? { count: dashboard.tasks.staleProfiles, href: "/console/members?profile=stale", label: "年度资料复核", detail: "超过一年未更新的成员资料" } : null,
   ].filter((item): item is NonNullable<typeof item> => Boolean(item));
   const quickActions = [
     permissions.includes("procurements.create") ? { href: "/console/procurements?view=create", label: "新建采购" } : null,

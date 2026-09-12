@@ -16,7 +16,7 @@ type Profile = {
 
 const publicOptions = [
   ["avatar", "照片"], ["name_zh", "中文姓名"], ["name_en", "英文姓名"], ["academic", "学籍或学历"],
-  ["major", "专业"], ["research", "研究方向"], ["bio", "个人简介"], ["email", "邮箱"],
+  ["major", "专业"], ["research", "研究方向"], ["bio", "个人简介"], ["email", "公开联系邮箱"],
   ["links", "个人链接"], ["thesis", "毕业设计题目"], ["destination", "毕业去向"],
 ] as const;
 const input = "mt-1 w-full border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100";
@@ -103,7 +103,7 @@ export function ProfileConsole({ mustChangePassword }: { mustChangePassword: boo
         <TextField label={alumni ? "毕业年份" : "入学年份"} placeholder="例如 2024" value={alumni ? draft.graduationYear : draft.enrollmentYear} onChange={(value) => update(alumni ? "graduationYear" : "enrollmentYear", value)} />
         <label className="text-sm font-medium">学位层次<select className={input} value={draft.degreeLevel} onChange={(event) => update("degreeLevel", event.target.value)}><option value="">请选择</option><option value="faculty">教师</option><option value="postdoc">博士后</option><option value="undergrad">本科</option><option value="master">硕士</option><option value="phd">博士</option></select></label>
         <TextField label="中文专业" value={draft.majorZh} onChange={(value) => update("majorZh", value)} /><TextField label="英文专业" value={draft.majorEn} onChange={(value) => update("majorEn", value)} />
-        <TextField label="邮箱" value={draft.email} onChange={(value) => update("email", value)} /><TextField label="手机号（仅内部）" value={draft.phone} onChange={(value) => update("phone", value)} />
+        <TextField label="公开联系邮箱（可选择在官网展示）" value={draft.email} onChange={(value) => update("email", value)} /><TextField label="手机号（仅内部）" value={draft.phone} onChange={(value) => update("phone", value)} />
         <TextArea label="中文研究方向" value={draft.researchInterestsZh} onChange={(value) => update("researchInterestsZh", value)} /><TextArea label="英文研究方向" value={draft.researchInterestsEn} onChange={(value) => update("researchInterestsEn", value)} />
         <TextArea label="中文个人简介" value={draft.bioZh} onChange={(value) => update("bioZh", value)} /><TextArea label="英文个人简介" value={draft.bioEn} onChange={(value) => update("bioEn", value)} />
         {alumni ? <><TextArea label="中文毕业设计题目" value={draft.thesisZh} onChange={(value) => update("thesisZh", value)} /><TextArea label="英文毕业设计题目" value={draft.thesisEn} onChange={(value) => update("thesisEn", value)} /><TextField label="中文去向单位" value={draft.destinationZh} onChange={(value) => update("destinationZh", value)} /><TextField label="英文去向单位" value={draft.destinationEn} onChange={(value) => update("destinationEn", value)} /></> : null}

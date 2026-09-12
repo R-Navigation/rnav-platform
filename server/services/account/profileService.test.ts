@@ -10,7 +10,7 @@ class Client {
   released = false; conflict = false;
   async query(sql: string, values?: unknown[]) {
     this.calls.push({ sql, values });
-    if (sql.includes("FOR UPDATE")) return { rowCount: 1, rows: [{ avatar_asset_id: "old-avatar" }] };
+    if (sql.includes("FOR UPDATE")) return { rowCount: 1, rows: [{ ...row, avatar_asset_id: "old-avatar", version: "1" }] };
     if (sql.includes("SELECT 1 FROM media_assets")) return { rowCount: 1, rows: [{ exists: 1 }] };
     if (sql.includes("UPDATE user_profiles SET")) return this.conflict ? { rowCount: 0, rows: [] } : { rowCount: 1, rows: [] };
     if (sql.includes("SELECT user_profiles.*")) return { rowCount: 1, rows: [row] };
@@ -24,7 +24,7 @@ test("profile update uses account data directly and recycles an unreferenced old
   const result = await createProfileService({ connect: async () => client } as never).updateProfile("user-1", body as never);
   assert.equal(client.calls.some((call) => call.sql.includes("UPDATE team_members")), false);
   assert.ok(client.calls.some((call) => call.sql.includes("status='recycled'")));
-  assert.equal(JSON.stringify(client.calls.find((call) => call.sql.includes("profile.update"))?.values).includes("secret-phone"), false);
+  assert.equal(JSON.stringify(client.calls.find((call) => call.values?.includes("profile.update"))?.values).includes("secret-phone"), false);
   assert.equal(result.avatarUrl, "https://cdn/new.png");
   assert.equal(result.avatarZoom, 1.25);
   assert.equal(client.calls.at(-1)?.sql, "COMMIT");

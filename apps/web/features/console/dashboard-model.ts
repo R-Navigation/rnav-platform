@@ -11,6 +11,8 @@ export type ConsoleDashboard = {
     procurementReviews: number;
     procurementPurchases: number;
     labUsageReviews: number;
+    incompleteProfiles: number;
+    staleProfiles: number;
   };
   mine: {
     procurementOpen: number;
@@ -68,6 +70,8 @@ export function normalizeConsoleDashboard(value: unknown): ConsoleDashboard {
       procurementReviews: count(tasks.procurementReviews),
       procurementPurchases: count(tasks.procurementPurchases),
       labUsageReviews: count(tasks.labUsageReviews),
+      incompleteProfiles: count(tasks.incompleteProfiles ?? 0),
+      staleProfiles: count(tasks.staleProfiles ?? 0),
     },
     mine: {
       procurementOpen: count(mine.procurementOpen),

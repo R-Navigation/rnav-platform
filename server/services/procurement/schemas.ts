@@ -62,8 +62,8 @@ export const processingItemSchema = z.object({
 });
 
 export const spendingEntrySchema = z.discriminatedUnion("scope", [
-  z.object({ scope: z.literal("items"), itemIds: z.array(z.string().uuid()).min(1).max(100), amount: money(9_999_999_999.99), note: text(500).optional().default("") }).strict(),
-  z.object({ scope: z.literal("request_total"), amount: money(9_999_999_999.99), note: text(500).optional().default("") }).strict(),
+  z.object({ scope: z.literal("items"), itemIds: z.array(z.string().uuid()).min(1).max(100), amount: money(9_999_999_999.99), note: text(500).optional().default(""), orderNumber: text(200).optional() }).strict(),
+  z.object({ scope: z.literal("request_total"), amount: money(9_999_999_999.99), note: text(500).optional().default(""), orderNumber: text(200).optional() }).strict(),
 ]);
 
 export const processingSaveSchema = z.object({

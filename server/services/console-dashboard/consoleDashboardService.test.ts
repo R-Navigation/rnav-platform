@@ -47,13 +47,15 @@ test("normal dashboard returns personal work while suppressing every administrat
     procurementReviews: 0,
     procurementPurchases: 0,
     labUsageReviews: 0,
+    incompleteProfiles: 0,
+    staleProfiles: 0,
   });
   assert.deepEqual(dashboard.mine, {
     procurementOpen: 2,
     labUsageOpen: 1,
     assetsInUse: 3,
   });
-  assert.deepEqual(calls[0].values.slice(1), [false, false, false]);
+  assert.deepEqual(calls[0].values.slice(1), [false, false, false, false]);
   assert.deepEqual(calls[1].values.slice(1), [false, false, false]);
 });
 
@@ -76,8 +78,10 @@ test("dashboard exposes only the task counters enabled by effective permissions"
     procurementReviews: 4,
     procurementPurchases: 0,
     labUsageReviews: 6,
+    incompleteProfiles: 0,
+    staleProfiles: 0,
   });
-  assert.deepEqual(calls[0].values.slice(1), [true, false, true]);
+  assert.deepEqual(calls[0].values.slice(1), [true, false, true, false]);
   assert.deepEqual(dashboard.user.roleLabels, ["资产管理员", "采购审批"]);
 });
 

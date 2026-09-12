@@ -52,6 +52,7 @@ type SpendingEntry = {
   scope: "items" | "request_total";
   amount: number;
   note: string;
+  order_number: string;
   item_ids: string[];
 };
 type SpendingDraft = {
@@ -59,6 +60,7 @@ type SpendingDraft = {
   scope: "items" | "request_total";
   amount: string;
   note: string;
+  orderNumber: string;
   itemIds: string[];
 };
 type ProcurementItem = {
@@ -328,6 +330,7 @@ function SpendingSummary({ request }: { request: ProcurementDetail }) {
               {entry.note ? (
                 <p className="mt-1 text-xs text-slate-500">{entry.note}</p>
               ) : null}
+              {entry.order_number ? <p className="mt-1 text-xs font-semibold text-cyan-800">订单号：{entry.order_number}</p> : null}
             </div>
             <p className="text-xl font-black text-blue-950 md:text-right">
               ¥{entry.amount.toFixed(2)}
@@ -371,6 +374,7 @@ function ProcessingPanel({
       scope: entry.scope,
       amount: entry.amount.toFixed(2),
       note: entry.note,
+      orderNumber: entry.order_number,
       itemIds: entry.item_ids,
     })),
   );
@@ -399,6 +403,7 @@ function ProcessingPanel({
         scope: entry.scope,
         amount: entry.amount.toFixed(2),
         note: entry.note,
+        orderNumber: entry.order_number,
         itemIds: entry.item_ids,
       })),
     );
@@ -458,6 +463,7 @@ function ProcessingPanel({
         scope: "items",
         amount: "",
         note: "",
+        orderNumber: "",
         itemIds: [itemId],
       },
     ]);
@@ -472,6 +478,7 @@ function ProcessingPanel({
         scope: "items",
         amount: groupAmount,
         note: groupNote,
+        orderNumber: "",
         itemIds: selectedForGroup,
       },
     ]);
@@ -486,6 +493,7 @@ function ProcessingPanel({
         scope: "request_total",
         amount: "",
         note: "",
+        orderNumber: "",
         itemIds: [],
       },
     ]);
@@ -520,12 +528,13 @@ function ProcessingPanel({
     })),
     spendingEntries: spending.map((entry) =>
       entry.scope === "request_total"
-        ? { scope: entry.scope, amount: Number(entry.amount), note: entry.note }
+        ? { scope: entry.scope, amount: Number(entry.amount), note: entry.note, orderNumber: entry.orderNumber }
         : {
             scope: entry.scope,
             itemIds: entry.itemIds,
             amount: Number(entry.amount),
             note: entry.note,
+            orderNumber: entry.orderNumber,
           },
     ),
   });
@@ -793,7 +802,7 @@ function ProcessingPanel({
         </div>
 
         {requestTotal ? (
-          <div className="mt-4 grid gap-3 md:grid-cols-[180px_minmax(0,1fr)]">
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
             <label className="text-xs font-semibold">
               整单实际金额（元）
               <input
@@ -808,6 +817,7 @@ function ProcessingPanel({
                 value={requestTotal.amount}
               />
             </label>
+            <label className="text-xs font-semibold">订单号<input className={field} maxLength={200} placeholder="平台订单号 / 合同号" value={requestTotal.orderNumber} onChange={(event)=>setSpending([{...requestTotal,orderNumber:event.target.value}])}/></label>
             <label className="text-xs font-semibold">
               备注
               <input
@@ -865,7 +875,7 @@ function ProcessingPanel({
             <div className="mt-4 space-y-2">
               {itemSpending.map((entry) => (
                 <div
-                  className="grid gap-3 border border-slate-200 bg-white p-3 md:grid-cols-[minmax(0,1fr)_160px_minmax(180px,1fr)_auto] md:items-end"
+                  className="grid gap-3 border border-slate-200 bg-white p-3 md:grid-cols-[minmax(0,1fr)_140px_180px_minmax(160px,1fr)_auto] md:items-end"
                   key={entry.key}
                 >
                   <div>
@@ -905,6 +915,7 @@ function ProcessingPanel({
                       value={entry.amount}
                     />
                   </label>
+                  <label className="text-xs font-semibold">订单号<input className={field} maxLength={200} placeholder="订单号" value={entry.orderNumber} onChange={(event)=>setSpending((current)=>current.map((item)=>item.key===entry.key?{...item,orderNumber:event.target.value}:item))}/></label>
                   <label className="text-xs font-semibold">
                     备注
                     <input

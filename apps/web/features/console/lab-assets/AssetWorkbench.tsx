@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { ConsoleEmptyState } from "@/features/console/ui/ConsoleEmptyState";
 import { ConsoleStatusBadge } from "@/features/console/ui/ConsoleStatusBadge";
 import { AssetImportDialog } from "./AssetImportDialog";
+import { AssetQrLabels } from "./AssetQrLabels";
+import { InventoryDialog } from "./InventoryDialog";
 import {
   downloadCsv,
   exportAssetsCsv,
@@ -24,6 +26,7 @@ type BatchAction =
   | "set_platform"
   | "set_location";
 type Props = {
+  initialAssetCode?: string;
   busy: boolean;
   snapshot: LabAssetsSnapshot;
   userId: string;
@@ -294,6 +297,7 @@ function AssetDrawer({
 }
 
 export function AssetWorkbench({
+  initialAssetCode,
   busy,
   snapshot,
   userId,
@@ -321,6 +325,8 @@ export function AssetWorkbench({
   const [batchAction, setBatchAction] = useState<BatchAction>("set_status");
   const [batchValue, setBatchValue] = useState("maintenance");
   const [importOpen, setImportOpen] = useState(false);
+  const [qrOpen,setQrOpen]=useState(false);
+  const [inventoryOpen,setInventoryOpen]=useState(false);
   const [exportScope, setExportScope] = useState<
     "all" | "filtered" | "selected"
   >("filtered");
@@ -346,6 +352,7 @@ export function AssetWorkbench({
   const allVisibleSelected =
     filtered.length > 0 &&
     filtered.every((item) => selectedCodes.includes(item.code));
+  useEffect(()=>{if(!initialAssetCode)return;const asset=snapshot.assets.find((item)=>item.code===initialAssetCode);if(asset)setSelectedAsset(asset);},[initialAssetCode,snapshot.assets]);
 
   function updateFilter(key: keyof AssetFilters, value: string) {
     setFilters((current) => ({ ...current, [key]: value }));
@@ -553,6 +560,8 @@ export function AssetWorkbench({
           </div>
           {writable ? (
             <>
+              <button className={secondary} onClick={()=>setInventoryOpen(true)} type="button">盘点</button>
+              <button className={secondary} disabled={!selectedCodes.length} onClick={()=>setQrOpen(true)} type="button">打印二维码</button>
               <button
                 className={secondary}
                 onClick={() => setImportOpen(true)}
@@ -869,6 +878,8 @@ export function AssetWorkbench({
         open={importOpen}
         revision={snapshot.revision}
       />
+      <AssetQrLabels assets={snapshot.assets.filter((asset)=>selectedCodes.includes(asset.code))} onClose={()=>setQrOpen(false)} open={qrOpen}/>
+      <InventoryDialog assets={snapshot.assets} onClose={()=>setInventoryOpen(false)} open={inventoryOpen}/>
     </div>
   );
 }

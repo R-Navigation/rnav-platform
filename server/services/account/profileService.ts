@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from "pg";
-import type { ProfileUpdate } from "./profileSchemas.js";
+import type { AdminProfileUpdate, ProfileUpdate } from "./profileSchemas.js";
+import { profileCompleteness } from "./profileCompleteness.js";
 
 export class ProfileConflictError extends Error {
   constructor() { super("Profile version conflict"); this.name = "ProfileConflictError"; }
@@ -19,6 +20,7 @@ type ProfileRow = {
   avatar_asset_id: string | null; avatar_url: string | null; personal_links: unknown;
   avatar_position_x: number; avatar_position_y: number; avatar_zoom: string;
   public_fields: string[]; version: string;
+  account_email?: string | null; profile_content_updated_at?: Date; updated_at?: Date;
 };
 
 function output(row: ProfileRow) {
@@ -34,11 +36,17 @@ function output(row: ProfileRow) {
     avatarAssetId: row.avatar_asset_id, avatarUrl: row.avatar_url,
     avatarPositionX: row.avatar_position_x, avatarPositionY: row.avatar_position_y, avatarZoom: Number(row.avatar_zoom),
     personalLinks: Array.isArray(row.personal_links) ? row.personal_links : [],
-    publicFields: row.public_fields, version: Number(row.version),
+    publicFields: row.public_fields, version: Number(row.version), accountEmail: row.account_email ?? "",
+    updatedAt: row.updated_at ?? null, profileContentUpdatedAt: row.profile_content_updated_at ?? row.updated_at ?? null,
+    completeness: profileCompleteness({ memberStatus: row.member_status, publicVisible: row.public_visible,
+      nameZh: row.name_zh, nameEn: row.name_en, avatarAssetId: row.avatar_asset_id, degreeLevel: row.degree_level,
+      enrollmentYear: row.enrollment_year, graduationYear: row.graduation_year, majorZh: row.major_zh, majorEn: row.major_en,
+      researchInterestsZh: row.research_interests_zh, researchInterestsEn: row.research_interests_en,
+      destinationZh: row.destination_zh, destinationEn: row.destination_en }),
   };
 }
 
-const selectProfile = `SELECT user_profiles.*, users.username, media_assets.url AS avatar_url
+const selectProfile = `SELECT user_profiles.*, users.username, users.email AS account_email, media_assets.url AS avatar_url
   FROM user_profiles JOIN users ON users.id = user_profiles.user_id
   LEFT JOIN media_assets ON media_assets.id = user_profiles.avatar_asset_id AND media_assets.status = 'active'
   WHERE user_profiles.user_id = $1`;
@@ -56,52 +64,58 @@ async function recycleUnreferencedAvatar(client: PoolClient, assetId: string | n
 }
 
 export function createProfileService(pool: Pick<Pool, "query" | "connect">) {
+  async function updateProfileInternal(targetUserId: string, actorUserId: string, body: ProfileUpdate | AdminProfileUpdate, admin: boolean) {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const current = await client.query<ProfileRow>(`SELECT user_profiles.*,users.username,users.email AS account_email,NULL::text avatar_url FROM user_profiles JOIN users ON users.id=user_profiles.user_id WHERE user_profiles.user_id=$1 FOR UPDATE OF user_profiles`, [targetUserId]);
+      if (!current.rows[0]) throw new ProfileConflictError();
+      if (body.avatarAssetId) {
+        const asset = await client.query("SELECT 1 FROM media_assets WHERE id=$1 AND status='active' AND mime_type LIKE 'image/%'", [body.avatarAssetId]);
+        if (!asset.rowCount) throw new ProfileAssetError();
+      }
+      const before = output(current.rows[0]) as Record<string, unknown>;
+      const memberCategory = admin ? (body as AdminProfileUpdate).memberCategory : current.rows[0].member_category;
+      const publicVisible = admin ? (body as AdminProfileUpdate).publicVisible : current.rows[0].public_visible;
+      const updated = await client.query(
+        `UPDATE user_profiles SET member_category=$3,member_status=$4,degree_level=$5,name_zh=$6,name_en=$7,email=$8,phone=$9,bio_zh=$10,bio_en=$11,
+           research_interests_zh=$12,research_interests_en=$13,enrollment_year=$14,graduation_year=$15,
+           major_zh=$16,major_en=$17,thesis_zh=$18,thesis_en=$19,destination_zh=$20,destination_en=$21,
+           avatar_asset_id=$22,avatar_position_x=$23,avatar_position_y=$24,avatar_zoom=$25,
+           personal_links=$26::jsonb,public_fields=$27,public_visible=$28,version=version+1,
+           profile_content_updated_at=now(),updated_at=now()
+         WHERE user_id=$1 AND version=$2`,
+        [targetUserId, body.version, memberCategory, body.memberStatus, body.degreeLevel, body.nameZh, body.nameEn, body.email, body.phone, body.bioZh, body.bioEn,
+          body.researchInterestsZh, body.researchInterestsEn, body.enrollmentYear, body.graduationYear,
+          body.majorZh, body.majorEn, body.thesisZh, body.thesisEn, body.destinationZh, body.destinationEn,
+          body.avatarAssetId, body.avatarPositionX, body.avatarPositionY, body.avatarZoom,
+          JSON.stringify(body.personalLinks), body.publicFields, publicVisible]
+      );
+      if (!updated.rowCount) throw new ProfileConflictError();
+      await client.query("UPDATE users SET display_name=COALESCE(NULLIF($2,''),NULLIF($3,''),username),updated_at=now() WHERE id=$1", [targetUserId, body.nameZh, body.nameEn]);
+      await recycleUnreferencedAvatar(client, current.rows[0].avatar_asset_id === body.avatarAssetId ? null : current.rows[0].avatar_asset_id);
+      const after = { ...body, memberCategory, publicVisible } as Record<string, unknown>;
+      const changedFields = Object.keys(after).filter((key) => key !== "version" && JSON.stringify(before[key]) !== JSON.stringify(after[key]));
+      await client.query("INSERT INTO audit_logs(actor_id,action,target_type,target_id,detail) VALUES($1,$2,'user',$3::text,$4::jsonb)",
+        [actorUserId, admin ? "profile.admin_update" : "profile.update", targetUserId, JSON.stringify({ changedFields })]);
+      const result = await client.query<ProfileRow>(selectProfile, [targetUserId]);
+      await client.query("COMMIT");
+      return output(result.rows[0]);
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally { client.release(); }
+  }
   return {
     async getProfile(userId: string) {
       const result = await pool.query<ProfileRow>(selectProfile, [userId]);
       return result.rows[0] ? output(result.rows[0]) : null;
     },
     async updateProfile(userId: string, body: ProfileUpdate) {
-      const client = await pool.connect();
-      try {
-        await client.query("BEGIN");
-        const current = await client.query<{ avatar_asset_id: string | null }>(
-          "SELECT avatar_asset_id FROM user_profiles WHERE user_id=$1 FOR UPDATE", [userId]
-        );
-        if (body.avatarAssetId) {
-          const asset = await client.query("SELECT 1 FROM media_assets WHERE id=$1 AND status='active' AND mime_type LIKE 'image/%'", [body.avatarAssetId]);
-          if (!asset.rowCount) throw new ProfileAssetError();
-        }
-        const updated = await client.query(
-          `UPDATE user_profiles SET member_status=$3,degree_level=$4,name_zh=$5,name_en=$6,email=$7,phone=$8,bio_zh=$9,bio_en=$10,
-             research_interests_zh=$11,research_interests_en=$12,enrollment_year=$13,graduation_year=$14,
-             major_zh=$15,major_en=$16,thesis_zh=$17,thesis_en=$18,destination_zh=$19,destination_en=$20,
-             avatar_asset_id=$21,avatar_position_x=$22,avatar_position_y=$23,avatar_zoom=$24,
-             personal_links=$25::jsonb,public_fields=$26,version=version+1,updated_at=now()
-           WHERE user_id=$1 AND version=$2`,
-          [userId, body.version, body.memberStatus, body.degreeLevel, body.nameZh, body.nameEn, body.email, body.phone, body.bioZh, body.bioEn,
-            body.researchInterestsZh, body.researchInterestsEn, body.enrollmentYear, body.graduationYear,
-            body.majorZh, body.majorEn, body.thesisZh, body.thesisEn, body.destinationZh, body.destinationEn,
-            body.avatarAssetId, body.avatarPositionX, body.avatarPositionY, body.avatarZoom,
-            JSON.stringify(body.personalLinks), body.publicFields]
-        );
-        if (!updated.rowCount) throw new ProfileConflictError();
-        await client.query(
-          "UPDATE users SET email=$2,display_name=COALESCE(NULLIF($3,''),NULLIF($4,''),username),updated_at=now() WHERE id=$1",
-          [userId, body.email || null, body.nameZh, body.nameEn]
-        );
-        await recycleUnreferencedAvatar(client, current.rows[0]?.avatar_asset_id === body.avatarAssetId ? null : current.rows[0]?.avatar_asset_id ?? null);
-        await client.query(
-          "INSERT INTO audit_logs(actor_id,action,target_type,target_id,detail) VALUES($1,'profile.update','user_profile',$2::text,$3::jsonb)",
-          [userId, userId, JSON.stringify({ publicFields: body.publicFields, links: body.personalLinks.length })]
-        );
-        const result = await client.query<ProfileRow>(selectProfile, [userId]);
-        await client.query("COMMIT");
-        return output(result.rows[0]);
-      } catch (error) {
-        await client.query("ROLLBACK");
-        throw error;
-      } finally { client.release(); }
+      return updateProfileInternal(userId, userId, body, false);
+    },
+    async updateProfileAsAdmin(userId: string, actorUserId: string, body: AdminProfileUpdate) {
+      return updateProfileInternal(userId, actorUserId, body, true);
     },
   };
 }

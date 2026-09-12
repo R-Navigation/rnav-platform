@@ -14,6 +14,7 @@ import {
   validateTransition,
   type ProcurementStatus,
 } from "./workflow.js";
+import { insertNotifications, type NotificationEvent } from "../notifications/notificationService.js";
 
 type CreateInput = z.input<typeof createProcurementSchema>;
 type TransitionInput = z.output<typeof transitionSchema>;
@@ -23,7 +24,7 @@ type CatalogCategoryInput = z.output<typeof catalogCategorySchema>;
 type CatalogSubcategoryInput = z.output<typeof catalogSubcategorySchema>;
 type CatalogItemInput = z.output<typeof catalogItemSchema>;
 type Actor = { id: string; permissions: string[] };
-type Dependencies = { now?: () => Date };
+type Dependencies = { now?: () => Date; notify?: (client: Pick<PoolClient, "query">, event: NotificationEvent) => Promise<void> };
 
 export class ProcurementNotFoundError extends Error {}
 export class ProcurementAccessError extends Error {}
@@ -227,8 +228,8 @@ async function persistProcessing(
     );
     for (const entry of input.spendingEntries) {
       const created = await client.query(
-        `INSERT INTO procurement_spend_entries(request_id,scope,amount,note,created_by,updated_by,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$5,$6::timestamptz,$6::timestamptz) RETURNING id`,
-        [id, entry.scope, entry.amount, entry.note, actor.id, processedAt],
+        `INSERT INTO procurement_spend_entries(request_id,scope,amount,note,order_number,created_by,updated_by,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$6,$7::timestamptz,$7::timestamptz) RETURNING id`,
+        [id, entry.scope, entry.amount, entry.note, entry.orderNumber ?? "", actor.id, processedAt],
       );
       if (entry.scope === "items")
         for (const itemId of entry.itemIds) {
@@ -368,6 +369,17 @@ export function createProcurementService(
   dependencies: Dependencies = {},
 ) {
   const now = dependencies.now ?? (() => new Date());
+  const notify = dependencies.notify ?? insertNotifications;
+  async function permissionUsers(client: Pick<PoolClient, "query">, permission: string, exclude?: string) {
+    const result = await client.query<{ id: string }>(`SELECT DISTINCT users.id FROM users
+      LEFT JOIN user_permission_templates templates ON templates.user_id=users.id
+      LEFT JOIN permission_template_permissions allowed ON allowed.template_key=templates.template_key AND allowed.permission_key=$1
+      LEFT JOIN user_permission_overrides grants ON grants.user_id=users.id AND grants.permission_key=$1 AND grants.decision='grant'
+      LEFT JOIN user_permission_overrides revokes ON revokes.user_id=users.id AND revokes.permission_key=$1 AND revokes.decision='revoke'
+      WHERE users.status='active' AND ($2::uuid IS NULL OR users.id<>$2) AND revokes.user_id IS NULL
+        AND (users.base_tier='super' OR allowed.permission_key IS NOT NULL OR grants.permission_key IS NOT NULL)`, [permission, exclude ?? null]);
+    return result.rows.map((row) => row.id).filter(Boolean);
+  }
   return {
     async listCatalog(query: CatalogQuery, actor: Actor) {
       if (query.includeInactive) requireCatalogManager(actor);
@@ -879,7 +891,7 @@ export function createProcurementService(
           [id],
         ),
         pool.query(
-          `SELECT entries.id,entries.scope,entries.amount,entries.note,
+          `SELECT entries.id,entries.scope,entries.amount,entries.note,entries.order_number,
           COALESCE(array_agg(entry_items.item_id ORDER BY request_items.sort_order) FILTER (WHERE entry_items.item_id IS NOT NULL),ARRAY[]::uuid[]) item_ids
           FROM procurement_spend_entries entries
           LEFT JOIN procurement_spend_entry_items entry_items ON entry_items.entry_id=entries.id
@@ -920,6 +932,7 @@ export function createProcurementService(
           "INSERT INTO audit_logs(actor_id,action,target_type,target_id,detail) VALUES($1,'procurement.create','procurement_request',$2,$3)",
           [actorId, row.id, JSON.stringify({ requestNo: row.request_no })],
         );
+        await notify(client, { eventKey: `procurement:${row.id}:submitted`, type: "procurement.submitted", title: "有新的采购申请待审批", message: row.request_no, href: `/console/procurements?request=${row.id}`, userIds: await permissionUsers(client, "procurements.review", actorId) });
         return { id: row.id, requestNo: row.request_no };
       });
     },
@@ -963,6 +976,7 @@ export function createProcurementService(
           "INSERT INTO audit_logs(actor_id,action,target_type,target_id,detail) VALUES($1,'procurement.revise','procurement_request',$2,$3::jsonb)",
           [actor.id, id, JSON.stringify({ requestNo: request.request_no })],
         );
+        await notify(client, { eventKey: `procurement:${id}:resubmitted:${submittedAt.toISOString()}`, type: "procurement.submitted", title: "采购申请已重新提交", message: request.request_no, href: `/console/procurements?request=${id}`, userIds: await permissionUsers(client, "procurements.review", actor.id) });
         return { id, requestNo: request.request_no, status: "submitted" };
       });
     },
@@ -1116,6 +1130,8 @@ export function createProcurementService(
             JSON.stringify({ status: next, atomic: Boolean(input) }),
           ],
         );
+        const owner = await client.query<{ requester_id: string }>("SELECT requester_id FROM procurement_requests WHERE id=$1", [id]);
+        await notify(client, { eventKey: `procurement:${id}:${next}`, type: `procurement.${next}`, title: `采购申请状态更新：${next}`, href: `/console/procurements?request=${id}`, userIds: owner.rows[0] ? [owner.rows[0].requester_id] : [] });
         return { id, status: next };
       });
     },
@@ -1144,6 +1160,8 @@ export function createProcurementService(
           "INSERT INTO audit_logs(actor_id,action,target_type,target_id,detail) VALUES($1,'procurement.received.complete','procurement_request',$2,'{}'::jsonb)",
           [actor.id, id],
         );
+        const owner = await client.query<{ requester_id: string }>("SELECT requester_id FROM procurement_requests WHERE id=$1", [id]);
+        await notify(client, { eventKey: `procurement:${id}:received`, type: "procurement.received", title: "采购已确认收货", href: `/console/procurements?request=${id}`, userIds: owner.rows[0] ? [owner.rows[0].requester_id] : [] });
         return { id, status: "received" };
       });
     },
@@ -1221,6 +1239,7 @@ export function createProcurementService(
           "INSERT INTO audit_logs(actor_id,action,target_type,target_id,detail) VALUES($1,'procurement.transition','procurement_request',$2,$3)",
           [actor.id, id, JSON.stringify({ from: request.status, to: next })],
         );
+        await notify(client, { eventKey: `procurement:${id}:${next}`, type: `procurement.${next}`, title: `采购申请状态更新：${next}`, message: input.note, href: `/console/procurements?request=${id}`, userIds: [request.requester_id] });
         return { id, status: next };
       });
     },

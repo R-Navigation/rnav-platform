@@ -5,6 +5,10 @@ import { requirePermission } from "../middleware/requirePermission.js";
 import { createRequireSameOrigin } from "../middleware/requireSameOrigin.js";
 import {
   createUserSchema,
+  accountEmailSchema,
+  adminProfileUpdateSchema,
+  convertAlumniSchema,
+  importUsersSchema,
   publicProfileAdminSchema,
   statusSchema,
   tierSchema,
@@ -15,13 +19,16 @@ import {
   UserAdminError,
   type UserAdminService,
 } from "../services/user-admin/userAdminService.js";
+import { ProfileAssetError, ProfileConflictError, type ProfileService } from "../services/account/profileService.js";
 export function createUsersRouter({
   authMiddleware,
   service,
+  profileService,
   trustProxy,
 }: {
   authMiddleware: RequestHandler;
   service: UserAdminService;
+  profileService?: ProfileService;
   trustProxy: boolean;
 }) {
   const router = Router(),
@@ -40,11 +47,13 @@ export function createUsersRouter({
       });
     else if (e instanceof UserAdminError)
       res.status(e.status).json({ code: e.code, error: e.message });
+    else if (e instanceof ProfileConflictError) res.status(409).json({ code: "VERSION_CONFLICT", error: e.message });
+    else if (e instanceof ProfileAssetError) res.status(400).json({ code: "AVATAR_INVALID", error: e.message });
     else next(e);
   };
   const canList: RequestHandler = (req, res, next) =>
     req.authUser?.permissions.some(
-      (p) => p === "users.read" || p === "permissions.write",
+      (p) => p === "users.read" || p === "users.write" || p === "permissions.write" || p === "site.members.write",
     )
       ? next()
       : res.status(403).json({ error: "Permission denied" });
@@ -66,6 +75,14 @@ export function createUsersRouter({
       handle(e, res, next);
     }
   });
+  router.get("/api/users/:id/profile", requirePermission("site.members.write"), async (r, res, next) => {
+    try { if (!profileService) throw new Error("Profile service unavailable"); const profile = await profileService.getProfile(userIdSchema.parse(r.params.id)); profile ? res.json(profile) : res.status(404).json({ error: "Profile not found" }); }
+    catch (e) { handle(e, res, next); }
+  });
+  router.put("/api/users/:id/profile", requirePermission("site.members.write"), same, async (r, res, next) => {
+    try { if (!profileService) throw new Error("Profile service unavailable"); res.json(await profileService.updateProfileAsAdmin(userIdSchema.parse(r.params.id), actor(r).id, adminProfileUpdateSchema.parse(r.body))); }
+    catch (e) { handle(e, res, next); }
+  });
   router.post(
     "/api/users",
     requirePermission("users.write"),
@@ -82,6 +99,22 @@ export function createUsersRouter({
       }
     },
   );
+  router.put("/api/users/:id/account-email", requirePermission("users.write"), same, async (r, res, next) => {
+    try { await service.setAccountEmail(userIdSchema.parse(r.params.id), accountEmailSchema.parse(r.body).email, actor(r)); res.status(204).end(); }
+    catch (e) { handle(e, res, next); }
+  });
+  router.post("/api/users/:id/convert-alumni", requirePermission("site.members.write"), same, async (r, res, next) => {
+    try { convertAlumniSchema.parse(r.body); res.json(await service.convertToAlumni(userIdSchema.parse(r.params.id), actor(r))); }
+    catch (e) { handle(e, res, next); }
+  });
+  router.post("/api/users/import", requirePermission("users.write"), same, async (r, res, next) => {
+    try { res.status(201).json(await service.importUsers(importUsersSchema.parse(r.body), actor(r))); }
+    catch (e) { handle(e, res, next); }
+  });
+  router.post("/api/users/import/validate", requirePermission("users.write"), same, async (r, res, next) => {
+    try { res.json(await service.validateImportUsers(importUsersSchema.parse(r.body), actor(r))); }
+    catch (e) { handle(e, res, next); }
+  });
   router.put(
     "/api/users/:id/status",
     requirePermission("users.write"),

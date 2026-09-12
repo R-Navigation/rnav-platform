@@ -8,6 +8,7 @@ import { ConflictError, ImportValidationError, RevisionConflictError, type LabAs
 import {
   assetBatchRequestSchema,assetImportRequestSchema,assetRequestSchema,codeParamSchema,deleteRequestSchema,deviceTypeRequestSchema,noteIdParamSchema,noteRequestSchema,pageRequestSchema,
   platformRequestSchema,platformTypeRequestSchema,requestIdParamSchema,usageRequestSchema,usageReviewSchema,
+  inventoryBatchIdSchema,inventoryCreateSchema,inventoryScanSchema,
 } from "../services/lab-assets/schemas.js";
 
 type Options={authMiddleware:RequestHandler;service:LabAssetsService;trustProxy:boolean};
@@ -34,6 +35,11 @@ export function createLabAssetsRouter({authMiddleware,service,trustProxy}:Option
   router.delete("/api/lab-assets/assets/:code",...mutation(deleteRequestSchema,(r,b)=>service.deleteAsset(code(r),b.expectedRevision,actorId(r))));
   router.post("/api/lab-assets/usage-requests",sameOrigin,async(request,response,next)=>{try{if(!canRead(request)){response.status(403).json({error:"Permission denied"});return;}const body=usageRequestSchema.parse(request.body);response.json(await service.submitUsageRequest(body.assetCode,body.reason,body.expectedRevision,actorId(request)));}catch(error){handle(response,next,error)}});
   router.post("/api/lab-assets/usage-requests/:id/review",requirePermission("lab_assets.write"),sameOrigin,async(request,response,next)=>{try{const body=usageReviewSchema.parse(request.body);response.json(await service.reviewUsageRequest(requestIdParamSchema.parse(request.params.id),body,body.expectedRevision,actorId(request)));}catch(error){handle(response,next,error)}});
+  router.get("/api/lab-assets/inventory",requirePermission("lab_assets.write"),async(request,response,next)=>{try{response.json({batches:await service.listInventoryBatches()});}catch(error){handle(response,next,error)}});
+  router.post("/api/lab-assets/inventory",requirePermission("lab_assets.write"),sameOrigin,async(request,response,next)=>{try{const body=inventoryCreateSchema.parse(request.body);response.status(201).json(await service.createInventoryBatch(body.name,body.assetCodes,actorId(request)));}catch(error){handle(response,next,error)}});
+  router.get("/api/lab-assets/inventory/:id",requirePermission("lab_assets.write"),async(request,response,next)=>{try{response.json(await service.getInventoryBatch(inventoryBatchIdSchema.parse(request.params.id)));}catch(error){handle(response,next,error)}});
+  router.post("/api/lab-assets/inventory/:id/scan",requirePermission("lab_assets.write"),sameOrigin,async(request,response,next)=>{try{const body=inventoryScanSchema.parse(request.body);response.json(await service.scanInventoryAsset(inventoryBatchIdSchema.parse(request.params.id),body.assetCode,actorId(request)));}catch(error){handle(response,next,error)}});
+  router.post("/api/lab-assets/inventory/:id/complete",requirePermission("lab_assets.write"),sameOrigin,async(request,response,next)=>{try{response.json(await service.completeInventoryBatch(inventoryBatchIdSchema.parse(request.params.id),actorId(request)));}catch(error){handle(response,next,error)}});
   // Compatibility endpoints for previous clients; the new console stores remarks directly on records.
   router.post("/api/lab-assets/platforms/:code/notes",...mutation(noteRequestSchema,(r,b)=>service.addPlatformNote(code(r),b,b.expectedRevision,actorId(r))));
   router.delete("/api/lab-assets/platforms/:code/notes/:noteId",...mutation(deleteRequestSchema,(r,b)=>service.deletePlatformNote(code(r),noteId(r),b.expectedRevision,actorId(r))));

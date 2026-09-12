@@ -32,6 +32,7 @@ type Props = {
   initialView?: "overview" | "platforms" | "assets" | "requests";
   permissions: string[];
   userId: string;
+  initialAssetCode?: string;
 };
 type View = "overview" | "platforms" | "assets" | "requests";
 type Editor =
@@ -205,6 +206,7 @@ function assignment(item: LabAsset) {
 }
 
 export function LabAssetsConsole({
+  initialAssetCode,
   initialView = "overview",
   permissions,
   userId,
@@ -878,6 +880,7 @@ export function LabAssetsConsole({
       {view === "assets" ? (
         <AssetWorkbench
           busy={busy}
+          initialAssetCode={initialAssetCode}
           onAdd={() =>
             openEditor({
               kind: "asset",

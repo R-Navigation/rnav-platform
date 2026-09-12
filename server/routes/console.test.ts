@@ -25,7 +25,7 @@ async function requestDashboard(authUser?: AuthenticatedUser) {
       async getDashboard(user) {
         return {
           user: { id: user.id, displayName: user.displayName, tier: "normal", roleLabels: ["普通成员"] },
-          tasks: { procurementReviews: 0, procurementPurchases: 0, labUsageReviews: 0 },
+        tasks: { procurementReviews: 0, procurementPurchases: 0, labUsageReviews: 0, incompleteProfiles: 0, staleProfiles: 0 },
           mine: { procurementOpen: 1, labUsageOpen: 0, assetsInUse: 0 },
           recentItems: [],
         };
