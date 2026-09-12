@@ -14,6 +14,9 @@ import {
   teamFallback,
 } from "@/features/public-site/fallbacks";
 import { sanitizeMonitorPreview } from "@/features/public-site/monitor-preview";
+import { publicMetadata } from "@/lib/publicMetadata";
+
+export const metadata = publicMetadata("RNAV Lab", "RNAV 实验室的研究方向、团队成员、科研设施与最新动态。", "/");
 
 export default async function Page() {
   const bootstrapPromise = getPublicData("bootstrap", fallbackBootstrap);
