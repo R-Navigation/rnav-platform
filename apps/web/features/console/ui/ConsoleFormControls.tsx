@@ -1,0 +1,8 @@
+import { forwardRef, type InputHTMLAttributes, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
+import { ConsoleIcon } from "./ConsoleIcon";
+
+const control = "w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm outline-none placeholder:text-slate-400 focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100 disabled:cursor-not-allowed disabled:bg-slate-100";
+export const ConsoleInput = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(function ConsoleInput({ className = "", ...props }, ref) { return <input className={`min-h-10 ${control} ${className}`} ref={ref} {...props}/>; });
+export const ConsoleSelect = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSelectElement>>(function ConsoleSelect({ className = "", ...props }, ref) { return <select className={`min-h-10 ${control} ${className}`} ref={ref} {...props}/>; });
+export const ConsoleTextarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(function ConsoleTextarea({ className = "", ...props }, ref) { return <textarea className={`min-h-28 py-2.5 ${control} ${className}`} ref={ref} {...props}/>; });
+export const ConsoleSearchInput = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(function ConsoleSearchInput({ className = "", ...props }, ref) { return <label className="relative block"><span className="sr-only">{props["aria-label"] || "搜索"}</span><ConsoleIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" name="search"/><input className={`min-h-10 ${control} pl-9 ${className}`} ref={ref} type="search" {...props}/></label>; });

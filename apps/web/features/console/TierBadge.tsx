@@ -8,7 +8,7 @@ const tierLabels: Record<ConsoleTier, string> = {
 
 export function TierBadge({ tier }: { tier: ConsoleTier }) {
   return (
-    <span className="inline-flex border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-xs font-bold text-cyan-800">
+    <span className="inline-flex rounded-full border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-[11px] font-semibold text-cyan-800">
       {tierLabels[tier]}
     </span>
   );

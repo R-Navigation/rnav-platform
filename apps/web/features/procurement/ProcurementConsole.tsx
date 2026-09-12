@@ -101,11 +101,11 @@ type BuilderDraft = {
 };
 
 const field =
-  "mt-1 w-full border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 focus:border-cyan-700 focus:outline-none";
+  "mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 focus:border-cyan-700 focus:outline-none focus:ring-2 focus:ring-cyan-100";
 const primary =
-  "bg-blue-950 px-4 py-2 text-sm font-bold text-white disabled:bg-slate-400";
+  "rounded-lg bg-cyan-700 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-cyan-800 disabled:bg-slate-400";
 const secondary =
-  "border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:border-cyan-700";
+  "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:border-cyan-700";
 const statusLabels: Record<ProcurementStatus, string> = {
   draft: "草稿",
   submitted: "待处理",
@@ -198,7 +198,7 @@ function ItemTags({ item }: { item: ProcurementItem }) {
     <div className="flex flex-wrap gap-1.5">
       {tags.map((tag) => (
         <span
-          className="border border-cyan-200 bg-cyan-50 px-2 py-1 text-xs font-semibold text-cyan-950"
+          className="rounded-full border border-cyan-200 bg-cyan-50 px-2 py-1 text-xs font-semibold text-cyan-950"
           key={tag.key}
         >
           <span className="text-cyan-700">{tag.label}</span> {tag.value}
@@ -214,8 +214,8 @@ function GroupedItems({ items }: { items: ProcurementItem[] }) {
   return (
     <div className="space-y-5">
       {groups.map((group) => (
-        <section className="border border-slate-200" key={group.category}>
-          <h3 className="border-b border-slate-200 bg-blue-950 px-4 py-2.5 text-sm font-bold text-white">
+        <section className="overflow-hidden rounded-xl border border-slate-200" key={group.category}>
+          <h3 className="border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-bold text-slate-800">
             {group.category}
           </h3>
           {group.subcategories.map((subcategory) => (
@@ -1037,19 +1037,19 @@ function RequestList({
   onSelect(id: string): void;
 }) {
   return (
-    <aside className="border border-slate-200 bg-white xl:sticky xl:top-6 xl:max-h-[calc(100vh-3rem)] xl:overflow-y-auto">
+    <aside className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm xl:sticky xl:top-20 xl:max-h-[calc(100vh-6rem)] xl:overflow-y-auto">
       <div className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-4 py-3">
         <div className="flex items-center justify-between">
           <h2 className="font-bold text-blue-950">采购请求</h2>
           <span className="text-xs text-slate-500">{requests.length} 条</span>
         </div>
       </div>
-      <div className="divide-y divide-slate-200">
+      <div className="space-y-1 p-1.5">
         {requests.map((request) => {
           const selected = selectedId === request.id;
           return (
             <button
-              className={`w-full border-l-4 px-4 py-4 text-left transition-colors ${selected ? "border-cyan-700 bg-cyan-50" : "border-transparent hover:bg-slate-50"}`}
+              className={`w-full rounded-lg px-3 py-3 text-left transition-colors ${selected ? "bg-cyan-50 ring-1 ring-inset ring-cyan-100" : "hover:bg-slate-50"}`}
               key={request.id}
               onClick={() => onSelect(request.id)}
               type="button"
@@ -1059,7 +1059,7 @@ function RequestList({
                   {request.title}
                 </strong>
                 <span
-                  className={`shrink-0 px-2 py-1 text-[11px] font-bold ${statusStyles[request.status]}`}
+                  className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-bold ${statusStyles[request.status]}`}
                 >
                   {statusLabels[request.status]}
                 </span>
@@ -1261,11 +1261,11 @@ export function ProcurementConsole({
 
   return (
     <section aria-labelledby="procurement-heading">
-      <header className="flex flex-wrap items-end justify-between gap-5 border-b border-slate-300 pb-5">
+      <header className="flex flex-wrap items-end justify-between gap-5 border-b border-slate-200 pb-5">
         <div>
-          <p className="text-sm font-semibold text-cyan-800">内部业务</p>
+          <p className="text-xs font-semibold text-cyan-800">内部业务</p>
           <h1
-            className="mt-2 font-serif text-3xl font-bold text-slate-950"
+            className="mt-1.5 text-3xl font-bold tracking-tight text-slate-950"
             id="procurement-heading"
           >
             零件采购
@@ -1294,7 +1294,7 @@ export function ProcurementConsole({
       </header>
       <nav
         aria-label="采购模块视图"
-        className="mt-5 flex gap-1 border-b border-slate-300"
+        className="mt-5 flex gap-1 border-b border-slate-200"
       >
         <button
           className={`border-b-2 px-3 py-2.5 text-sm font-semibold ${view === "requests" ? "border-cyan-700 text-cyan-800" : "border-transparent text-slate-600"}`}
@@ -1339,7 +1339,7 @@ export function ProcurementConsole({
             />
           ) : null}
           {!showForm && capability.create && recentPurchases.length ? (
-            <section className="mt-5 border border-slate-200 bg-white p-4">
+            <section className="mt-5 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <h2 className="font-bold text-blue-950">最近购买</h2>
               <p className="mt-1 text-xs text-slate-500">
                 直接复用历史清单，减少重复填写。
@@ -1347,7 +1347,7 @@ export function ProcurementConsole({
               <div className="mt-3 grid gap-3 md:grid-cols-3">
                 {recentPurchases.map((request) => (
                   <button
-                    className="border border-slate-200 p-3 text-left hover:border-cyan-700 hover:bg-cyan-50"
+                    className="rounded-lg border border-slate-200 p-3 text-left hover:border-cyan-700 hover:bg-cyan-50"
                     key={request.id}
                     onClick={() => void reuseRequest(request, "copy")}
                     type="button"
@@ -1368,9 +1368,9 @@ export function ProcurementConsole({
             </section>
           ) : null}
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex border border-slate-300 bg-white p-1">
+            <div className="flex overflow-x-auto rounded-lg border border-slate-300 bg-white p-1">
               <button
-                className={`px-3 py-2 text-sm font-semibold ${scope === "mine" ? "bg-blue-950 text-white" : "text-slate-600"}`}
+                className={`rounded-md px-3 py-2 text-sm font-semibold ${scope === "mine" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50"}`}
                 onClick={() => {
                   setScope("mine");
                   setQueue("all");
@@ -1382,7 +1382,7 @@ export function ProcurementConsole({
               </button>
               {capability.readAll ? (
                 <button
-                  className={`px-3 py-2 text-sm font-semibold ${scope === "all" && queue === "all" ? "bg-blue-950 text-white" : "text-slate-600"}`}
+                  className={`rounded-md px-3 py-2 text-sm font-semibold ${scope === "all" && queue === "all" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50"}`}
                   onClick={() => {
                     setScope("all");
                     setQueue("all");
@@ -1395,7 +1395,7 @@ export function ProcurementConsole({
               ) : null}
               {capability.review ? (
                 <button
-                  className={`px-3 py-2 text-sm font-semibold ${queue === "review" ? "bg-blue-950 text-white" : "text-slate-600"}`}
+                  className={`rounded-md px-3 py-2 text-sm font-semibold ${queue === "review" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50"}`}
                   onClick={() => {
                     setScope("all");
                     setQueue("review");
@@ -1408,7 +1408,7 @@ export function ProcurementConsole({
               ) : null}
               {capability.purchase ? (
                 <button
-                  className={`px-3 py-2 text-sm font-semibold ${queue === "purchase" ? "bg-blue-950 text-white" : "text-slate-600"}`}
+                  className={`rounded-md px-3 py-2 text-sm font-semibold ${queue === "purchase" ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50"}`}
                   onClick={() => {
                     setScope("all");
                     setQueue("purchase");
@@ -1429,7 +1429,7 @@ export function ProcurementConsole({
             </button>
           </div>
 
-          <div className="mt-6 grid items-start gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
+          <div className="mt-5 grid items-start gap-5 xl:grid-cols-[320px_minmax(0,1fr)]">
             <RequestList
               loading={loading}
               onSelect={(id) => void openRequest(id)}
@@ -1437,11 +1437,11 @@ export function ProcurementConsole({
               selectedId={selected?.id}
             />
             {selectedLoading ? (
-              <main className="grid min-h-96 place-items-center border border-slate-200 bg-white p-8 text-sm text-slate-500">
+              <main className="grid min-h-96 place-items-center rounded-xl border border-slate-200 bg-white p-8 text-sm text-slate-500 shadow-sm">
                 正在加载采购请求...
               </main>
             ) : selected ? (
-              <main className="min-w-0 border border-slate-200 bg-white p-5 lg:p-7">
+              <main className="min-w-0 rounded-xl border border-slate-200 bg-white p-5 shadow-sm lg:p-7">
                 <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 pb-5">
                   <div className="min-w-0">
                     <p className="font-mono text-xs text-slate-500">
@@ -1455,7 +1455,7 @@ export function ProcurementConsole({
                     </p>
                   </div>
                   <span
-                    className={`px-3 py-2 text-sm font-bold ${statusStyles[selected.status]}`}
+                    className={`rounded-full px-3 py-2 text-sm font-bold ${statusStyles[selected.status]}`}
                   >
                     {statusLabels[selected.status]}
                   </span>
@@ -1552,7 +1552,7 @@ export function ProcurementConsole({
                   </div>
                 ) : null}
                 {actions.length ? (
-                  <div className="sticky bottom-0 z-20 mt-5 border-t border-slate-300 bg-white/95 py-4 backdrop-blur">
+                  <div className="sticky bottom-3 z-20 mt-5 rounded-xl border border-slate-200 bg-white/95 p-4 shadow-lg backdrop-blur">
                     <label className="text-sm font-semibold">
                       {actions.some(
                         (action) => action.action === "request_revision",
@@ -1572,7 +1572,7 @@ export function ProcurementConsole({
                             action.action === "reject" ||
                             action.action === "cancel" ||
                             action.action === "request_revision"
-                              ? "border border-red-300 bg-white px-3 py-2 text-sm font-semibold text-red-700"
+                              ? "rounded-lg border border-red-300 bg-white px-3 py-2 text-sm font-semibold text-red-700"
                               : primary
                           }
                           disabled={
@@ -1633,7 +1633,7 @@ export function ProcurementConsole({
                 </form>
               </main>
             ) : (
-              <main className="grid min-h-96 place-items-center border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
+              <main className="grid min-h-96 place-items-center rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
                 <div>
                   <p className="text-lg font-bold text-slate-700">
                     请选择一个采购请求开始处理

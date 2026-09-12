@@ -6,6 +6,7 @@ import { DiscardDialog } from "./DiscardDialog";
 import { PageEditor } from "./PageEditor";
 import { HomeComposer } from "./HomeComposer";
 import { readSiteAdminError } from "./api";
+import { ConsoleAlert, ConsoleButton, ConsoleIcon } from "@/features/console/ui";
 import {
   applyConflictSnapshot,
   applySavedModule,
@@ -147,6 +148,14 @@ export function SiteContentConsole({ permissions }: Props) {
     setSaveState("idle");
   }
 
+  function formatJson() {
+    const result = parseJsonEditorValue(jsonSource);
+    if (!result.ok) { setJsonError(result.error); return; }
+    setJsonSource(JSON.stringify(result.value, null, 2));
+    setDraftValue(result.value);
+    setJsonError("");
+  }
+
   async function saveCurrentModule() {
     if (!selectedModule || jsonError || !dirty) return;
     setSaveState("saving");
@@ -285,11 +294,11 @@ export function SiteContentConsole({ permissions }: Props) {
 
   return (
     <section aria-labelledby="site-console-heading">
-      <div className="flex flex-wrap items-end justify-between gap-5 border-b border-slate-300 pb-5">
+      <div className="flex flex-wrap items-end justify-between gap-5 border-b border-slate-200 pb-5">
         <div>
-          <p className="text-sm font-semibold text-cyan-700">控制台模块</p>
+          <p className="text-xs font-semibold text-cyan-700">控制台模块</p>
           <h1
-            className="mt-2 font-serif text-3xl font-bold text-slate-950"
+            className="mt-1.5 text-3xl font-bold tracking-tight text-slate-950"
             id="site-console-heading"
           >
             官网内容
@@ -308,8 +317,7 @@ export function SiteContentConsole({ permissions }: Props) {
                   ? "有未保存更改"
                   : "无未保存更改"}
           </span>
-          <button
-            className="bg-blue-950 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-400"
+          <ConsoleButton
             disabled={
               !dirty ||
               saveState === "saving" ||
@@ -318,9 +326,10 @@ export function SiteContentConsole({ permissions }: Props) {
             }
             onClick={() => void saveCurrentModule()}
             type="button"
+            variant="primary"
           >
             保存当前模块
-          </button>
+          </ConsoleButton>
         </div>
       </div>
 
@@ -365,12 +374,12 @@ export function SiteContentConsole({ permissions }: Props) {
           </div>
           <div
             aria-label="编辑模式"
-            className="flex border border-slate-300"
+            className="flex items-center gap-1 rounded-lg border border-slate-200 bg-white p-1"
             role="group"
           >
             <button
               aria-pressed={mode === "form"}
-              className={`px-3 py-2 text-sm font-semibold ${mode === "form" ? "bg-slate-900 text-white" : "bg-white text-slate-700"}`}
+              className={`rounded-md px-3 py-1.5 text-sm font-semibold ${mode === "form" ? "bg-slate-100 text-slate-900" : "text-slate-500 hover:text-slate-800"}`}
               onClick={() => setMode("form")}
               type="button"
             >
@@ -378,27 +387,29 @@ export function SiteContentConsole({ permissions }: Props) {
             </button>
             <button
               aria-pressed={mode === "json"}
-              className={`border-l border-slate-300 px-3 py-2 text-sm font-semibold ${mode === "json" ? "bg-slate-900 text-white" : "bg-white text-slate-700"}`}
+              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold ${mode === "json" ? "bg-amber-50 text-amber-900" : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"}`}
               onClick={() => setMode("json")}
               type="button"
             >
-              JSON
+              <ConsoleIcon name="settings"/>高级
             </button>
           </div>
         </div>
 
         <div className="mt-6" role="tabpanel">
           {mode === "json" ? (
-            <label className="block text-sm font-semibold text-slate-700">
-              高级 JSON 内容
+            <div>
+              <ConsoleAlert tone="warning" title="高级编辑模式">这里会直接修改模块的原始 JSON。通常应优先使用表单；保存前请确认字段结构和数据类型。</ConsoleAlert>
+              <div className="mt-4 flex items-center justify-between"><label className="text-sm font-semibold text-slate-700" htmlFor="site-json-editor">高级 JSON 内容</label><ConsoleButton onClick={formatJson} size="sm" type="button">格式化 JSON</ConsoleButton></div>
               <textarea
                 aria-invalid={Boolean(jsonError)}
-                className="mt-2 min-h-[32rem] w-full border border-slate-300 bg-slate-950 p-4 font-mono text-sm leading-6 text-slate-100 outline-none focus:border-cyan-500"
+                className="mt-2 min-h-[32rem] w-full rounded-lg border border-slate-700 bg-slate-950 p-4 font-mono text-sm leading-6 text-slate-100 outline-none focus:border-cyan-500"
+                id="site-json-editor"
                 onChange={(event) => updateJson(event.target.value)}
                 spellCheck={false}
                 value={jsonSource}
               />
-            </label>
+            </div>
           ) : selectedModule.key === "home" ? (
             <HomeComposer
               modules={modules}

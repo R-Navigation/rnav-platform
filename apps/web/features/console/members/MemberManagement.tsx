@@ -7,11 +7,14 @@ import {
   useState,
   type FormEvent,
 } from "react";
+import Image from "next/image";
 import { consoleApi } from "@/lib/consoleApi";
 import { MemberProfileEditor } from "./MemberProfileEditor";
 import { MemberImportDialog } from "./MemberImportDialog";
 import { AccountEmailEditor } from "./AccountEmailEditor";
 import { groupMembers,memberGroups,type MemberGroupKey } from "./memberGrouping";
+import { ConsoleIcon } from "@/features/console/ui/ConsoleIcon";
+import { ConsoleSearchInput } from "@/features/console/ui/ConsoleFormControls";
 
 export type Member = {
   id: string;
@@ -77,11 +80,11 @@ type AuditEntry = {
 type Tab = "profile" | "account" | "roles" | "security" | "audit";
 
 const input =
-  "w-full border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-cyan-700";
+  "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-cyan-700 focus:ring-2 focus:ring-cyan-100";
 const primary =
-  "bg-blue-950 px-4 py-2 text-sm font-bold text-white disabled:bg-slate-400";
+  "rounded-lg bg-cyan-700 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-cyan-800 disabled:bg-slate-400";
 const secondary =
-  "border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:border-cyan-700 disabled:opacity-40";
+  "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:border-cyan-700 disabled:opacity-40";
 const categories: Record<string, string> = {
   advisor: "导师",
   postdoc: "博士后",
@@ -278,13 +281,13 @@ export function MemberManagement({
 
   return (
     <section aria-labelledby="members-heading">
-      <header className="flex flex-wrap items-end justify-between gap-4 border-b border-slate-300 pb-5">
+      <header className="flex flex-wrap items-end justify-between gap-4 border-b border-slate-200 pb-5">
         <div>
-          <p className="text-sm font-semibold text-cyan-800">
+          <p className="text-xs font-semibold text-cyan-800">
             账号、资料与岗位权限
           </p>
           <h1
-            className="mt-1 font-serif text-3xl font-bold text-blue-950"
+            className="mt-1 text-3xl font-bold tracking-tight text-slate-950"
             id="members-heading"
           >
             成员管理
@@ -293,7 +296,7 @@ export function MemberManagement({
             围绕成员统一管理账号生命周期与岗位职责；成员自行维护的学术资料仅供查看。
           </p>
         </div>
-        {canWriteUsers ? <div className="flex gap-2"><button className={secondary} onClick={()=>setShowImport(true)} type="button">批量导入</button><button className={primary} onClick={() => {setCreateAccountKind("person");setShowCreate(true)}} type="button">+ 创建账号</button></div> : null}
+        {canWriteUsers ? <div className="flex gap-2"><button className={secondary} onClick={()=>setShowImport(true)} type="button"><span className="inline-flex items-center gap-2"><ConsoleIcon name="upload"/>批量导入</span></button><button className={primary} onClick={() => {setCreateAccountKind("person");setShowCreate(true)}} type="button"><span className="inline-flex items-center gap-2"><ConsoleIcon name="plus"/>创建账号</span></button></div> : null}
       </header>
       {error ? (
         <p
@@ -311,9 +314,9 @@ export function MemberManagement({
           {message}
         </p>
       ) : null}
-      <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <input
-          className={input}
+      <div className="mt-5 grid gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-2 xl:grid-cols-4">
+        <ConsoleSearchInput
+          aria-label="搜索成员"
           onChange={(event) => setSearch(event.target.value)}
           placeholder="搜索姓名 / 用户名 / 邮箱"
           value={search}
@@ -356,15 +359,15 @@ export function MemberManagement({
           ))}
         </select>
       </div>
-      <div className="mt-6 grid items-start gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
-        <aside className="border border-slate-200 bg-white xl:sticky xl:top-6 xl:max-h-[calc(100vh-3rem)] xl:overflow-y-auto">
+      <div className="mt-5 grid items-start gap-5 xl:grid-cols-[340px_minmax(0,1fr)]">
+        <aside className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm xl:sticky xl:top-20 xl:max-h-[calc(100vh-6rem)] xl:overflow-y-auto">
           <div className="sticky top-0 border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
             {visibleMembers.length} 位成员
           </div>
           <div>
-            {groupedMembers.filter((group)=>group.members.length).map((group)=><section className="border-b border-slate-200" key={group.key}><button className="flex w-full items-center justify-between bg-slate-50 px-4 py-2.5 text-left text-xs font-bold text-slate-700" onClick={()=>setCollapsedGroups((current)=>{const next=new Set(current);if(next.has(group.key))next.delete(group.key);else next.add(group.key);return next})} type="button"><span>{group.label} · {group.members.length}</span><span aria-hidden>{collapsedGroups.has(group.key)?"＋":"−"}</span></button>{collapsedGroups.has(group.key)?null:<div className="divide-y divide-slate-100">{group.members.map((member) => (
+            {groupedMembers.filter((group)=>group.members.length).map((group)=><section className="border-b border-slate-200 last:border-0" key={group.key}><button aria-expanded={!collapsedGroups.has(group.key)} className="flex w-full items-center justify-between bg-slate-50 px-4 py-2.5 text-left text-xs font-bold text-slate-600" onClick={()=>setCollapsedGroups((current)=>{const next=new Set(current);if(next.has(group.key))next.delete(group.key);else next.add(group.key);return next})} type="button"><span>{group.label} · {group.members.length}</span><span aria-hidden>{collapsedGroups.has(group.key)?"＋":"−"}</span></button>{collapsedGroups.has(group.key)?null:<div className="space-y-1 p-1.5">{group.members.map((member) => (
               <button
-                className={`w-full border-l-4 p-4 text-left ${selectedId === member.id ? "border-cyan-700 bg-cyan-50" : "border-transparent hover:bg-slate-50"}`}
+                className={`w-full rounded-lg p-3 text-left ${selectedId === member.id ? "bg-cyan-50 ring-1 ring-inset ring-cyan-100" : "hover:bg-slate-50"}`}
                 key={member.id}
                 onClick={() => {
                   setSelectedId(member.id);
@@ -377,17 +380,18 @@ export function MemberManagement({
                 }}
                 type="button"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
+                <div className="flex items-start gap-3">
+                  <span className="relative grid size-9 shrink-0 place-items-center overflow-hidden rounded-full bg-slate-200 text-xs font-bold text-slate-600">{member.avatarUrl ? <Image alt="" className="object-cover" fill sizes="36px" src={member.avatarUrl} unoptimized/> : (member.nameZh || member.displayName || member.username).slice(0,2)}</span>
+                  <div className="min-w-0 flex-1">
                     <strong className="text-sm text-blue-950">
                       {member.displayName}
                     </strong>
-                    <p className="mt-1 text-xs text-slate-500">
-                      @{member.username} · {member.email}
+                    <p className="mt-1 truncate text-xs text-slate-500">
+                      @{member.username}
                     </p>
                   </div>
                   <span
-                    className={`px-2 py-1 text-[11px] font-bold ${member.status === "active" ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-700"}`}
+                    className={`rounded-full px-2 py-1 text-[10px] font-bold ${member.status === "active" ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-700"}`}
                   >
                     {member.status === "active"
                       ? "启用"
@@ -399,7 +403,7 @@ export function MemberManagement({
                 <div className="mt-3 flex flex-wrap gap-1">
                   {member.templateKeys.slice(0, 3).map((key) => (
                     <span
-                      className="bg-slate-100 px-2 py-1 text-[11px] text-slate-600"
+                      className="rounded-full bg-slate-100 px-2 py-1 text-[10px] text-slate-600"
                       key={key}
                     >
                       {catalog?.templates.find(
@@ -416,11 +420,13 @@ export function MemberManagement({
           ) : null}
         </aside>
         {selected ? (
-          <main className="min-w-0 border border-slate-200 bg-white">
+          <main className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-4 p-5 lg:p-6">
-              <div>
+              <div className="flex items-start gap-4">
+                <span className="relative grid size-16 shrink-0 place-items-center overflow-hidden rounded-full bg-slate-200 text-lg font-bold text-slate-600">{selected.avatarUrl ? <Image alt="" className="object-cover" fill sizes="64px" src={selected.avatarUrl} unoptimized/> : (selected.nameZh || selected.displayName || selected.username).slice(0, 2)}</span>
+                <div>
                 <p className="text-xs text-cyan-800">
-                  {selected.accountKind==="system"?"系统账号":categories[selected.memberCategory] ??
+                  {selected.accountKind==="system"?<span className="rounded-full bg-slate-900 px-2 py-1 font-mono text-[10px] font-bold tracking-wider text-white">SYSTEM</span>:categories[selected.memberCategory] ??
                     selected.memberCategory}{" "}
                   · {selected.memberStatus === "alumni" ? "校友" : "在组"}
                 </p>
@@ -433,15 +439,16 @@ export function MemberManagement({
                 <p className="mt-1 text-sm text-slate-500">
                   @{selected.username}
                 </p>
+                </div>
               </div>
               <span
-                className={`px-3 py-2 text-xs font-bold ${selected.publicVisible ? "bg-cyan-100 text-cyan-800" : "bg-slate-100 text-slate-600"}`}
+                className={`rounded-full px-3 py-2 text-xs font-bold ${selected.publicVisible ? "bg-cyan-100 text-cyan-800" : "bg-slate-100 text-slate-600"}`}
               >
                   {selected.accountKind==="system"?"不参与团队展示":selected.publicVisible ? "官网展示中" : "官网未展示"}
               </span>
             </div>
             <nav
-              className="flex overflow-x-auto border-y border-slate-200 bg-slate-50"
+              className="flex overflow-x-auto border-y border-slate-200 bg-white px-2"
               aria-label="成员详情"
             >
               {(
@@ -456,7 +463,7 @@ export function MemberManagement({
                 .filter(([key]) => (key !== "roles" || canWritePermissions)&&(selected.accountKind!=="system"||key!=="profile"))
                 .map(([key, label]) => (
                   <button
-                    className={`shrink-0 border-b-2 px-4 py-3 text-sm font-semibold ${tab === key ? "border-cyan-700 text-cyan-800" : "border-transparent text-slate-600"}`}
+                    className={`shrink-0 border-b-2 px-4 py-3 text-sm font-semibold ${tab === key ? "border-cyan-700 text-cyan-800" : "border-transparent text-slate-500 hover:text-slate-900"}`}
                     key={key}
                     onClick={() => setTab(key)}
                     type="button"
@@ -745,7 +752,7 @@ export function MemberManagement({
             </div>
           </main>
         ) : (
-          <main className="grid min-h-96 place-items-center border border-dashed border-slate-300 text-sm text-slate-500">
+          <main className="grid min-h-96 place-items-center rounded-xl border border-dashed border-slate-300 bg-white text-sm text-slate-500">
             请选择成员。
           </main>
         )}
@@ -758,7 +765,7 @@ export function MemberManagement({
           aria-modal="true"
         >
           <form
-            className="w-full max-w-xl bg-white p-6"
+            className="w-full max-w-xl rounded-xl bg-white p-6 shadow-2xl"
             onSubmit={createMember}
           >
             <div className="flex justify-between">
@@ -818,7 +825,7 @@ export function MemberManagement({
           role="dialog"
           aria-modal="true"
         >
-          <div className="w-full max-w-lg bg-white p-6">
+          <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-2xl">
             <h2 className="font-serif text-2xl text-blue-950">
               一次性临时密码
             </h2>
@@ -850,7 +857,7 @@ function Info({
   value: string | null | undefined;
 }) {
   return (
-    <div className="border border-slate-200 p-4">
+    <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-4">
       <dt className="text-xs font-semibold text-slate-500">{label}</dt>
       <dd className="mt-2 break-words text-sm font-semibold text-slate-900">
         {value || "未设置"}

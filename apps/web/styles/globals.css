@@ -33,9 +33,50 @@
   }
 
   :focus-visible {
-    outline: 3px solid rgba(8, 145, 178, 0.42);
-    outline-offset: 3px;
+    outline: 2px solid rgba(8, 145, 178, 0.72);
+    outline-offset: 2px;
   }
+}
+
+@layer components {
+  .console-root {
+    --console-bg: #f7f8fa;
+    --console-panel: #ffffff;
+    --console-panel-soft: #f8fafc;
+    --console-panel-muted: #f1f5f9;
+    --console-text: #0f172a;
+    --console-muted: #64748b;
+    --console-text-subtle: #94a3b8;
+    --console-border: #e2e8f0;
+    --console-border-strong: #cbd5e1;
+    --console-primary: #172554;
+    --console-accent: #0e7490;
+    --radius-xs: .25rem;
+    --radius-sm: .375rem;
+    --radius-md: .5rem;
+    --radius-lg: .75rem;
+    --radius-xl: 1rem;
+    --radius-pill: 9999px;
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--console-bg);
+    color: var(--console-text);
+  }
+
+  .console-root :where(button, a, input, textarea, select) { transition-duration: 150ms; transition-property: color, background-color, border-color, box-shadow, opacity, transform; }
+  .console-root :where(button:not(:disabled)):active { transform: translateY(1px); }
+  .console-root :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) { border-radius: .5rem; }
+  .console-root :where(input[type="checkbox"], input[type="radio"]) { accent-color: var(--console-accent); }
+  .console-root :where(.font-serif) { font-family: inherit; letter-spacing: -0.015em; }
+  .console-root :where(table) { font-size: .8125rem; }
+  .console-root :where(thead) { background: #f8fafc; color: #475569; }
+  .console-root :where(th) { font-size: .6875rem; font-weight: 700; letter-spacing: .04em; }
+  .console-root :where(tbody tr) { border-color: #f1f5f9; }
+  .console-root :where(tbody tr:hover) { background: #f8fafc; }
+  .console-root :where(.shadow-lg, .shadow-xl, .shadow-2xl) { --tw-shadow-color: rgb(15 23 42 / .1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }
 
 @layer utilities {

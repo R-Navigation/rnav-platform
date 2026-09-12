@@ -6,6 +6,7 @@ import { TierBadge } from "@/features/console/TierBadge";
 import { ConsoleEmptyState } from "@/features/console/ui/ConsoleEmptyState";
 import { ConsolePageHeader } from "@/features/console/ui/ConsolePageHeader";
 import { ConsoleStatusBadge } from "@/features/console/ui/ConsoleStatusBadge";
+import { ConsoleIcon } from "@/features/console/ui/ConsoleIcon";
 
 const statusLabels: Record<string, string> = {
   submitted: "待审批", approved: "已批准", purchasing: "采购中", purchased: "待收货",
@@ -21,18 +22,18 @@ function taskTone(status: string) {
 
 function MetricLink({ count, href, label, detail }: { count: number; href: string; label: string; detail: string }) {
   return (
-    <Link className="group flex min-h-36 flex-col justify-between bg-white p-5 transition-colors hover:bg-cyan-50 focus-visible:relative" href={href}>
-      <span className="text-sm font-semibold text-slate-600">{label}</span>
-      <span>
-        <strong className="font-mono text-4xl font-semibold tabular-nums text-slate-950 group-hover:text-cyan-800">{count}</strong>
-        <span className="mt-2 block text-xs leading-5 text-slate-500">{detail}</span>
+    <Link className="group rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-cyan-200 hover:shadow-md focus-visible:relative" href={href}>
+      <span className="flex items-center justify-between text-xs font-semibold text-slate-500">{label}<ConsoleIcon className="size-3.5 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-cyan-700" name="external"/></span>
+      <span className="mt-4 flex items-end justify-between gap-3">
+        <strong className="font-mono text-3xl font-semibold tabular-nums text-slate-950 group-hover:text-cyan-800">{count}</strong>
+        <span className="pb-1 text-right text-[11px] leading-4 text-slate-400">{detail}</span>
       </span>
     </Link>
   );
 }
 
 function SectionHeading({ id, title, description }: { id: string; title: string; description: string }) {
-  return <div><h2 className="font-serif text-xl font-semibold tracking-tight text-slate-950" id={id}>{title}</h2><p className="mt-1 text-sm text-slate-500">{description}</p></div>;
+  return <div><h2 className="text-base font-semibold tracking-tight text-slate-950" id={id}>{title}</h2><p className="mt-1 text-xs text-slate-500">{description}</p></div>;
 }
 
 function DashboardContent({ dashboard, permissions }: { dashboard: ConsoleDashboard; permissions: string[] }) {
@@ -68,40 +69,40 @@ function DashboardContent({ dashboard, permissions }: { dashboard: ConsoleDashbo
       </div>
 
       {taskCards.length ? (
-        <section aria-labelledby="dashboard-tasks" className="mt-10">
+        <section aria-labelledby="dashboard-tasks" className="mt-8">
           <SectionHeading description="需要你审批或执行的实验室事务。" id="dashboard-tasks" title="我的待办" />
-          <div className="mt-5 grid gap-px overflow-hidden border border-slate-200 bg-slate-200 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {taskCards.map((item) => <MetricLink {...item} key={item.label} />)}
           </div>
         </section>
       ) : null}
 
-      <section aria-labelledby="dashboard-mine" className="mt-10">
+      <section aria-labelledby="dashboard-mine" className="mt-8">
         <SectionHeading description="与你直接相关、仍在进行中的申请与设备。" id="dashboard-mine" title="我的事务" />
-        <div className="mt-5 grid gap-px overflow-hidden border border-slate-200 bg-slate-200 sm:grid-cols-3">
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
           <MetricLink count={dashboard.mine.procurementOpen} detail="进行中的采购申请" href="/console/procurements?scope=mine" label="我的采购" />
           <MetricLink count={dashboard.mine.labUsageOpen} detail="等待处理的设备申请" href="/console/lab-assets?view=requests" label="设备申请" />
           <MetricLink count={dashboard.mine.assetsInUse} detail="当前分配给我的设备" href="/console/lab-assets?view=assets" label="正在使用" />
         </div>
       </section>
 
-      <section aria-labelledby="dashboard-actions" className="mt-10">
+      <section aria-labelledby="dashboard-actions" className="mt-8 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <SectionHeading description="从最常用的操作直接开始。" id="dashboard-actions" title="常用操作" />
-        <div className="mt-5 flex flex-wrap gap-3">
+        <div className="mt-4 flex flex-wrap gap-2">
           {quickActions.map((action, index) => (
-            <Link className={index === 0 ? "bg-blue-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-cyan-800 active:translate-y-px" : "border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 transition hover:border-cyan-500 hover:text-cyan-800 active:translate-y-px"} href={action.href} key={`${action.href}-${action.label}`}>
-              {action.label}
+            <Link className={index === 0 ? "inline-flex min-h-9 items-center gap-2 rounded-lg bg-cyan-700 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-cyan-800" : "inline-flex min-h-9 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"} href={action.href} key={`${action.href}-${action.label}`}>
+              {index === 0 ? <ConsoleIcon name="plus"/> : null}{action.label}
             </Link>
           ))}
         </div>
       </section>
 
-      <section aria-labelledby="dashboard-recent" className="mt-10">
+      <section aria-labelledby="dashboard-recent" className="mt-8">
         <SectionHeading description="你可查看的采购与设备申请更新。" id="dashboard-recent" title="最近动态" />
         {dashboard.recentItems.length ? (
-          <div className="mt-5 divide-y divide-slate-200 border-y border-slate-200 bg-white">
+          <div className="mt-4 divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
             {dashboard.recentItems.map((item) => (
-              <Link className="flex items-center justify-between gap-4 px-4 py-4 transition-colors hover:bg-slate-50" href={item.href} key={`${item.type}-${item.id}`}>
+              <Link className="flex items-center justify-between gap-4 px-4 py-3 transition-colors hover:bg-slate-50" href={item.href} key={`${item.type}-${item.id}`}>
                 <span className="min-w-0">
                   <span className="block truncate font-semibold text-slate-900">{item.title}</span>
                   <span className="mt-1 block text-xs text-slate-500">{item.type === "procurement" ? "采购事务" : "设备使用"} · {new Intl.DateTimeFormat("zh-CN", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(item.updatedAt))}</span>

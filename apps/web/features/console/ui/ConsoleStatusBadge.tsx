@@ -9,5 +9,5 @@ const tones = {
 };
 
 export function ConsoleStatusBadge({ children, tone = "neutral" }: { children: ReactNode; tone?: keyof typeof tones }) {
-  return <span className={`inline-flex px-2.5 py-1 text-xs font-semibold ${tones[tone]}`}>{children}</span>;
+  return <span className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold ${tones[tone]}`}>{children}</span>;
 }

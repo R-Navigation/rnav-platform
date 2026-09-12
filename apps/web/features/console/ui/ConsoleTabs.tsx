@@ -1,0 +1,3 @@
+import type { ReactNode } from "react";
+export function ConsoleTabs({ children, label = "内容分区" }: { children: ReactNode; label?: string }) { return <div aria-label={label} className="flex gap-1 overflow-x-auto border-b border-slate-200" role="tablist">{children}</div>; }
+export function ConsoleTab({ active, children, onClick }: { active: boolean; children: ReactNode; onClick: () => void }) { return <button aria-selected={active} className={`relative min-h-10 whitespace-nowrap px-3 text-sm font-semibold transition ${active ? "text-cyan-800 after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:bg-cyan-700" : "text-slate-500 hover:text-slate-900"}`} onClick={onClick} role="tab" type="button">{children}</button>; }

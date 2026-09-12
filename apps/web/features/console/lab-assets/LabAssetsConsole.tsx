@@ -29,6 +29,7 @@ import {
   type LabPlatform,
   type LocalizedText,
 } from "./model";
+import { ConsoleConfirmDialog } from "@/features/console/ui/ConsoleOverlay";
 
 type Props = {
   initialView?: "overview" | "platforms" | "assets" | "requests";
@@ -45,13 +46,13 @@ type Editor =
   | null;
 
 const field =
-  "w-full border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-cyan-600";
+  "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100";
 const primary =
-  "bg-blue-950 px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-400";
+  "rounded-lg bg-cyan-700 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-cyan-800 disabled:cursor-not-allowed disabled:bg-slate-400";
 const secondary =
-  "border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:border-cyan-700";
+  "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:border-cyan-700";
 const danger =
-  "border border-red-300 bg-white px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50";
+  "rounded-lg border border-red-300 bg-white px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50";
 const assetStatuses = ["idle", "in_use", "lend"] as const;
 const platformStatuses = [
   "active",
@@ -177,7 +178,7 @@ function StatusBadge({
           : "border-slate-300 bg-slate-50 text-slate-700";
   return (
     <span
-      className={`inline-flex border px-2 py-1 text-xs font-semibold ${tone}`}
+      className={`inline-flex rounded-full border px-2 py-1 text-[11px] font-semibold ${tone}`}
     >
       {labels[status] ?? status}
     </span>
@@ -185,7 +186,7 @@ function StatusBadge({
 }
 function Metric({ label, value }: { label: string; value: number }) {
   return (
-    <div className="border-l-2 border-cyan-600 bg-white px-4 py-3">
+    <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
       <strong className="block font-mono text-2xl text-slate-950">
         {value}
       </strong>
@@ -221,7 +222,8 @@ export function LabAssetsConsole({
     [message, setMessage] = useState(""),
     [busy, setBusy] = useState(false),
     [revisionConflict, setRevisionConflict] = useState(false),
-    [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
+    [reviewNotes, setReviewNotes] = useState<Record<string, string>>({}),
+    [pendingDelete, setPendingDelete] = useState<{ kind: "asset" | "platform"; code: string } | null>(null);
   const dialogRef = useRef<HTMLDialogElement>(null),
     firstEditorInputRef = useRef<HTMLInputElement>(null),
     editorTriggerRef = useRef<HTMLElement | null>(null);
@@ -404,7 +406,13 @@ export function LabAssetsConsole({
     }
   }
   async function remove(kind: "asset" | "platform", code: string) {
-    if (!snapshot || !window.confirm(`确定删除 ${code}？`)) return;
+    if (!snapshot) return;
+    setPendingDelete({ kind, code });
+  }
+  async function confirmRemove() {
+    if (!snapshot || !pendingDelete) return;
+    const { kind, code } = pendingDelete;
+    setPendingDelete(null);
     await mutate(
       `/${kind === "asset" ? "assets" : "platforms"}/${encodeURIComponent(code)}`,
       "DELETE",
@@ -525,11 +533,11 @@ export function LabAssetsConsole({
   const views: View[] = ["overview", "platforms", "assets", "requests"];
   return (
     <section aria-labelledby="lab-assets-heading">
-      <header className="flex flex-wrap items-end justify-between gap-5 border-b border-slate-300 pb-5">
+      <header className="flex flex-wrap items-end justify-between gap-5 border-b border-slate-200 pb-5">
         <div>
-          <p className="text-sm font-semibold text-cyan-700">内部资源</p>
+          <p className="text-xs font-semibold text-cyan-700">内部资源</p>
           <h1
-            className="mt-2 font-serif text-3xl font-bold text-slate-950"
+            className="mt-1.5 text-3xl font-bold tracking-tight text-slate-950"
             id="lab-assets-heading"
           >
             实验室资产
@@ -540,7 +548,7 @@ export function LabAssetsConsole({
         </div>
         <div className="text-right">
           <span
-            className={`inline-flex border bg-white px-3 py-1 text-xs font-bold ${writable ? "border-cyan-600 text-cyan-900" : "border-slate-300 text-slate-700"}`}
+            className={`inline-flex rounded-full border bg-white px-3 py-1 text-xs font-bold ${writable ? "border-cyan-600 text-cyan-900" : "border-slate-300 text-slate-700"}`}
           >
             {writable ? "资产管理员" : "成员账号"}
           </span>
@@ -551,7 +559,7 @@ export function LabAssetsConsole({
       </header>
       <nav
         aria-label="资产模块视图"
-        className="mt-5 flex gap-1 overflow-x-auto border-b border-slate-300"
+        className="mt-5 flex gap-1 overflow-x-auto border-b border-slate-200"
       >
         {views.map((item) => (
           <button
@@ -598,7 +606,7 @@ export function LabAssetsConsole({
 
       {view === "overview" ? (
         <div className="mt-6 space-y-8">
-          <div className="grid gap-px border border-slate-200 bg-slate-200 sm:grid-cols-3 xl:grid-cols-7">
+          <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-7">
             <Metric label="设备总数" value={snapshot.stats.totalAssets ?? 0} />
             <Metric label="闲置设备" value={snapshot.stats.idleAssets ?? 0} />
             <Metric
@@ -630,9 +638,9 @@ export function LabAssetsConsole({
                   <h3 className="border-b border-slate-300 pb-2 text-sm font-bold text-cyan-800">
                     {type.name}
                   </h3>
-                  <div className="grid gap-px border-x border-b border-slate-200 bg-slate-200 lg:grid-cols-2">
+                  <div className="mt-3 grid gap-3 lg:grid-cols-2">
                     {type.platforms.map((platform) => (
-                      <article className="bg-white p-4" key={platform.code}>
+                      <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm" key={platform.code}>
                         <div className="flex justify-between gap-3">
                           <div>
                             <strong className="font-mono">
@@ -659,7 +667,7 @@ export function LabAssetsConsole({
                             );
                             return asset ? (
                               <button
-                                className="flex w-full items-center justify-between border border-slate-200 px-3 py-2 text-left hover:border-cyan-600"
+                                className="flex w-full items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-left hover:border-cyan-600"
                                 key={code}
                                 onClick={() => {
                                   setView("assets");
@@ -708,10 +716,10 @@ export function LabAssetsConsole({
                   <h3 className="border-b border-slate-300 pb-2 text-sm font-bold text-cyan-800">
                     {group.name} · {group.items.length} 台
                   </h3>
-                  <div className="grid gap-px border-x border-b border-slate-200 bg-slate-200 md:grid-cols-2 xl:grid-cols-3">
+                  <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                     {group.items.map((item) => (
                       <button
-                        className="bg-white p-4 text-left hover:bg-cyan-50"
+                        className="rounded-xl border border-slate-200 bg-white p-4 text-left shadow-sm hover:border-cyan-200 hover:bg-cyan-50"
                         key={item.code}
                         onClick={() => {
                           setView("assets");
@@ -793,9 +801,9 @@ export function LabAssetsConsole({
               <h3 className="border-b border-slate-300 pb-2 font-bold text-cyan-800">
                 {type.name}
               </h3>
-              <div className="grid gap-px border-x border-b border-slate-200 bg-slate-200 xl:grid-cols-2">
+              <div className="mt-3 grid gap-3 xl:grid-cols-2">
                 {type.platforms.map((item) => (
-                  <article className="bg-white p-5" key={item.code}>
+                  <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" key={item.code}>
                     <div className="flex justify-between gap-3">
                       <div>
                         <strong className="font-mono">{item.code}</strong>
@@ -819,7 +827,7 @@ export function LabAssetsConsole({
                     <div className="mt-2 flex flex-wrap gap-1">
                       {item.assetCodes.map((code) => (
                         <span
-                          className="border border-slate-300 px-2 py-1 font-mono text-xs"
+                          className="rounded-md border border-slate-300 px-2 py-1 font-mono text-xs"
                           key={code}
                         >
                           {code}
@@ -978,7 +986,7 @@ export function LabAssetsConsole({
       {editor ? (
         <dialog
           aria-labelledby="asset-editor-title"
-          className="m-auto w-[calc(100%-2rem)] max-w-4xl border-0 bg-transparent p-0 backdrop:bg-slate-950/50"
+          className="m-0 ml-auto h-screen w-[min(46rem,calc(100%-2rem))] max-w-none border-0 bg-transparent p-0 backdrop:bg-slate-950/40"
           onCancel={(event) => {
             event.preventDefault();
             cancelEditor();
@@ -987,7 +995,7 @@ export function LabAssetsConsole({
           ref={dialogRef}
         >
           <form
-            className="max-h-[90vh] overflow-y-auto border-t-4 border-cyan-600 bg-white p-6 shadow-2xl"
+            className="h-screen overflow-y-auto border-l border-slate-200 bg-white p-6 shadow-2xl"
             onSubmit={(event) => {
               event.preventDefault();
               void saveEditor();
@@ -1008,7 +1016,7 @@ export function LabAssetsConsole({
               </div>
               <button
                 aria-label="关闭编辑器"
-                className="text-2xl text-slate-500"
+                className="grid size-9 place-items-center rounded-lg text-2xl text-slate-500 hover:bg-slate-100"
                 onClick={cancelEditor}
                 type="button"
               >
@@ -1405,6 +1413,7 @@ export function LabAssetsConsole({
           </form>
         </dialog>
       ) : null}
+      <ConsoleConfirmDialog confirmLabel="确认删除" danger description={`删除 ${pendingDelete?.code || ""} 后无法直接恢复；有关联关系时系统会阻止删除。`} onClose={() => setPendingDelete(null)} onConfirm={() => void confirmRemove()} open={Boolean(pendingDelete)} title="删除资产记录？"/>
     </section>
   );
 }
