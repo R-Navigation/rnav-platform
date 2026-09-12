@@ -48,17 +48,17 @@ export function createUserAdminService(pool: Pick<Pool, "query" | "connect">) {
         user_profiles.name_zh,user_profiles.name_en,user_profiles.email public_email,user_profiles.phone,user_profiles.bio_zh,user_profiles.bio_en,
         user_profiles.research_interests_zh,user_profiles.research_interests_en,user_profiles.enrollment_year,user_profiles.graduation_year,
         user_profiles.major_zh,user_profiles.major_en,user_profiles.thesis_zh,user_profiles.thesis_en,user_profiles.destination_zh,user_profiles.destination_en,
-        user_profiles.avatar_asset_id,user_profiles.avatar_position_x,user_profiles.avatar_position_y,user_profiles.avatar_zoom,
+        user_profiles.avatar_asset_id,media_assets.url avatar_url,user_profiles.avatar_position_x,user_profiles.avatar_position_y,user_profiles.avatar_zoom,
         user_profiles.personal_links,user_profiles.public_fields,user_profiles.version,user_profiles.profile_content_updated_at,user_profiles.homepage_url,
         COALESCE(array_agg(DISTINCT permission_template_permissions.permission_key) FILTER(WHERE permission_template_permissions.permission_key IS NOT NULL),ARRAY[]::text[]) template_permissions,
         COALESCE(array_agg(DISTINCT user_permission_templates.template_key) FILTER(WHERE user_permission_templates.template_key IS NOT NULL),ARRAY[]::text[]) template_keys,
         COALESCE(array_agg(DISTINCT user_permission_overrides.permission_key) FILTER(WHERE user_permission_overrides.decision='grant'),ARRAY[]::text[]) grants,
         COALESCE(array_agg(DISTINCT user_permission_overrides.permission_key) FILTER(WHERE user_permission_overrides.decision='revoke'),ARRAY[]::text[]) revokes
-        FROM users JOIN user_profiles ON user_profiles.user_id=users.id LEFT JOIN user_permission_templates ON user_permission_templates.user_id=users.id
+        FROM users JOIN user_profiles ON user_profiles.user_id=users.id LEFT JOIN media_assets ON media_assets.id=user_profiles.avatar_asset_id LEFT JOIN user_permission_templates ON user_permission_templates.user_id=users.id
         LEFT JOIN permission_template_permissions ON permission_template_permissions.template_key=user_permission_templates.template_key
         LEFT JOIN user_permission_overrides ON user_permission_overrides.user_id=users.id
         WHERE ($1='' OR users.username ILIKE '%'||$1||'%' OR users.display_name ILIKE '%'||$1||'%' OR COALESCE(users.email,'') ILIKE '%'||$1||'%')
-          AND ($2='' OR users.status=$2) GROUP BY users.id,user_profiles.user_id ORDER BY users.status,users.username`,
+          AND ($2='' OR users.status=$2) GROUP BY users.id,user_profiles.user_id,media_assets.id ORDER BY users.status,users.username`,
         [query.search ?? "", query.status ?? ""],
       );
       return result.rows
@@ -91,7 +91,7 @@ export function createUserAdminService(pool: Pick<Pool, "query" | "connect">) {
             publicEmail: row.public_email, phone: row.phone, bioZh: row.bio_zh, bioEn: row.bio_en,
             researchInterestsEn: row.research_interests_en, enrollmentYear: row.enrollment_year, graduationYear: row.graduation_year,
             majorZh: row.major_zh, majorEn: row.major_en, thesisZh: row.thesis_zh, thesisEn: row.thesis_en,
-            destinationZh: row.destination_zh, destinationEn: row.destination_en, avatarAssetId: row.avatar_asset_id,
+            destinationZh: row.destination_zh, destinationEn: row.destination_en, avatarAssetId: row.avatar_asset_id, avatarUrl: row.avatar_url,
             avatarPositionX: row.avatar_position_x, avatarPositionY: row.avatar_position_y, avatarZoom: Number(row.avatar_zoom),
             personalLinks: row.personal_links, publicFields: row.public_fields, version: Number(row.version),
             profileContentUpdatedAt: row.profile_content_updated_at,

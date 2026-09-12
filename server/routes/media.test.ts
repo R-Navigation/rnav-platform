@@ -57,8 +57,15 @@ test("profile editors can upload multipart images without media administration",
   assert.deepEqual(response.calls, [{ filename: "avatar.png", mimeType: "image/png" }]);
 });
 
+test("member profile administrators can upload avatar images", async () => {
+  const response = await upload(["site.members.write"], "image/webp", "member.webp");
+  assert.equal(response.status, 201);
+  assert.deepEqual(response.calls, [{ filename: "member.webp", mimeType: "image/webp" }]);
+});
+
 test("profile-only uploads reject documents while media administrators may upload them", async () => {
   assert.equal((await upload(["profile.write_own"], "application/pdf", "paper.pdf")).status, 400);
+  assert.equal((await upload(["site.members.write"], "application/pdf", "member.pdf")).status, 400);
   assert.equal((await upload(["site.media.write"], "application/pdf", "paper.pdf")).status, 201);
   assert.equal((await upload([], "image/png", "avatar.png")).status, 403);
 });

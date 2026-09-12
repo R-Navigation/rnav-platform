@@ -34,7 +34,7 @@ export type Member = {
   templateKeys: string[];
   publicEmail: string; phone: string; bioZh: string; bioEn: string; researchInterestsEn: string;
   enrollmentYear: string; graduationYear: string; majorZh: string; majorEn: string; thesisZh: string; thesisEn: string;
-  destinationZh: string; destinationEn: string; avatarAssetId: string | null; avatarPositionX: number; avatarPositionY: number;
+  destinationZh: string; destinationEn: string; avatarAssetId: string | null; avatarUrl: string | null; avatarPositionX: number; avatarPositionY: number;
   avatarZoom: number; personalLinks: Array<{labelZh:string;labelEn:string;url:string}>; publicFields: string[]; version: number;
   profileContentUpdatedAt: string; completeness: { complete: boolean; publishable: boolean; missing: string[] };
 };
