@@ -155,7 +155,7 @@ export function HomePage({ data }: { data: any }) {
   ].filter(
     (item: any, index: number, all: any[]) =>
       item &&
-      all.findIndex((candidate) => candidate.slug === item.slug) === index,
+      all.findIndex((candidate) => candidate?.slug === item.slug) === index,
   );
   const memberSlugs = home.featuredMemberSlugs?.length
     ? home.featuredMemberSlugs
