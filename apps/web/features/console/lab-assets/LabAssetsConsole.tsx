@@ -3,7 +3,6 @@
 import {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
   type KeyboardEvent,
@@ -16,6 +15,9 @@ import {
   readLabAssetsError,
 } from "./api";
 import { AssetWorkbench } from "./AssetWorkbench";
+import { PlatformComponentsPanel } from "./PlatformComponentsPanel";
+import { PublicProfileEditor, SpecsEditor } from "./SpecsPublicEditor";
+import { TypeTemplatesPanel } from "./TypeTemplatesPanel";
 import type { AssetImportRow } from "./import-export";
 import { getTrappedFocusIndex } from "./dialog-keyboard";
 import {
@@ -50,14 +52,7 @@ const secondary =
   "border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:border-cyan-700";
 const danger =
   "border border-red-300 bg-white px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50";
-const assetStatuses = [
-  "idle",
-  "in_use",
-  "mounted",
-  "maintenance",
-  "lend",
-  "retired",
-] as const;
+const assetStatuses = ["idle", "in_use", "lend"] as const;
 const platformStatuses = [
   "active",
   "maintenance",
@@ -97,16 +92,19 @@ function emptyAsset(typeCode: string): LabAsset {
     description: emptyText(),
     deviceTypeCode: typeCode,
     deviceTypeName: "",
+    manufacturer: "",
     model: "",
     name: emptyText(),
     vendorSerial: "",
     status: "idle",
+    condition:"normal",displayState:"idle",platformRole:emptyText(),platformSlot:null,platformSortOrder:0,mountedAt:null,
     assignedUserId: null,
     assignedUserName: "",
     borrowerName: "",
     borrowerContact: "",
     storageLocation: null,
     updatedAt: "",
+    specs:[],publicProfile:{publicVisible:false,title:emptyText(),description:emptyText(),imageAssetId:null,imageUrl:null,sortOrder:0},
   };
 }
 function emptyPlatform(typeCode: string): LabPlatform {
@@ -117,6 +115,7 @@ function emptyPlatform(typeCode: string): LabPlatform {
     name: emptyText(),
     status: "building",
     typeCode,
+    location:null,maintainerUserId:null,maintainerName:"",commissionedAt:"",specs:[],publicProfile:{publicVisible:false,title:emptyText(),description:emptyText(),imageAssetId:null,imageUrl:null,tags:[],componentDisplayMode:"summary",sortOrder:0},
   };
 }
 function slug(value: string, prefix: string) {
@@ -197,7 +196,7 @@ function Metric({ label, value }: { label: string; value: number }) {
   );
 }
 function assignment(item: LabAsset) {
-  if (item.status === "mounted") return `平台 ${item.currentPlatformCode}`;
+  if (item.currentPlatformCode) return `平台 ${item.currentPlatformCode}`;
   if (item.status === "in_use")
     return `使用人 ${item.assignedUserName || "未设置"}`;
   if (item.status === "lend")
@@ -222,7 +221,6 @@ export function LabAssetsConsole({
     [message, setMessage] = useState(""),
     [busy, setBusy] = useState(false),
     [revisionConflict, setRevisionConflict] = useState(false),
-    [assetPickerQuery, setAssetPickerQuery] = useState(""),
     [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
   const dialogRef = useRef<HTMLDialogElement>(null),
     firstEditorInputRef = useRef<HTMLInputElement>(null),
@@ -258,31 +256,11 @@ export function LabAssetsConsole({
       editorTriggerRef.current?.focus();
     };
   }, [editorOpen]);
-  const pickerAssets = useMemo(() => {
-    if (!snapshot || editor?.kind !== "platform") return [];
-    const query = assetPickerQuery.trim().toLocaleLowerCase();
-    return snapshot.assets.filter((item) => {
-      const haystack = [
-        item.code,
-        item.name.zh,
-        item.name.en,
-        item.model,
-        item.deviceTypeName,
-        item.currentPlatformCode ?? "",
-        item.assignedUserName,
-      ]
-        .join(" ")
-        .toLocaleLowerCase();
-      return !query || haystack.includes(query);
-    });
-  }, [assetPickerQuery, editor, snapshot]);
-
   function openEditor(next: Exclude<Editor, null>) {
     editorTriggerRef.current =
       document.activeElement instanceof HTMLElement
         ? document.activeElement
         : null;
-    setAssetPickerQuery("");
     setEditor(next);
   }
   function closeEditor() {
@@ -318,7 +296,7 @@ export function LabAssetsConsole({
   }
   async function mutate(
     endpoint: string,
-    method: "POST" | "PUT" | "DELETE",
+    method: "POST" | "PUT" | "PATCH" | "DELETE",
     body: Record<string, unknown>,
     success: string,
     close = true,
@@ -354,17 +332,19 @@ export function LabAssetsConsole({
       const body = {
         code: item.code,
         deviceTypeCode: item.deviceTypeCode,
+        manufacturer:item.manufacturer,
         model: item.model,
         name: item.name,
         description: item.description,
         vendorSerial: item.vendorSerial,
+        condition:item.condition,
         status: item.status,
-        currentPlatformCode:
-          item.status === "mounted" ? item.currentPlatformCode : null,
+        currentPlatformCode:item.currentPlatformCode,
         assignedUserId: item.status === "in_use" ? item.assignedUserId : null,
         borrowerName: item.status === "lend" ? item.borrowerName : "",
         borrowerContact: item.status === "lend" ? item.borrowerContact : "",
         storageLocation: item.storageLocation,
+        platformRole:item.platformRole,platformSlot:item.platformSlot,platformSortOrder:item.platformSortOrder,mountedAt:item.mountedAt,specs:item.specs,publicProfile:item.publicProfile,
         expectedRevision: snapshot.revision,
       };
       await mutate(
@@ -444,7 +424,7 @@ export function LabAssetsConsole({
     );
   }
   async function batchAssets(
-    action: "set_status" | "set_device_type" | "set_platform" | "set_location",
+    action: "set_status" | "set_device_type" | "set_location",
     value: string | null,
     assetCodes: string[],
   ) {
@@ -744,7 +724,7 @@ export function LabAssetsConsole({
                           </strong>
                           <StatusBadge
                             labels={assetStatusLabels}
-                            status={item.status}
+                            status={item.displayState}
                           />
                         </div>
                         <p className="mt-2 font-semibold">
@@ -774,7 +754,7 @@ export function LabAssetsConsole({
             <div>
               <h2 className="text-xl font-bold">平台管理</h2>
               <p className="mt-1 text-sm text-slate-600">
-                按平台类型分组、按编号排序，编辑平台可批量选择组成设备。
+                按平台类型分组；组成设备通过添加、拆下和转移专用操作维护。
               </p>
             </div>
             {writable ? (
@@ -807,12 +787,13 @@ export function LabAssetsConsole({
               </div>
             ) : null}
           </div>
+          {writable?<TypeTemplatesPanel busy={busy} snapshot={snapshot} onAction={async(endpoint,method,body,success)=>Boolean(await mutate(endpoint,method,body,success,false))}/>:null}
           {snapshot.platformTypes.map((type) => (
             <section key={type.code}>
               <h3 className="border-b border-slate-300 pb-2 font-bold text-cyan-800">
                 {type.name}
               </h3>
-              <div className="grid gap-px border-x border-b border-slate-200 bg-slate-200 md:grid-cols-2 xl:grid-cols-3">
+              <div className="grid gap-px border-x border-b border-slate-200 bg-slate-200 xl:grid-cols-2">
                 {type.platforms.map((item) => (
                   <article className="bg-white p-5" key={item.code}>
                     <div className="flex justify-between gap-3">
@@ -869,6 +850,7 @@ export function LabAssetsConsole({
                         </button>
                       </div>
                     ) : null}
+                    {writable?<PlatformComponentsPanel assets={snapshot.assets} busy={busy} onAction={async(endpoint,method,body,success)=>Boolean(await mutate(endpoint,method,body,success,false))} platform={item} revision={snapshot.revision}/>:null}
                   </article>
                 ))}
               </div>
@@ -1119,6 +1101,10 @@ export function LabAssetsConsole({
                       />
                     </label>
                     <label className="text-sm font-semibold">
+                      制造商 / 品牌
+                      <input className={`${field} mt-1`} value={editor.value.manufacturer} onChange={(event)=>setEditor({...editor,value:{...editor.value,manufacturer:event.target.value}})} placeholder="例如 Intel、Livox、NVIDIA" />
+                    </label>
+                    <label className="text-sm font-semibold">
                       厂商序列号
                       <input
                         className={`${field} mt-1`}
@@ -1152,9 +1138,15 @@ export function LabAssetsConsole({
                       />
                     </label>
                     <label className="text-sm font-semibold">
-                      状态
+                      设备状况
+                      <select className={`${field} mt-1`} value={editor.value.condition} onChange={(event)=>setEditor({...editor,value:{...editor.value,condition:event.target.value as LabAsset["condition"]}})}><option value="normal">正常</option><option value="maintenance">维护中</option><option value="retired">报废</option></select>
+                      <span className="mt-1 block text-xs text-slate-500">状况不改变所属平台。</span>
+                    </label>
+                    <label className="text-sm font-semibold">
+                      使用状态
                       <select
                         className={`${field} mt-1`}
+                        disabled={Boolean(editor.value.currentPlatformCode)}
                         onChange={(event) => {
                           const status = event.target
                             .value as LabAsset["status"];
@@ -1163,10 +1155,7 @@ export function LabAssetsConsole({
                             value: {
                               ...editor.value,
                               status,
-                              currentPlatformCode:
-                                status === "mounted"
-                                  ? editor.value.currentPlatformCode
-                                  : null,
+                              currentPlatformCode:editor.value.currentPlatformCode,
                               assignedUserId:
                                 status === "in_use"
                                   ? editor.value.assignedUserId
@@ -1182,7 +1171,7 @@ export function LabAssetsConsole({
                             },
                           });
                         }}
-                        value={editor.value.status}
+                        value={editor.value.status==="in_use"||editor.value.status==="lend"?editor.value.status:"idle"}
                       >
                         {assetStatuses.map((status) => (
                           <option key={status} value={status}>
@@ -1190,33 +1179,8 @@ export function LabAssetsConsole({
                           </option>
                         ))}
                       </select>
+                      {editor.value.currentPlatformCode?<span className="mt-1 block text-xs text-cyan-800">已归属 {editor.value.currentPlatformCode}，请在平台组成中拆下或转移。</span>:null}
                     </label>
-                    {editor.value.status === "mounted" ? (
-                      <label className="text-sm font-semibold">
-                        装载平台
-                        <select
-                          className={`${field} mt-1`}
-                          onChange={(event) =>
-                            setEditor({
-                              ...editor,
-                              value: {
-                                ...editor.value,
-                                currentPlatformCode: event.target.value || null,
-                              },
-                            })
-                          }
-                          required
-                          value={editor.value.currentPlatformCode ?? ""}
-                        >
-                          <option value="">请选择平台</option>
-                          {snapshot.platforms.map((item) => (
-                            <option key={item.code} value={item.code}>
-                              {item.code} · {item.name.zh || item.name.en}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    ) : null}
                     {editor.value.status === "in_use" ? (
                       <label className="text-sm font-semibold">
                         使用成员
@@ -1282,6 +1246,8 @@ export function LabAssetsConsole({
                       </>
                     ) : null}
                   </div>
+                  <SpecsEditor specs={editor.value.specs} onChange={(specs)=>setEditor({...editor,value:{...editor.value,specs}})}/>
+                  <PublicProfileEditor duplicateWarning={Boolean(editor.value.currentPlatformCode)} profile={editor.value.publicProfile} onChange={(publicProfile)=>setEditor({...editor,value:{...editor.value,publicProfile}})}/>
                 </>
               ) : editor.kind === "platform" ? (
                 <>
@@ -1378,60 +1344,12 @@ export function LabAssetsConsole({
                         ))}
                       </select>
                     </label>
+                    <label className="text-sm font-semibold">平台位置<input className={`${field} mt-1`} value={editor.value.location??""} onChange={(event)=>setEditor({...editor,value:{...editor.value,location:event.target.value||null}})} placeholder="例如 507 实验室"/></label>
+                    <label className="text-sm font-semibold">维护负责人<select className={`${field} mt-1`} value={editor.value.maintainerUserId??""} onChange={(event)=>setEditor({...editor,value:{...editor.value,maintainerUserId:event.target.value||null}})}><option value="">未指定</option>{snapshot.members.map((member)=><option key={member.id} value={member.id}>{member.displayName}</option>)}</select></label>
+                    <label className="text-sm font-semibold">启用日期<input className={`${field} mt-1`} type="date" value={editor.value.commissionedAt} onChange={(event)=>setEditor({...editor,value:{...editor.value,commissionedAt:event.target.value}})}/></label>
                   </div>
-                  <section>
-                    <div>
-                      <h3 className="text-sm font-bold">组成设备</h3>
-                      <p className="mt-1 text-xs text-slate-500">
-                        搜索后勾选，可多选；取消勾选会让设备自动变为闲置。
-                      </p>
-                    </div>
-                    <input
-                      className={`${field} mt-3`}
-                      onChange={(event) =>
-                        setAssetPickerQuery(event.target.value)
-                      }
-                      placeholder="搜索设备编号、名称、型号或类型"
-                      value={assetPickerQuery}
-                    />
-                    <div className="mt-3 max-h-72 overflow-y-auto border border-slate-200">
-                      {pickerAssets.map((item) => (
-                        <label
-                          className="flex items-center justify-between gap-3 border-b border-slate-100 px-3 py-2 last:border-b-0"
-                          key={item.code}
-                        >
-                          <span>
-                            <b className="font-mono text-xs">{item.code}</b>
-                            <span className="ml-2 text-sm">
-                              {item.name.zh || item.name.en}
-                            </span>
-                            <span className="ml-2 text-xs text-slate-500">
-                              {item.deviceTypeName} · {item.model}
-                            </span>
-                          </span>
-                          <input
-                            checked={editor.value.assetCodes.includes(
-                              item.code,
-                            )}
-                            onChange={(event) =>
-                              setEditor({
-                                ...editor,
-                                value: {
-                                  ...editor.value,
-                                  assetCodes: event.target.checked
-                                    ? [...editor.value.assetCodes, item.code]
-                                    : editor.value.assetCodes.filter(
-                                        (code) => code !== item.code,
-                                      ),
-                                },
-                              })
-                            }
-                            type="checkbox"
-                          />
-                        </label>
-                      ))}
-                    </div>
-                  </section>
+                  <SpecsEditor specs={editor.value.specs} onChange={(specs)=>setEditor({...editor,value:{...editor.value,specs}})}/>
+                  <PublicProfileEditor platform profile={editor.value.publicProfile} onChange={(publicProfile)=>setEditor({...editor,value:{...editor.value,publicProfile}})}/>
                 </>
               ) : (
                 <>

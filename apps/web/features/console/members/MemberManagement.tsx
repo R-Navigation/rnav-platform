@@ -11,6 +11,7 @@ import { consoleApi } from "@/lib/consoleApi";
 import { MemberProfileEditor } from "./MemberProfileEditor";
 import { MemberImportDialog } from "./MemberImportDialog";
 import { AccountEmailEditor } from "./AccountEmailEditor";
+import { groupMembers,memberGroups,type MemberGroupKey } from "./memberGrouping";
 
 export type Member = {
   id: string;
@@ -20,6 +21,7 @@ export type Member = {
   nameZh: string;
   nameEn: string;
   baseTier: "normal" | "super";
+  accountKind: "person" | "system";
   tier: "normal" | "plus" | "super";
   status: "active" | "disabled" | "invited";
   mustChangePassword: boolean;
@@ -136,10 +138,12 @@ export function MemberManagement({
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [showCreate, setShowCreate] = useState(false);
+  const [createAccountKind,setCreateAccountKind]=useState<"person"|"system">("person");
   const [showImport, setShowImport] = useState(false);
   const [temporaryPassword, setTemporaryPassword] = useState<string | null>(
     null,
   );
+  const [collapsedGroups,setCollapsedGroups]=useState<Set<MemberGroupKey>>(()=>new Set(memberGroups.filter((group)=>group.collapsed).map((group)=>group.key)));
 
   const loadMembers = useCallback(async () => {
     const query = new URLSearchParams();
@@ -215,6 +219,8 @@ export function MemberManagement({
     [memberCategory, members, role],
   );
   const selected = members.find((member) => member.id === selectedId) ?? null;
+  const groupedMembers=useMemo(()=>groupMembers(visibleMembers),[visibleMembers]);
+  useEffect(()=>{if(selected?.accountKind==="system"&&tab==="profile")setTab("account");},[selected?.accountKind,tab]);
 
   async function run(action: () => Promise<unknown>, success: string) {
     setBusy(true);
@@ -287,7 +293,7 @@ export function MemberManagement({
             围绕成员统一管理账号生命周期与岗位职责；成员自行维护的学术资料仅供查看。
           </p>
         </div>
-        {canWriteUsers ? <div className="flex gap-2"><button className={secondary} onClick={()=>setShowImport(true)} type="button">批量导入</button><button className={primary} onClick={() => setShowCreate(true)} type="button">+ 创建成员</button></div> : null}
+        {canWriteUsers ? <div className="flex gap-2"><button className={secondary} onClick={()=>setShowImport(true)} type="button">批量导入</button><button className={primary} onClick={() => {setCreateAccountKind("person");setShowCreate(true)}} type="button">+ 创建账号</button></div> : null}
       </header>
       {error ? (
         <p
@@ -355,14 +361,14 @@ export function MemberManagement({
           <div className="sticky top-0 border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
             {visibleMembers.length} 位成员
           </div>
-          <div className="divide-y divide-slate-200">
-            {visibleMembers.map((member) => (
+          <div>
+            {groupedMembers.filter((group)=>group.members.length).map((group)=><section className="border-b border-slate-200" key={group.key}><button className="flex w-full items-center justify-between bg-slate-50 px-4 py-2.5 text-left text-xs font-bold text-slate-700" onClick={()=>setCollapsedGroups((current)=>{const next=new Set(current);if(next.has(group.key))next.delete(group.key);else next.add(group.key);return next})} type="button"><span>{group.label} · {group.members.length}</span><span aria-hidden>{collapsedGroups.has(group.key)?"＋":"−"}</span></button>{collapsedGroups.has(group.key)?null:<div className="divide-y divide-slate-100">{group.members.map((member) => (
               <button
                 className={`w-full border-l-4 p-4 text-left ${selectedId === member.id ? "border-cyan-700 bg-cyan-50" : "border-transparent hover:bg-slate-50"}`}
                 key={member.id}
                 onClick={() => {
                   setSelectedId(member.id);
-                  setTab("profile");
+                  setTab(member.accountKind==="system"?"account":"profile");
                   window.history.replaceState(
                     null,
                     "",
@@ -403,7 +409,7 @@ export function MemberManagement({
                   ))}
                 </div>
               </button>
-            ))}
+            ))}</div>}</section>)}
           </div>
           {!visibleMembers.length ? (
             <p className="p-5 text-sm text-slate-500">没有匹配的成员。</p>
@@ -414,7 +420,7 @@ export function MemberManagement({
             <div className="flex flex-wrap items-start justify-between gap-4 p-5 lg:p-6">
               <div>
                 <p className="text-xs text-cyan-800">
-                  {categories[selected.memberCategory] ??
+                  {selected.accountKind==="system"?"系统账号":categories[selected.memberCategory] ??
                     selected.memberCategory}{" "}
                   · {selected.memberStatus === "alumni" ? "校友" : "在组"}
                 </p>
@@ -431,7 +437,7 @@ export function MemberManagement({
               <span
                 className={`px-3 py-2 text-xs font-bold ${selected.publicVisible ? "bg-cyan-100 text-cyan-800" : "bg-slate-100 text-slate-600"}`}
               >
-                {selected.publicVisible ? "官网展示中" : "官网未展示"}
+                  {selected.accountKind==="system"?"不参与团队展示":selected.publicVisible ? "官网展示中" : "官网未展示"}
               </span>
             </div>
             <nav
@@ -447,7 +453,7 @@ export function MemberManagement({
                   ["audit", "操作记录"],
                 ] as const
               )
-                .filter(([key]) => key !== "roles" || canWritePermissions)
+                .filter(([key]) => (key !== "roles" || canWritePermissions)&&(selected.accountKind!=="system"||key!=="profile"))
                 .map(([key, label]) => (
                   <button
                     className={`shrink-0 border-b-2 px-4 py-3 text-sm font-semibold ${tab === key ? "border-cyan-700 text-cyan-800" : "border-transparent text-slate-600"}`}
@@ -465,6 +471,8 @@ export function MemberManagement({
               ) : null}
               {tab === "account" ? (
                 <div className="grid gap-4 sm:grid-cols-2">
+                  <Info label="账号类型" value={selected.accountKind==="system"?"系统账号":"人员账号"} />
+                  {canWriteUsers?<label className="text-sm font-medium">修改账号类型<select className={`${input} mt-1`} value={selected.accountKind} disabled={busy} onChange={(event)=>{if(event.target.value==="system")setTab("account");void run(()=>consoleApi(`/api/users/${selected.id}/account-kind`,{method:"PUT",body:JSON.stringify({accountKind:event.target.value})}),"账号类型已更新。")}}><option value="person">人员账号</option><option value="system">系统账号</option></select></label>:null}
                   <Info label="用户名" value={selected.username} />
                   <AccountEmailEditor busy={busy} canEdit={canWriteUsers} email={selected.email} onSave={(email)=>run(()=>consoleApi(`/api/users/${selected.id}/account-email`,{method:"PUT",body:JSON.stringify({email})}),"账号邮箱已更新。")} />
                   <Info label="账号状态" value={selected.status} />
@@ -755,7 +763,7 @@ export function MemberManagement({
           >
             <div className="flex justify-between">
               <h2 className="font-serif text-2xl text-blue-950">
-                创建成员账号
+                创建账号
               </h2>
               <button onClick={() => setShowCreate(false)} type="button">
                 关闭
@@ -769,7 +777,7 @@ export function MemberManagement({
                 ["email", "邮箱"],
               ].map(([name, label]) => (
                 <label className="text-sm" key={name}>
-                  {label}
+                  {name==="nameZh"&&createAccountKind==="system"?"显示名称":label}
                   <input
                     className={`${input} mt-1`}
                     name={name}
@@ -777,7 +785,8 @@ export function MemberManagement({
                   />
                 </label>
               ))}
-              <label className="text-sm">
+              <label className="text-sm sm:col-span-2">账号类型<select className={`${input} mt-1`} name="accountKind" value={createAccountKind} onChange={(event)=>setCreateAccountKind(event.target.value as "person"|"system")}><option value="person">人员账号</option><option value="system">系统账号</option></select><span className="mt-1 block text-xs text-slate-500">系统账号用于自动化、采集或专用管理，不参与官网团队展示。</span></label>
+              {createAccountKind==="person"?<label className="text-sm">
                 成员类别
                 <select className={`${input} mt-1`} name="memberCategory">
                   {Object.entries(categories).map(([key, label]) => (
@@ -786,7 +795,7 @@ export function MemberManagement({
                     </option>
                   ))}
                 </select>
-              </label>
+              </label>:null}
               {actorTier === "super" ? (
                 <label className="text-sm">
                   基础身份

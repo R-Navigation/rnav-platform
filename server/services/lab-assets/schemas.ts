@@ -25,6 +25,10 @@ export const deviceTypeSchema = z.object({
   name: text(200).min(1),
 }).strict();
 
+export const specSchema=z.object({key:codeSchema,label:localizedTextSchema,value:localizedTextSchema,unit:text(100).default(""),publicVisible:z.boolean().default(false),sortOrder:sortOrderSchema.default(0)}).strict();
+export const platformPublicProfileSchema=z.object({publicVisible:z.boolean().default(false),title:localizedTextSchema,description:localizedTextSchema,imageAssetId:z.string().uuid().nullable().default(null),tags:z.array(text(100)).max(50).default([]),componentDisplayMode:z.enum(["none","summary","detail"]).default("summary"),sortOrder:sortOrderSchema.default(0)}).strict();
+export const assetPublicProfileSchema=z.object({publicVisible:z.boolean().default(false),title:localizedTextSchema,description:localizedTextSchema,imageAssetId:z.string().uuid().nullable().default(null),sortOrder:sortOrderSchema.default(0)}).strict();
+
 export const platformSchema = z.object({
   code: codeSchema,
   typeCode: codeSchema,
@@ -32,6 +36,8 @@ export const platformSchema = z.object({
   description: localizedTextSchema,
   status: z.enum(["active", "maintenance", "building", "lend", "retired"]),
   assetCodes: z.array(codeSchema).max(1_000).default([]).refine((codes) => new Set(codes).size === codes.length, "Duplicate assets are not allowed"),
+  location:text(500).nullable().default(null),maintainerUserId:z.string().uuid().nullable().default(null),commissionedAt:z.union([z.literal(""),z.string().date()]).default(""),
+  specs:z.array(specSchema).max(200).default([]),publicProfile:platformPublicProfileSchema.default({publicVisible:false,title:{zh:"",en:""},description:{zh:"",en:""},imageAssetId:null,tags:[],componentDisplayMode:"summary",sortOrder:0}),
 }).strict();
 
 const assetShape = {
@@ -41,12 +47,15 @@ const assetShape = {
   name: localizedTextSchema,
   description: localizedTextSchema,
   vendorSerial: text(500),
+  manufacturer:text(500).default(""),condition:z.enum(["normal","maintenance","retired"]).default("normal"),
   status: z.enum(["idle", "in_use", "mounted", "maintenance", "lend", "retired"]),
   currentPlatformCode: codeSchema.nullable(),
   assignedUserId: z.string().uuid().nullable(),
   borrowerName: text(500),
   borrowerContact: text(500),
   storageLocation: text(500).nullable().default(null),
+  platformRole:localizedTextSchema.default({zh:"",en:""}),platformSlot:text(191).nullable().default(null),platformSortOrder:sortOrderSchema.default(0),mountedAt:z.string().nullable().default(null),
+  specs:z.array(specSchema).max(200).default([]),publicProfile:assetPublicProfileSchema.default({publicVisible:false,title:{zh:"",en:""},description:{zh:"",en:""},imageAssetId:null,sortOrder:0}),
 };
 const validateAssetState = (value: z.infer<z.ZodObject<typeof assetShape>>, context: z.RefinementCtx) => {
   if (value.status === "mounted" && !value.currentPlatformCode) context.addIssue({ code: "custom", path: ["currentPlatformCode"], message: "已装载设备必须选择平台" });
@@ -100,7 +109,6 @@ const batchBase = { assetCodes: z.array(codeSchema).min(1).max(1_000).refine((co
 export const assetBatchRequestSchema = z.discriminatedUnion("action", [
   z.object({ ...batchBase, action: z.literal("set_status"), value: z.enum(["idle", "maintenance", "retired"]) }).strict(),
   z.object({ ...batchBase, action: z.literal("set_device_type"), value: codeSchema }).strict(),
-  z.object({ ...batchBase, action: z.literal("set_platform"), value: codeSchema.nullable() }).strict(),
   z.object({ ...batchBase, action: z.literal("set_location"), value: text(500).nullable() }).strict(),
 ]);
 export const assetImportRowSchema = z.object({
@@ -120,12 +128,18 @@ export const assetImportRequestSchema = z.object({ rows: z.array(assetImportRowS
 export const inventoryCreateSchema = z.object({ name: text(200).min(1), assetCodes: z.array(codeSchema).max(5_000).default([]) }).strict();
 export const inventoryScanSchema = z.object({ assetCode: codeSchema }).strict();
 export const inventoryBatchIdSchema = z.string().uuid();
+export const componentAddSchema=z.object({assetCode:codeSchema,role:localizedTextSchema.default({zh:"",en:""}),slot:text(191).nullable().default(null),sortOrder:sortOrderSchema.default(0),expectedRevision:revisionSchema}).strict();
+export const componentUpdateSchema=z.object({role:localizedTextSchema,slot:text(191).nullable(),sortOrder:sortOrderSchema,expectedRevision:revisionSchema}).strict();
+export const componentRemoveSchema=z.object({storageLocation:text(500).min(1),expectedRevision:revisionSchema}).strict();
+export const componentTransferSchema=componentAddSchema.omit({assetCode:true});
+export const platformSlotsRequestSchema=z.object({slots:z.array(z.object({slotKey:codeSchema,name:localizedTextSchema,deviceTypeCode:codeSchema.nullable(),required:z.boolean(),minCount:z.number().int().min(0),maxCount:z.number().int().min(0).nullable(),sortOrder:sortOrderSchema}).strict()).max(200),expectedRevision:revisionSchema}).strict();
+export const deviceSpecDefinitionsRequestSchema=z.object({definitions:z.array(z.object({key:codeSchema,label:localizedTextSchema,unit:text(100),sortOrder:sortOrderSchema}).strict()).max(200),expectedRevision:revisionSchema}).strict();
 
 export type LocalizedText = z.infer<typeof localizedTextSchema>;
 export type LabPlatformType = z.infer<typeof platformTypeSchema>;
 export type LabDeviceType = z.infer<typeof deviceTypeSchema>;
-export type LabPlatform = z.infer<typeof platformSchema>;
-export type LabAsset = z.infer<typeof assetSchema>;
+export type LabPlatform = z.input<typeof platformSchema>;
+export type LabAsset = z.input<typeof assetSchema>;
 export type LabNote = z.infer<typeof noteSchema>;
 export type UsageRequestInput = z.infer<typeof usageRequestSchema>;
 export type UsageReviewInput = z.infer<typeof usageReviewSchema>;

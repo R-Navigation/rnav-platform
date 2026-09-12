@@ -11,6 +11,8 @@ class MemoryPublicSiteRepository implements PublicSiteRepository {
   news: Record<string, unknown>[] = [];
   team: Record<string, unknown>[] = [];
   facilities: Record<string, unknown>[] = [];
+  publicPlatforms: Record<string, unknown>[] = [];
+  publicAssets: Record<string, unknown>[] = [];
   contacts = { primaryChannels: [], socialLinks: [], extraCards: [] };
 
   async getPageContent(key: string) {
@@ -28,6 +30,8 @@ class MemoryPublicSiteRepository implements PublicSiteRepository {
   async getFacilityItems() {
     return this.facilities;
   }
+  async getPublicLabPlatforms(){return this.publicPlatforms;}
+  async getPublicLabAssets(){return this.publicAssets;}
   async getContactItems() {
     return this.contacts;
   }
@@ -189,6 +193,8 @@ test("facilities preserves an explicitly empty facilitySections array", async ()
   const facilities = await createPublicSiteService(repository).getFacilities();
   assert.deepEqual(facilities.facilitySections, []);
 });
+
+test("facilities combines safe live platforms and assets with legacy fallback",async()=>{const repository=new MemoryPublicSiteRepository();repository.publicPlatforms=[{id:"platform-1",category:"robot",categoryLabel:{zh:"机器人",en:"Robots"},title:{zh:"导航平台",en:"Navigation platform"},components:[{role:{zh:"前视",en:"Front"},deviceType:"相机",manufacturer:"Intel",model:"D455",count:1}]}];repository.publicAssets=[{id:"asset-1",category:"lidar",categoryLabel:{zh:"激光雷达",en:"LiDAR"},title:{zh:"核心雷达",en:"Core LiDAR"}}];repository.facilities=[{id:"legacy-1",category:"quadrupeds",title:{zh:"旧设施",en:"Legacy"}}];const facilities=await createPublicSiteService(repository).getFacilities();assert.deepEqual(facilities.facilitySections.map((section:any)=>section.category),["platform:robot","asset:lidar","quadrupeds"]);assert.deepEqual(facilities.facilitySections[0].subtitle,{zh:"机器人",en:"Robots"});assert.equal(facilities.facilitySections[0].items[0].components[0].role.zh,"前视");});
 
 test("public page projections recursively strip unknown and internal JSON fields", async () => {
   const repository = new MemoryPublicSiteRepository();

@@ -154,6 +154,8 @@ test("asset import validation and commit require write permission", async () => 
   assert.equal(committed.statusCode, 200); assert.deepEqual(committed.calls, ["commitAssetImport"]);
 });
 
+test("dedicated platform component routes require write permission and dispatch explicit operations",async()=>{const base="/api/lab-assets/platforms/DOG-1/components";const add={assetCode:"CAM-1",role:{zh:"前视",en:"Front"},slot:"front",sortOrder:0,expectedRevision:"0"};assert.equal((await request("POST",base,{user:user(["lab_assets.read"]),origin:"same-origin",body:add})).statusCode,403);const operations=[await request("POST",base,{user:user(["lab_assets.write"]),origin:"same-origin",body:add}),await request("PATCH",`${base}/CAM-1`,{user:user(["lab_assets.write"]),origin:"same-origin",body:{role:{zh:"后视",en:"Rear"},slot:null,sortOrder:1,expectedRevision:"0"}}),await request("DELETE",`${base}/CAM-1`,{user:user(["lab_assets.write"]),origin:"same-origin",body:{storageLocation:"507-A",expectedRevision:"0"}}),await request("POST",`${base}/CAM-1/transfer`,{user:user(["lab_assets.write"]),origin:"same-origin",body:{role:{zh:"前视",en:"Front"},slot:null,sortOrder:0,expectedRevision:"0"}})];assert.deepEqual(operations.map((item)=>item.statusCode),[200,200,200,200]);assert.deepEqual(operations.flatMap((item)=>item.calls),["addPlatformComponent","updatePlatformComponent","removePlatformComponent","transferPlatformComponent"]);});
+
 test("members can request devices while only asset managers can review", async () => {
   const submitted = await request("POST", "/api/lab-assets/usage-requests", {
     user: user(["lab_assets.read"]), origin: "same-origin",

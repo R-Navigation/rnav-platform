@@ -23,7 +23,6 @@ import {
 type BatchAction =
   | "set_status"
   | "set_device_type"
-  | "set_platform"
   | "set_location";
 type Props = {
   initialAssetCode?: string;
@@ -52,7 +51,7 @@ const primary =
   "bg-blue-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-cyan-800 active:translate-y-px disabled:cursor-not-allowed disabled:bg-slate-400";
 const secondary =
   "border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-cyan-600 hover:text-cyan-800 active:translate-y-px";
-const statusLabels: Record<LabAsset["status"], string> = {
+const statusLabels: Record<LabAsset["displayState"], string> = {
   idle: "闲置",
   in_use: "使用中",
   mounted: "已装载",
@@ -61,7 +60,7 @@ const statusLabels: Record<LabAsset["status"], string> = {
   retired: "报废",
 };
 const statusTone: Record<
-  LabAsset["status"],
+  LabAsset["displayState"],
   "neutral" | "info" | "success" | "warning" | "danger"
 > = {
   idle: "success",
@@ -73,23 +72,23 @@ const statusTone: Record<
 };
 
 function assignment(item: LabAsset) {
-  if (item.status === "mounted")
+  if (item.currentPlatformCode)
     return item.currentPlatformCode
       ? `平台 ${item.currentPlatformCode}`
       : "未分配平台";
-  if (item.status === "in_use")
+  if (item.displayState === "in_use")
     return item.assignedUserName
       ? `使用人 ${item.assignedUserName}`
       : "未设置使用人";
-  if (item.status === "lend")
+  if (item.displayState === "lend")
     return item.borrowerName ? `借用人 ${item.borrowerName}` : "未填写借用人";
   return "无占用关系";
 }
 
 function AssetStatus({ asset }: { asset: LabAsset }) {
   return (
-    <ConsoleStatusBadge tone={statusTone[asset.status]}>
-      {statusLabels[asset.status]}
+    <ConsoleStatusBadge tone={statusTone[asset.displayState]}>
+      {statusLabels[asset.displayState]}
     </ConsoleStatusBadge>
   );
 }
@@ -398,21 +397,6 @@ export function AssetWorkbench({
           ))}
         </select>
       );
-    if (batchAction === "set_platform")
-      return (
-        <select
-          className={field}
-          onChange={(event) => setBatchValue(event.target.value)}
-          value={batchValue}
-        >
-          <option value="">移出实验平台</option>
-          {snapshot.platforms.map((item) => (
-            <option key={item.code} value={item.code}>
-              {item.code} · {item.name.zh || item.name.en}
-            </option>
-          ))}
-        </select>
-      );
     return (
       <input
         className={field}
@@ -428,7 +412,7 @@ export function AssetWorkbench({
   }
   async function applyBatch() {
     const value =
-      batchAction === "set_platform" || batchAction === "set_location"
+      batchAction === "set_location"
         ? batchValue.trim() || null
         : batchValue;
     if (!value && batchAction === "set_device_type") return;
@@ -832,9 +816,8 @@ export function AssetWorkbench({
               }
               value={batchAction}
             >
-              <option value="set_status">修改状态</option>
+              <option value="set_status">修改设备状况</option>
               <option value="set_device_type">修改设备类型</option>
-              <option value="set_platform">移动到实验平台</option>
               <option value="set_location">修改存放位置</option>
             </select>
             {batchOptions()}

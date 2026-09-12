@@ -32,6 +32,8 @@ test("user creation creates a private self-managed profile and returns a one-tim
   assert.equal(client.calls.at(-1)?.sql, "COMMIT");
 });
 
+test("system account creation and conversion stay out of the public team",async()=>{const client=new Client();const service=createUserAdminService({connect:async()=>client} as never);await service.createUser({username:"robot",nameZh:"设备账号",nameEn:"Robot",email:"robot@example.com",baseTier:"normal",accountKind:"system"},{id:"admin",baseTier:"super"});const insert=client.calls.find((call)=>call.sql.includes("INSERT INTO users"));assert.equal(insert?.values?.[4],"system");await service.setAccountKind("user-2","system",{id:"admin",baseTier:"super"});assert.ok(client.calls.some((call)=>call.sql.includes("UPDATE user_profiles SET public_visible=false")));assert.ok(client.calls.some((call)=>call.sql.includes("'user.account_kind'")));});
+
 test("last active super and self disable are protected", async () => {
   const client = new Client(); const service = createUserAdminService({ connect: async () => client } as never);
   await assert.rejects(service.setStatus("admin", "disabled", { id: "admin", baseTier: "super" }), (error: unknown) => error instanceof UserAdminError && error.code === "SELF_DISABLE");

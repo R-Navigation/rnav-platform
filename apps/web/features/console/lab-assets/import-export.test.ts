@@ -59,9 +59,11 @@ test("template and export escape spreadsheet formulas", () => {
       description: { zh: "", en: "" },
       deviceTypeCode: "camera",
       deviceTypeName: "相机",
+      manufacturer: "",
       model: "",
       vendorSerial: "",
       status: "idle",
+      condition:"normal",displayState:"idle",platformRole:{zh:"",en:""},platformSlot:null,platformSortOrder:0,mountedAt:null,
       currentPlatformCode: null,
       assignedUserId: null,
       assignedUserName: "",
@@ -69,6 +71,7 @@ test("template and export escape spreadsheet formulas", () => {
       borrowerContact: "",
       storageLocation: null,
       updatedAt: "",
+      specs:[],publicProfile:{publicVisible:false,title:{zh:"",en:""},description:{zh:"",en:""},imageAssetId:null,imageUrl:null,sortOrder:0},
     },
   ]);
   assert.match(csv, /'=CMD\(\)/);

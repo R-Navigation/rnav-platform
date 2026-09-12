@@ -22,10 +22,10 @@ test("asset state fields follow the selected relationship", () => {
   assert.equal(assetRequestSchema.safeParse({ ...base, status: "lend", borrowerName: "李四", borrowerContact: "13800000000" }).success, true);
 });
 
-test("batch actions require unique assets and relationship-safe values", () => {
+test("batch actions require unique assets and cannot bypass component operations", () => {
   const base = { assetCodes: ["CAM-1", "CAM-2"], expectedRevision: "4" };
   assert.equal(assetBatchRequestSchema.safeParse({ ...base, action: "set_location", value: "507-A 柜 3 层" }).success, true);
-  assert.equal(assetBatchRequestSchema.safeParse({ ...base, action: "set_platform", value: null }).success, true);
+  assert.equal(assetBatchRequestSchema.safeParse({ ...base, action: "set_platform", value: null }).success, false);
   assert.equal(assetBatchRequestSchema.safeParse({ ...base, action: "set_status", value: "maintenance" }).success, true);
   assert.equal(assetBatchRequestSchema.safeParse({ ...base, action: "set_status", value: "in_use" }).success, false);
   assert.equal(assetBatchRequestSchema.safeParse({ ...base, assetCodes: ["CAM-1", "CAM-1"], action: "set_location", value: null }).success, false);

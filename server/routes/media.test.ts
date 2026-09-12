@@ -63,9 +63,14 @@ test("member profile administrators can upload avatar images", async () => {
   assert.deepEqual(response.calls, [{ filename: "member.webp", mimeType: "image/webp" }]);
 });
 
+test("lab asset administrators can upload public profile cover images", async () => {
+  assert.equal((await upload(["lab_assets.write"], "image/png", "platform.png")).status, 201);
+});
+
 test("profile-only uploads reject documents while media administrators may upload them", async () => {
   assert.equal((await upload(["profile.write_own"], "application/pdf", "paper.pdf")).status, 400);
   assert.equal((await upload(["site.members.write"], "application/pdf", "member.pdf")).status, 400);
+  assert.equal((await upload(["lab_assets.write"], "application/pdf", "platform.pdf")).status, 400);
   assert.equal((await upload(["site.media.write"], "application/pdf", "paper.pdf")).status, 201);
   assert.equal((await upload([], "image/png", "avatar.png")).status, 403);
 });

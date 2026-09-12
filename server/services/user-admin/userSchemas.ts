@@ -6,9 +6,10 @@ export const createUserSchema = z.object({
   username: z.string().trim().min(3).max(64).regex(/^[a-z0-9][a-z0-9._-]*$/),
   nameZh: z.string().trim().min(1).max(100),
   nameEn: z.string().trim().max(100),
-  memberCategory: z.enum(memberCategories),
+  memberCategory: z.enum(memberCategories).default("undergrad"),
   email: z.string().email().max(320),
-  baseTier: z.enum(["normal", "super"]).default("normal")
+  baseTier: z.enum(["normal", "super"]).default("normal"),
+  accountKind: z.enum(["person", "system"]).default("person")
 }).strict();
 export const userListSchema = z.object({
   search: z.string().trim().max(100).optional(),
@@ -21,6 +22,7 @@ export const userListSchema = z.object({
 }).strict();
 export const statusSchema = z.object({ status: z.enum(["active", "disabled"]) }).strict();
 export const tierSchema = z.object({ baseTier: z.enum(["normal", "super"]) }).strict();
+export const accountKindSchema = z.object({ accountKind: z.enum(["person", "system"]) }).strict();
 export const publicProfileAdminSchema = z.object({
   publicVisible: z.boolean(),
 }).strict();

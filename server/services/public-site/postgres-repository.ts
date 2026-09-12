@@ -31,7 +31,7 @@ export function createPostgresPublicSiteRepository(pool: Queryable): PublicSiteR
       const { rows } = await pool.query(`SELECT p.*, u.username, m.url AS avatar_url
         FROM user_profiles p JOIN users u ON u.id=p.user_id
         LEFT JOIN media_assets m ON m.id=p.avatar_asset_id AND m.status='active'
-        WHERE p.public_visible=true
+        WHERE p.public_visible=true AND u.account_kind='person'
         ORDER BY p.member_status,p.member_category,p.enrollment_year,p.name_en,u.username`);
       return rows.map((row) => {
         const fields = new Set<string>(row.public_fields ?? []);
@@ -62,6 +62,21 @@ export function createPostgresPublicSiteRepository(pool: Queryable): PublicSiteR
       const [items, specs] = await Promise.all([pool.query("SELECT * FROM facility_items ORDER BY category_key, sort_order, title_en, id"), pool.query("SELECT * FROM facility_item_specs ORDER BY facility_item_id, sort_order, id")]);
       const specMap = groupBy(specs.rows, "facility_item_id");
       return items.rows.map((row) => ({ id: String(row.id), category: row.category_key, sortOrder: row.sort_order, icon: row.icon, tag: locale(row, "tag"), title: locale(row, "title"), description: locale(row, "description"), specLine: locale(row, "spec_line"), image: image(row), specs: (specMap.get(row.id) ?? []).map((item: PublicRecord) => ({ label: locale(item, "label"), value: locale(item, "value") })) }));
+    },
+    async getPublicLabPlatforms() {
+      const [platforms,specs,components]=await Promise.all([
+        pool.query(`SELECT p.id,pt.code category,pt.name_zh category_zh,pt.name_en category_en,pp.title_zh,pp.title_en,pp.description_zh,pp.description_en,pp.tags,pp.component_display_mode,pp.sort_order,m.url image_src FROM lab_platform_public_profiles pp JOIN lab_platforms p ON p.id=pp.platform_id JOIN lab_platform_types pt ON pt.id=p.type_id LEFT JOIN media_assets m ON m.id=pp.image_asset_id AND m.status='active' WHERE pp.public_visible=true ORDER BY pp.sort_order,p.id`),
+        pool.query(`SELECT s.platform_id,s.label_zh,s.label_en,s.value_zh,s.value_en,s.unit FROM lab_platform_specs s JOIN lab_platform_public_profiles pp ON pp.platform_id=s.platform_id WHERE pp.public_visible=true AND s.public_visible=true ORDER BY s.platform_id,s.sort_order,s.id`),
+        pool.query(`SELECT a.current_platform_id,a.platform_role_zh,a.platform_role_en,dt.name device_type,a.manufacturer,a.model FROM lab_assets a JOIN lab_device_types dt ON dt.id=a.device_type_id JOIN lab_platform_public_profiles pp ON pp.platform_id=a.current_platform_id WHERE pp.public_visible=true AND pp.component_display_mode<>'none' AND a.condition<>'retired' ORDER BY a.current_platform_id,a.platform_sort_order,a.id`),
+      ]);
+      return platforms.rows.map((row:any)=>{const mode=row.component_display_mode;const raw=components.rows.filter((item:any)=>String(item.current_platform_id)===String(row.id));const publicComponents=mode==="detail"?raw.map((item:any)=>({role:locale(item,"platform_role"),deviceType:item.device_type,manufacturer:item.manufacturer??"",model:item.model??"",count:1})):mode==="summary"?[...raw.reduce((map:Map<string,any>,item:any)=>{const key=[item.device_type,item.manufacturer,item.model].join("\u0000");const current=map.get(key)??{role:{zh:"",en:""},deviceType:item.device_type,manufacturer:item.manufacturer??"",model:item.model??"",count:0};current.count+=1;map.set(key,current);return map},new Map()).values()]:[];return{id:`platform-${row.id}`,category:row.category,categoryLabel:{zh:row.category_zh??row.category,en:row.category_en??row.category},sortOrder:row.sort_order,title:locale(row,"title"),description:locale(row,"description"),tag:{zh:"实验平台",en:"Experimental Platform"},image:row.image_src?{src:row.image_src,alt:row.title_zh||row.title_en}:null,tags:row.tags??[],specs:specs.rows.filter((item:any)=>String(item.platform_id)===String(row.id)).map((item:any)=>({label:locale(item,"label"),value:{zh:`${item.value_zh??""}${item.unit?` ${item.unit}`:""}`,en:`${item.value_en??item.value_zh??""}${item.unit?` ${item.unit}`:""}`}})),components:publicComponents};});
+    },
+    async getPublicLabAssets() {
+      const [assets,specs]=await Promise.all([
+        pool.query(`SELECT a.id,dt.code category,dt.name category_name,ap.title_zh,ap.title_en,ap.description_zh,ap.description_en,ap.sort_order,m.url image_src FROM lab_asset_public_profiles ap JOIN lab_assets a ON a.id=ap.asset_id JOIN lab_device_types dt ON dt.id=a.device_type_id LEFT JOIN media_assets m ON m.id=ap.image_asset_id AND m.status='active' WHERE ap.public_visible=true AND a.condition<>'retired' ORDER BY ap.sort_order,a.id`),
+        pool.query(`SELECT s.asset_id,s.label_zh,s.label_en,s.value_zh,s.value_en,s.unit FROM lab_asset_specs s JOIN lab_asset_public_profiles ap ON ap.asset_id=s.asset_id WHERE ap.public_visible=true AND s.public_visible=true ORDER BY s.asset_id,s.sort_order,s.id`),
+      ]);
+      return assets.rows.map((row:any)=>({id:`asset-${row.id}`,category:row.category,categoryLabel:{zh:row.category_name??row.category,en:row.category_name??row.category},sortOrder:row.sort_order,title:locale(row,"title"),description:locale(row,"description"),tag:{zh:"核心设备",en:"Core Equipment"},image:row.image_src?{src:row.image_src,alt:row.title_zh||row.title_en}:null,specs:specs.rows.filter((item:any)=>String(item.asset_id)===String(row.id)).map((item:any)=>({label:locale(item,"label"),value:{zh:`${item.value_zh??""}${item.unit?` ${item.unit}`:""}`,en:`${item.value_en??item.value_zh??""}${item.unit?` ${item.unit}`:""}`}}))}));
     },
     async getContactItems() {
       const [channels, social, cards] = await Promise.all([pool.query("SELECT * FROM contact_primary_channels ORDER BY sort_order, id"), pool.query("SELECT * FROM contact_social_links ORDER BY sort_order, id"), pool.query("SELECT * FROM contact_extra_cards ORDER BY sort_order, id")]);

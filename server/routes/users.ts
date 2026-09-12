@@ -6,6 +6,7 @@ import { createRequireSameOrigin } from "../middleware/requireSameOrigin.js";
 import {
   createUserSchema,
   accountEmailSchema,
+  accountKindSchema,
   adminProfileUpdateSchema,
   convertAlumniSchema,
   importUsersSchema,
@@ -102,6 +103,10 @@ export function createUsersRouter({
   router.put("/api/users/:id/account-email", requirePermission("users.write"), same, async (r, res, next) => {
     try { await service.setAccountEmail(userIdSchema.parse(r.params.id), accountEmailSchema.parse(r.body).email, actor(r)); res.status(204).end(); }
     catch (e) { handle(e, res, next); }
+  });
+  router.put("/api/users/:id/account-kind", requirePermission("users.write"), same, async (r, res, next) => {
+    try { await service.setAccountKind(userIdSchema.parse(r.params.id),accountKindSchema.parse(r.body).accountKind,actor(r));res.status(204).end(); }
+    catch(e){handle(e,res,next);}
   });
   router.post("/api/users/:id/convert-alumni", requirePermission("site.members.write"), same, async (r, res, next) => {
     try { convertAlumniSchema.parse(r.body); res.json(await service.convertToAlumni(userIdSchema.parse(r.params.id), actor(r))); }

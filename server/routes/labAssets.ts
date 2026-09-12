@@ -9,6 +9,7 @@ import {
   assetBatchRequestSchema,assetImportRequestSchema,assetRequestSchema,codeParamSchema,deleteRequestSchema,deviceTypeRequestSchema,noteIdParamSchema,noteRequestSchema,pageRequestSchema,
   platformRequestSchema,platformTypeRequestSchema,requestIdParamSchema,usageRequestSchema,usageReviewSchema,
   inventoryBatchIdSchema,inventoryCreateSchema,inventoryScanSchema,
+  componentAddSchema,componentUpdateSchema,componentRemoveSchema,componentTransferSchema,platformSlotsRequestSchema,deviceSpecDefinitionsRequestSchema,
 } from "../services/lab-assets/schemas.js";
 
 type Options={authMiddleware:RequestHandler;service:LabAssetsService;trustProxy:boolean};
@@ -27,6 +28,12 @@ export function createLabAssetsRouter({authMiddleware,service,trustProxy}:Option
   router.post("/api/lab-assets/platforms",...mutation(platformRequestSchema,(r,b)=>service.createPlatform(b,b.expectedRevision,actorId(r))));
   router.put("/api/lab-assets/platforms/:code",...mutation(platformRequestSchema,(r,b)=>service.updatePlatform(code(r),b,b.expectedRevision,actorId(r))));
   router.delete("/api/lab-assets/platforms/:code",...mutation(deleteRequestSchema,(r,b)=>service.deletePlatform(code(r),b.expectedRevision,actorId(r))));
+  router.post("/api/lab-assets/platforms/:code/components",...mutation(componentAddSchema,(r,b)=>service.addPlatformComponent(code(r),b,actorId(r))));
+  router.patch("/api/lab-assets/platforms/:code/components/:assetCode",...mutation(componentUpdateSchema,(r,b)=>service.updatePlatformComponent(code(r),codeParamSchema.parse(r.params.assetCode),b,actorId(r))));
+  router.delete("/api/lab-assets/platforms/:code/components/:assetCode",...mutation(componentRemoveSchema,(r,b)=>service.removePlatformComponent(code(r),codeParamSchema.parse(r.params.assetCode),b,actorId(r))));
+  router.post("/api/lab-assets/platforms/:code/components/:assetCode/transfer",...mutation(componentTransferSchema,(r,b)=>service.transferPlatformComponent(code(r),codeParamSchema.parse(r.params.assetCode),b,actorId(r))));
+  router.put("/api/lab-assets/platform-types/:code/slots",...mutation(platformSlotsRequestSchema,(r,b)=>service.replacePlatformTypeSlots(code(r),b,actorId(r))));
+  router.put("/api/lab-assets/device-types/:code/spec-definitions",...mutation(deviceSpecDefinitionsRequestSchema,(r,b)=>service.replaceDeviceTypeSpecDefinitions(code(r),b,actorId(r))));
   router.post("/api/lab-assets/assets",...mutation(assetRequestSchema,(r,b)=>service.createAsset(b,b.expectedRevision,actorId(r))));
   router.post("/api/lab-assets/assets/batch",...mutation(assetBatchRequestSchema,(r,b)=>service.batchAssets(b,actorId(r))));
   router.post("/api/lab-assets/assets/import/validate",requirePermission("lab_assets.write"),sameOrigin,async(request,response,next)=>{try{const body=assetImportRequestSchema.parse(request.body);response.json(await service.validateAssetImport(body));}catch(error){handle(response,next,error)}});

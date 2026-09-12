@@ -13,6 +13,8 @@ export interface PublicSiteRepository {
   getNewsItems(): Promise<PublicRecord[]>;
   getTeamMembers(): Promise<PublicRecord[]>;
   getFacilityItems(): Promise<PublicRecord[]>;
+  getPublicLabPlatforms?(): Promise<PublicRecord[]>;
+  getPublicLabAssets?(): Promise<PublicRecord[]>;
   getContactItems(): Promise<{
     primaryChannels: PublicRecord[];
     socialLinks: PublicRecord[];
@@ -72,6 +74,7 @@ const itemFields: Allowlist = {
   group: true,
   groupKey: true,
   category: true,
+  categoryLabel: localized,
   sortOrder: true,
   title: localized,
   description: localized,
@@ -111,6 +114,8 @@ const itemFields: Allowlist = {
   keywords: [localized],
   authors: [{ name: localized, highlight: true }],
   specs: [{ label: localized, value: localized }],
+  tags:[true],
+  components:[{role:localized,deviceType:true,manufacturer:true,model:true,count:true}],
 };
 const facilityVideoFields: Allowlist = {
   title: localized,
@@ -651,7 +656,7 @@ export function createPublicSiteService(repository: PublicSiteRepository) {
         await Promise.all([
           page("home", defaults.home),
           repository.getResearchItems(),
-          repository.getFacilityItems(),
+          Promise.all([repository.getPublicLabPlatforms?.()??Promise.resolve([]),repository.getPublicLabAssets?.()??Promise.resolve([]),repository.getFacilityItems()]).then(([platforms,assets,legacy])=>[...platforms,...assets,...legacy]),
           repository.getTeamMembers(),
           repository.getNewsItems(),
           page("contact_page", defaults.contact),
@@ -744,9 +749,11 @@ export function createPublicSiteService(repository: PublicSiteRepository) {
       };
     },
     async getFacilities(): Promise<PublicRecord> {
-      const [raw, rawItems] = await Promise.all([
+      const [raw, rawItems, publicPlatforms, publicAssets] = await Promise.all([
         repository.getPageContent("facilities_page"),
         repository.getFacilityItems(),
+        repository.getPublicLabPlatforms?.()??Promise.resolve([]),
+        repository.getPublicLabAssets?.()??Promise.resolve([]),
       ]);
       const projected = project(raw, pageAllowlists.facilities_page);
       const config = sanitizeConfig(
@@ -757,11 +764,12 @@ export function createPublicSiteService(repository: PublicSiteRepository) {
         object(raw),
         "facilitySections",
       );
+      const dynamic=(items:PublicRecord[],kind:"platform"|"asset")=>{const grouped=new Map<string,PublicRecord[]>();for(const item of items){const group=clean(item.category)||"other";grouped.set(group,[...(grouped.get(group)??[]),normalizeItem(item)]);}return[...grouped.entries()].map(([category,items])=>({category:`${kind}:${category}`,kind,subtitle:items[0]?.categoryLabel??{zh:category,en:category},items}));};
       return {
         ...config,
-        facilitySections: hasExplicitSections
+        facilitySections: [...dynamic(publicPlatforms,"platform"),...dynamic(publicAssets,"asset"),...(hasExplicitSections
           ? array(config.facilitySections).map(normalizeFacilitySection)
-          : buildFacilitySections(config, legacyItems),
+          : buildFacilitySections(config, legacyItems))],
       };
     },
     async getContact(): Promise<PublicRecord> {

@@ -38,7 +38,7 @@ export async function readLabAssetsError(response: Response) {
   }
 }
 
-export async function mutateLabAssets(endpoint: string, method: "POST" | "PUT" | "DELETE", body: Record<string, unknown>) {
+export async function mutateLabAssets(endpoint: string, method: "POST" | "PUT" | "PATCH" | "DELETE", body: Record<string, unknown>) {
   const response = await fetch(`/api/lab-assets${endpoint}`, {
     method,
     headers: { "content-type": "application/json" },

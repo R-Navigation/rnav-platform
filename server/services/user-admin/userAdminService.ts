@@ -42,7 +42,7 @@ export function createUserAdminService(pool: Pick<Pool, "query" | "connect">) {
       publicVisibility?: string; profile?: string; login?: string; memberStatus?: string;
     }) {
       const result = await pool.query<any>(
-        `SELECT users.id,users.username,users.email,users.display_name,users.base_tier,users.status,
+        `SELECT users.id,users.username,users.email,users.display_name,users.base_tier,users.account_kind,users.status,
         users.must_change_password,users.last_login_at,users.created_at,
         user_profiles.public_visible,user_profiles.member_status,user_profiles.member_category,user_profiles.degree_level,
         user_profiles.name_zh,user_profiles.name_en,user_profiles.email public_email,user_profiles.phone,user_profiles.bio_zh,user_profiles.bio_en,
@@ -74,6 +74,7 @@ export function createUserAdminService(pool: Pick<Pool, "query" | "connect">) {
             email: row.email ?? "",
             displayName: row.display_name,
             baseTier: row.base_tier,
+            accountKind: row.account_kind,
             tier: deriveDisplayTier(row.base_tier, permissions),
             status: row.status,
             mustChangePassword: row.must_change_password,
@@ -125,7 +126,7 @@ export function createUserAdminService(pool: Pick<Pool, "query" | "connect">) {
         actorName: row.actor_name,
       }));
     },
-    async createUser(body: z.output<typeof createUserSchema>, actor: Actor) {
+    async createUser(body: z.input<typeof createUserSchema>, actor: Actor) {
       if (body.baseTier === "super" && actor.baseTier !== "super")
         throw new UserAdminError(
           "Only super can create super users",
@@ -139,13 +140,14 @@ export function createUserAdminService(pool: Pick<Pool, "query" | "connect">) {
         await client.query("BEGIN");
         await client.query("SELECT pg_advisory_xact_lock($1)", [SUPER_LOCK]);
         const user = await client.query<{ id: string }>(
-          `INSERT INTO users(username,email,password_hash,base_tier,display_name,status,must_change_password,created_source)
-          VALUES($1,$2,$3,$4,$5,'active',true,'admin') RETURNING id`,
+          `INSERT INTO users(username,email,password_hash,base_tier,account_kind,display_name,status,must_change_password,created_source)
+          VALUES($1,$2,$3,$4,$5,$6,'active',true,'admin') RETURNING id`,
           [
             body.username,
             body.email,
             hash,
             body.baseTier,
+            body.accountKind ?? "person",
             body.nameZh || body.nameEn,
           ],
         );
@@ -184,6 +186,7 @@ export function createUserAdminService(pool: Pick<Pool, "query" | "connect">) {
             JSON.stringify({
               username: body.username,
               baseTier: body.baseTier,
+              accountKind: body.accountKind ?? "person",
             }),
           ],
         );
@@ -315,6 +318,19 @@ export function createUserAdminService(pool: Pick<Pool, "query" | "connect">) {
       } finally {
         client.release();
       }
+    },
+    async setAccountKind(userId: string, accountKind: "person" | "system", actor: Actor) {
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const target = await client.query<{base_tier:BaseTier}>("SELECT base_tier FROM users WHERE id=$1 FOR UPDATE",[userId]);
+        if(!target.rowCount) throw new UserAdminError("User not found","NOT_FOUND",404);
+        if(target.rows[0].base_tier==="super"&&actor.baseTier!=="super") throw new UserAdminError("Only super can modify super users","SUPER_REQUIRED",403);
+        await client.query("UPDATE users SET account_kind=$2,updated_at=now() WHERE id=$1",[userId,accountKind]);
+        if(accountKind==="system") await client.query("UPDATE user_profiles SET public_visible=false,updated_at=now() WHERE user_id=$1",[userId]);
+        await client.query("INSERT INTO audit_logs(actor_id,action,target_type,target_id,detail) VALUES($1,'user.account_kind','user',$2,$3::jsonb)",[actor.id,userId,JSON.stringify({accountKind})]);
+        await client.query("COMMIT");
+      } catch(error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); }
     },
     async setPublicProfile(
       userId: string,
