@@ -20,7 +20,7 @@ export const metadata = publicMetadata("RNAV Lab", "RNAV 实验室的研究方�
 
 export default async function Page() {
   const bootstrapPromise = getPublicData("bootstrap", fallbackBootstrap);
-  const [bootstrap, homepage, rawMonitorPreview] = await Promise.all([
+  const [bootstrap, homepage, rawMonitorPreview, team] = await Promise.all([
     bootstrapPromise,
     getPublicData("homepage", {
       home: homeFallback,
@@ -31,6 +31,7 @@ export default async function Page() {
       contact: contactFallback,
     }),
     getOptionalPublicData("/api/monitor/public/homepage-snapshot?limit=6"),
+    getPublicData("team", teamFallback),
   ]);
   const degraded = homepage.degraded;
   return (
@@ -38,6 +39,7 @@ export default async function Page() {
       <HomePage
         data={{
           ...homepage.data,
+          team: team.degraded ? homepage.data.team : team.data,
           monitorPreview: sanitizeMonitorPreview(rawMonitorPreview),
         }}
       />

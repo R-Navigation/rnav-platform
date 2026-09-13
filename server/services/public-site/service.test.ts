@@ -44,9 +44,10 @@ test("bootstrap supplies bilingual defaults and the required public navigation",
   assert.equal(bootstrap.brand.name.zh, "R-Nav 研究组");
   assert.deepEqual(
     bootstrap.navigation.map((item) => item.href),
-    ["/", "/research", "/team", "/facilities", "/news", "/monitor", "/contact"],
+    ["/", "/directions", "/research", "/facilities", "/team", "/news", "/contact"],
   );
-  assert.equal(bootstrap.navigation[1].label.en, "Research");
+  assert.equal(bootstrap.navigation[1].label.en, "Directions");
+  assert.equal(bootstrap.navigation[2].label.zh, "论文成果");
 });
 
 test("research merges stored page content with normalized repository items", async () => {

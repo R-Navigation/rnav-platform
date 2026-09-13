@@ -1,217 +1,299 @@
 "use client";
-
-import { PageHeader } from "./PageHeader";
+import { useState } from "react";
 import { useLanguage } from "./LanguageProvider";
-import { getLocalizedText, normalizeInternalHref } from "./i18n";
+import { getLocalizedText } from "./i18n";
 import {
-  PublicButton,
-  PublicImage,
-  PublicSectionHeading,
-  PublicTag,
-} from "./ui/PublicUi";
+  Action,
+  ContactCta,
+  Empty,
+  Heading,
+  Hero,
+  Media,
+  Tag,
+} from "./ui4/Primitives";
+import { flattenFacilities, isDemoContent } from "./ui4/content";
 import { sanitizeEmbedUrl, sanitizePublicUrl } from "./url-sanitizer";
 
-export function FacilitiesPage({ data }: { data: any }) {
-  const { locale } = useLanguage();
-  const sections = data.facilitySections ?? [];
-  const firstImage = sections
-    .flatMap((section: any) =>
-      section.items?.length ? section.items : [section],
-    )
-    .find((item: any) => sanitizePublicUrl(item.image?.src))?.image;
+export function FacilitiesPage({
+  data,
+  featuredIds = [],
+}: {
+  data: any;
+  featuredIds?: unknown[];
+}) {
+  const { locale } = useLanguage(),
+    zh = locale === "zh",
+    text = (value: unknown) => getLocalizedText(value, locale);
+  const sections = data.facilitySections ?? [],
+    all = flattenFacilities(data),
+    platforms = all.filter((item) => item.sectionKind !== "asset"),
+    assets = all.filter((item) => item.sectionKind === "asset");
+  const [selected, setSelected] = useState("");
+  const featured: any =
+    platforms.find((item) => item.displayKey === selected) ||
+    platforms.find((item) => String(item.id) === String(featuredIds[0])) ||
+    platforms[0];
+  const overview = sections.filter((section: any) => section.kind !== "asset");
+  const video = sections.find((section: any) =>
+    (section.items?.length ? section.items : [section]).some((item: any) =>
+      item.id
+        ? String(item.id) === String(featured?.id)
+        : text(item.title) === text(featured?.title),
+    ),
+  )?.video;
+  const embed = sanitizeEmbedUrl(video?.embedUrl),
+    videoUrl = sanitizePublicUrl(video?.url);
+  const configuredScenarios = Array.isArray(data.scenarios)
+    ? data.scenarios
+    : platforms;
   return (
     <main>
-      <PageHeader header={data.header} image={firstImage} />
-      <div className="public-container public-section">
-        <section className="mb-16">
-          <PublicSectionHeading
-            eyebrow={locale === "zh" ? "平台概览" : "PLATFORM OVERVIEW"}
-            title={
-              locale === "zh" ? "真实实验能力一览" : "Experimental capabilities"
-            }
-          />
-          <div className="flex gap-3 overflow-x-auto pb-2">
-            {sections.map((section: any, index: number) => (
-              <a
-                className="min-w-48 rounded-xl border border-[#e4eaf2] bg-white p-4 hover:border-[#1266f1]"
-                href={`#facility-${index}`}
-                key={section.category || index}
-              >
-                <span className="public-kicker">
-                  {String(index + 1).padStart(2, "0")}
-                </span>
-                <span className="mt-2 block font-semibold text-[#09275f]">
-                  {getLocalizedText(section.subtitle, locale) ||
-                    getLocalizedText(section.title, locale)}
-                </span>
-              </a>
-            ))}
-          </div>
-        </section>
-        <div className="space-y-20">
-          {sections.map((section: any, index: number) => {
-            const items = section.items?.length ? section.items : [section];
-            const embedUrl = sanitizeEmbedUrl(section.video?.embedUrl);
-            const posterSrc = sanitizePublicUrl(section.video?.poster?.src);
+      <Hero
+        header={{
+          ...data.header,
+          eyebrow: "EXPERIMENTAL PLATFORMS",
+          description: isDemoContent(data.header)
+            ? {
+                zh: "了解实验室公开的机器人平台、核心设备与实验配置。",
+                en: "Explore the lab’s publicly shared robotic platforms, equipment and experimental configurations.",
+              }
+            : data.header?.description,
+        }}
+        locale={locale}
+        image={featured?.image}
+      >
+        <Action href="#platform-overview">
+          {zh ? "了解实验平台" : "Explore platforms"}
+        </Action>
+        {(embed || videoUrl) && (
+          <Action href="#platform-video" secondary>
+            {zh ? "观看平台影像" : "Platform video"}
+          </Action>
+        )}
+      </Hero>
+      <section id="platform-overview" className="v41-wrap v41-section">
+        <Heading
+          title={zh ? "平台总览" : "Platform overview"}
+          eyebrow="PLATFORM OVERVIEW"
+        />
+        <div className="v41-platform-overview">
+          {overview.map((section: any, index: number) => {
+            const first = section.items?.[0] || section;
+            const match = platforms.find((item) =>
+              first.id
+                ? String(item.id) === String(first.id)
+                : text(item.title) === text(first.title),
+            );
             return (
-              <section id={`facility-${index}`} key={section.category || index}>
-                <PublicSectionHeading
-                  eyebrow={
-                    section.kind === "platform"
-                      ? locale === "zh"
-                        ? "实验平台"
-                        : "EXPERIMENTAL PLATFORMS"
-                      : section.kind === "asset"
-                        ? locale === "zh"
-                          ? "核心设备"
-                          : "CORE EQUIPMENT"
-                        : ""
-                  }
-                  title={getLocalizedText(section.subtitle, locale)}
-                />
-                <div className="grid gap-6 lg:grid-cols-2">
-                  {items.map((item: any, itemIndex: number) => (
-                    <article
-                      className="overflow-hidden rounded-xl border border-[#e4eaf2] bg-white"
-                      key={String(item.id ?? itemIndex)}
-                    >
-                      <PublicImage
-                        alt={getLocalizedText(item.title, locale)}
-                        className="aspect-video"
-                        image={item.image}
-                      />
-                      <div className="p-6">
-                        {getLocalizedText(item.tag, locale) ? (
-                          <span className="public-kicker">
-                            {getLocalizedText(item.tag, locale)}
-                          </span>
-                        ) : null}
-                        <h3 className="mt-3 text-2xl font-semibold text-[#09275f]">
-                          {getLocalizedText(item.title, locale)}
-                        </h3>
-                        <p className="mt-3 leading-7 text-[#66758f]">
-                          {getLocalizedText(item.description, locale)}
-                        </p>
-                        {item.tags?.length ? (
-                          <div className="mt-5 flex flex-wrap gap-2">
-                            {item.tags.map((tag: string) => (
-                              <PublicTag key={tag}>{tag}</PublicTag>
-                            ))}
-                          </div>
-                        ) : null}
-                        {item.specs?.length ? (
-                          <dl className="mt-6 divide-y divide-[#e4eaf2] border-t border-[#e4eaf2]">
-                            {item.specs.map((spec: any, specIndex: number) => (
-                              <div
-                                className="grid grid-cols-[minmax(0,.8fr)_minmax(0,1.2fr)] gap-4 py-3 text-sm"
-                                key={specIndex}
-                              >
-                                <dt className="text-[#66758f]">
-                                  {getLocalizedText(spec.label, locale)}
-                                </dt>
-                                <dd className="text-right font-medium text-[#09275f]">
-                                  {getLocalizedText(spec.value, locale)}
-                                </dd>
-                              </div>
-                            ))}
-                          </dl>
-                        ) : null}
-                        {item.components?.length ? (
-                          <section className="mt-6 border-t border-[#e4eaf2] pt-5">
-                            <h4 className="text-sm font-bold text-[#09275f]">
-                              {locale === "zh" ? "主要配置" : "Core components"}
-                            </h4>
-                            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                              {item.components.map(
-                                (component: any, componentIndex: number) => (
-                                  <div
-                                    className="rounded-lg bg-[#f4f8fc] p-3 text-sm"
-                                    key={componentIndex}
-                                  >
-                                    <b className="text-[#09275f]">
-                                      {getLocalizedText(
-                                        component.role,
-                                        locale,
-                                      ) || component.deviceType}
-                                    </b>
-                                    <p className="mt-1 text-[#66758f]">
-                                      {[component.manufacturer, component.model]
-                                        .filter(Boolean)
-                                        .join(" ")}
-                                      {component.count > 1
-                                        ? ` × ${component.count}`
-                                        : ""}
-                                    </p>
-                                  </div>
-                                ),
-                              )}
-                            </div>
-                          </section>
-                        ) : null}
-                      </div>
-                    </article>
-                  ))}
+              <button
+                type="button"
+                aria-pressed={featured?.displayKey === match?.displayKey}
+                key={section.category || index}
+                onClick={() => setSelected(match?.displayKey || "")}
+              >
+                <Media image={first.image} alt={text(first.title)} />
+                <div>
+                  <h3>
+                    {text(section.subtitle) ||
+                      text(first.categoryLabel) ||
+                      text(first.title)}
+                  </h3>
+                  <p>{text(first.title)}</p>
+                  <span>{zh ? "查看平台" : "View platform"} →</span>
                 </div>
-                {embedUrl ||
-                posterSrc ||
-                getLocalizedText(section.video?.title, locale) ? (
-                  <article className="mt-6 overflow-hidden rounded-xl border border-[#e4eaf2] bg-white lg:grid lg:grid-cols-[1.4fr_.6fr]">
-                    {embedUrl ? (
-                      <iframe
-                        allow="fullscreen; picture-in-picture"
-                        className="min-h-[320px] w-full"
-                        referrerPolicy="strict-origin-when-cross-origin"
-                        sandbox="allow-scripts allow-same-origin allow-presentation"
-                        src={embedUrl}
-                        title={getLocalizedText(section.video.title, locale)}
-                      />
-                    ) : (
-                      <PublicImage
-                        alt={
-                          section.video?.poster?.alt ||
-                          getLocalizedText(section.video?.title, locale)
-                        }
-                        className="min-h-[280px]"
-                        image={{
-                          src: posterSrc,
-                          alt: section.video?.poster?.alt,
-                        }}
-                      />
-                    )}
-                    <div className="p-6 lg:self-center">
-                      <span className="public-kicker">
-                        {locale === "zh" ? "平台影像" : "PLATFORM MEDIA"}
-                      </span>
-                      <h3 className="mt-3 text-xl font-semibold text-[#09275f]">
-                        {getLocalizedText(section.video?.title, locale)}
-                      </h3>
-                      <p className="mt-3 text-sm leading-6 text-[#66758f]">
-                        {getLocalizedText(section.video?.description, locale)}
-                      </p>
-                    </div>
-                  </article>
-                ) : null}
-              </section>
+              </button>
             );
           })}
         </div>
-        <section className="mt-20 rounded-2xl bg-[#09275f] p-7 text-white sm:flex sm:items-center sm:justify-between sm:p-10">
-          <div>
-            <h2 className="text-3xl font-semibold">
-              {getLocalizedText(data.cta?.title, locale)}
-            </h2>
-            <p className="mt-3 max-w-2xl text-blue-100">
-              {getLocalizedText(data.cta?.description, locale)}
-            </p>
+        {!platforms.length && (
+          <Empty>{zh ? "暂无公开平台" : "No public platforms yet"}</Empty>
+        )}
+      </section>
+      <section className="v41-band">
+        <div className="v41-wrap v41-section">
+          <Heading
+            title={zh ? "重点平台展示" : "Featured platform"}
+            eyebrow="FEATURED PLATFORM"
+          />
+          {featured ? (
+            <article className="v41-featured-platform">
+              <Media image={featured.image} alt={text(featured.title)} />
+              <div className="v41-card-body">
+                <h2>{text(featured.title)}</h2>
+                <p className="v41-description">{text(featured.description)}</p>
+                <div className="v41-tags">
+                  {(featured.tags ?? [])
+                    .filter((tag: unknown) => !isDemoContent({ title: tag }))
+                    .map((tag: unknown, index: number) => (
+                      <Tag key={index}>{text(tag)}</Tag>
+                    ))}
+                </div>
+                {platforms.length > 1 && (
+                  <label className="v41-platform-picker">
+                    {zh ? "切换平台" : "Select platform"}
+                    <select
+                      value={featured.displayKey}
+                      onChange={(event) => setSelected(event.target.value)}
+                    >
+                      {platforms.map((item) => (
+                        <option value={item.displayKey} key={item.displayKey}>
+                          {text(item.title)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+              </div>
+              <div className="v41-spec-panel">
+                <h3>
+                  {zh ? "典型配置与能力" : "Configuration and capabilities"}
+                </h3>
+                {featured.specs?.length ? (
+                  <dl>
+                    {featured.specs.map((spec: any, index: number) => (
+                      <div key={index}>
+                        <dt>{text(spec.label)}</dt>
+                        <dd>{text(spec.value)}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                ) : (
+                  <p className="v41-muted">
+                    {zh
+                      ? "暂无公开配置参数"
+                      : "No public specifications available"}
+                  </p>
+                )}
+              </div>
+            </article>
+          ) : (
+            <Empty>
+              {zh
+                ? "平台公开资料发布后将在这里展示。"
+                : "Platform profiles will appear here when published."}
+            </Empty>
+          )}
+        </div>
+      </section>
+      <section className="v41-wrap v41-section v41-pair">
+        <div>
+          <Heading
+            title={zh ? "核心设备" : "Core equipment"}
+            eyebrow="CORE EQUIPMENT"
+          />
+          <div className="v41-equipment-grid">
+            {assets.map((item) => (
+              <article key={item.displayKey}>
+                <Media image={item.image} alt={text(item.title)} />
+                <h3>{text(item.title)}</h3>
+                <p>{text(item.description)}</p>
+                {item.specs?.length ? (
+                  <details>
+                    <summary>
+                      {zh ? "公开参数" : "Public specifications"}
+                    </summary>
+                    <dl>
+                      {item.specs.map((spec, index) => (
+                        <div key={index}>
+                          <dt>{text(spec.label)}</dt>
+                          <dd>{text(spec.value)}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </details>
+                ) : null}
+              </article>
+            ))}
           </div>
-          <PublicButton
-            className="mt-6 !bg-white !text-[#09275f] sm:mt-0"
-            href={normalizeInternalHref(data.cta?.buttonHref || "/contact")}
-          >
-            {getLocalizedText(data.cta?.buttonLabel, locale)}
-          </PublicButton>
+          {!assets.length && (
+            <Empty>
+              {zh
+                ? "暂无独立公开的核心设备资料"
+                : "No independently published equipment profiles yet"}
+            </Empty>
+          )}
+        </div>
+        <div>
+          <Heading
+            title={zh ? "主要配置" : "Core components"}
+            eyebrow="CORE COMPONENTS"
+          />
+          <div className="v41-components">
+            {(featured?.components ?? []).map(
+              (component: any, index: number) => (
+                <article key={index}>
+                  <h3>{text(component.role) || text(component.deviceType)}</h3>
+                  <p>
+                    {[component.manufacturer, component.model]
+                      .filter(Boolean)
+                      .join(" ")}
+                    {component.count > 1 ? ` × ${component.count}` : ""}
+                  </p>
+                </article>
+              ),
+            )}
+          </div>
+          {!featured?.components?.length && (
+            <Empty>
+              {zh
+                ? "此平台尚未公开组件明细"
+                : "Component details are not publicly available for this platform"}
+            </Empty>
+          )}
+        </div>
+      </section>
+      {(embed || videoUrl) && (
+        <section id="platform-video" className="v41-wrap v41-section">
+          <Heading
+            title={text(video?.title) || (zh ? "平台影像" : "Platform media")}
+            eyebrow="PLATFORM MEDIA"
+          />
+          {embed ? (
+            <iframe
+              className="v41-video"
+              src={embed}
+              title={text(video?.title) || text(featured?.title)}
+              loading="lazy"
+              allow="fullscreen; picture-in-picture"
+              sandbox="allow-scripts allow-same-origin allow-presentation"
+              referrerPolicy="strict-origin-when-cross-origin"
+            />
+          ) : (
+            <Action href={videoUrl}>{zh ? "观看视频" : "Watch video"}</Action>
+          )}
         </section>
-      </div>
+      )}
+      <section className="v41-wrap v41-section">
+        <Heading
+          title={zh ? "典型实验用途" : "Experimental applications"}
+          eyebrow="APPLICATION SCENARIOS"
+        />
+        <div className="v41-scenario-grid">
+          {configuredScenarios.map((item: any, index: number) => (
+            <article key={item.displayKey || index}>
+              <Media image={item.image} alt={text(item.title)} />
+              <div>
+                <h3>{text(item.title)}</h3>
+                <p>{text(item.description)}</p>
+              </div>
+            </article>
+          ))}
+        </div>
+        {!configuredScenarios.length && (
+          <Empty>
+            {zh
+              ? "暂无公开应用场景资料"
+              : "No published application scenarios yet"}
+          </Empty>
+        )}
+      </section>
+      <ContactCta
+        locale={locale}
+        title={!isDemoContent(data.cta) ? data.cta?.title : undefined}
+        description={
+          !isDemoContent(data.cta) ? data.cta?.description : undefined
+        }
+      />
     </main>
   );
 }

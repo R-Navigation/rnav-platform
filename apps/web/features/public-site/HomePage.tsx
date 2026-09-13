@@ -1,364 +1,322 @@
 "use client";
 
+import Link from "next/link";
 import { useLanguage } from "./LanguageProvider";
 import { getLocalizedText } from "./i18n";
 import {
-  FacilityCard,
-  MemberCard,
-  NewsRow,
-  PublicationCard,
-  PublicButton,
-  PublicImage,
-  PublicSectionHeading,
-} from "./ui/PublicUi";
-
-const defaultOrder = [
-  "researchAreas",
-  "featuredResearch",
-  "facilities",
-  "members",
-  "news",
-  "monitor",
-  "contact",
-];
-
-function Monitor({ preview, status }: { preview: any; status: unknown }) {
-  const { locale } = useLanguage();
-  const devices = preview?.devices ?? [];
-  const statusText =
-    preview?.summary?.statusText ||
-    getLocalizedText(status, locale) ||
-    (locale === "zh" ? "监控数据暂不可用" : "Monitor data unavailable");
-  return (
-    <section className="public-container public-section" key="monitor">
-      <PublicSectionHeading
-        eyebrow={locale === "zh" ? "实时运行" : "LIVE OPERATIONS"}
-        href="/monitor"
-        linkLabel={locale === "zh" ? "进入监控" : "Open monitor"}
-        title={locale === "zh" ? "实验状态" : "Lab status"}
-      />
-      <div className="overflow-hidden rounded-xl border border-[#e4eaf2] bg-white shadow-[0_12px_35px_rgba(9,39,95,.04)]">
-        <div className="flex flex-col gap-5 border-b border-[#e4eaf2] bg-[#f4f8fc] p-5 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-medium text-[#66758f]">{statusText}</p>
-            <p className="mt-1 text-2xl font-semibold text-[#09275f]">
-              {devices.filter((device: any) => device.isOnline).length}
-              <span className="ml-2 text-sm font-medium text-[#66758f]">
-                / {devices.length} {locale === "zh" ? "在线" : "online"}
-              </span>
-            </p>
-          </div>
-          <span className="inline-flex items-center gap-2 self-start rounded-full bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
-            <span className="h-2 w-2 rounded-full bg-emerald-500" />
-            {locale === "zh" ? "公开状态" : "Public status"}
-          </span>
-        </div>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4">
-          {devices.length ? (
-            devices.map((device: any) => (
-              <article
-                className="border-b border-[#e4eaf2] p-5 sm:border-r"
-                key={device.code || device.displayName}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="truncate font-semibold text-[#09275f]">
-                    {device.displayName || device.code}
-                  </h3>
-                  <span
-                    className={`h-2.5 w-2.5 shrink-0 rounded-full ${device.isOnline ? "bg-emerald-500" : "bg-[#a8b3c2]"}`}
-                  />
-                </div>
-                <p className="mt-2 text-xs text-[#66758f]">
-                  {device.statusLabel ||
-                    (device.isOnline
-                      ? locale === "zh"
-                        ? "在线"
-                        : "Online"
-                      : locale === "zh"
-                        ? "离线"
-                        : "Offline")}
-                </p>
-              </article>
-            ))
-          ) : (
-            <p className="col-span-full p-6 text-sm text-[#66758f]">
-              {locale === "zh"
-                ? "当前没有公开设备状态"
-                : "No public device status available"}
-            </p>
-          )}
-        </div>
-      </div>
-    </section>
-  );
-}
+  Action,
+  ContactCta,
+  Empty,
+  Heading,
+  Hero,
+  Media,
+  Publication,
+} from "./ui4/Primitives";
+import {
+  flattenFacilities,
+  homeSlots,
+  publishedItems,
+  selectConfigured,
+} from "./ui4/content";
 
 export function HomePage({ data }: { data: any }) {
   const { locale } = useLanguage();
-  const home = data.home ?? {},
+  const zh = locale === "zh",
+    home = data.home ?? {},
     hero = home.hero ?? {},
     sections = home.sections ?? {};
-  const publications = data.research?.publications ?? [];
-  const researchIds = home.featuredResearchIds?.length
-    ? home.featuredResearchIds
-    : home.featuredPublicationId
-      ? [home.featuredPublicationId]
-      : publications.slice(0, 3).map((item: any) => item.id);
-  const featuredResearch = researchIds
-    .map((id: string) => publications.find((item: any) => item.id === id))
-    .filter(Boolean)
-    .slice(0, 3);
-  const facilityItems = (data.facilities?.facilitySections ?? []).flatMap(
-    (section: any) => (section.items?.length ? section.items : [section]),
+  const text = (value: unknown) => getLocalizedText(value, locale);
+  const visible = (key: string) => home.sectionVisibility?.[key] !== false;
+  const facilities = flattenFacilities(data.facilities ?? {});
+  const selectedFacilities = selectConfigured(
+    facilities,
+    home.featuredFacilityIds ?? [],
+    home.featuredFacilityIds?.length ? "id" : "displayKey",
+    4,
   );
-  const facilityIds = home.featuredFacilityIds?.length
-    ? home.featuredFacilityIds.map(String)
-    : facilityItems.slice(0, 3).map((item: any) => String(item.id));
-  const featuredFacilities = facilityIds
-    .map((id: string) =>
-      facilityItems.find((item: any) => String(item.id) === id),
-    )
-    .filter(Boolean)
-    .slice(0, 3);
-  const teamMembers = [
+  const publications = selectConfigured(
+    publishedItems(data.research?.publications ?? []),
+    home.featuredResearchIds?.length
+      ? home.featuredResearchIds
+      : home.featuredPublicationId
+        ? [home.featuredPublicationId]
+        : [],
+    "id",
+    3,
+  );
+  const members = [
     data.team?.facultyLead,
     ...(data.team?.advisors ?? []),
     ...(data.team?.postdocs ?? []),
     ...(data.team?.phdStudents ?? []),
     ...(data.team?.masterStudents ?? []),
     ...(data.team?.undergraduateStudents ?? []),
-  ].filter(
-    (item: any, index: number, all: any[]) =>
-      item &&
-      all.findIndex((candidate) => candidate?.slug === item.slug) === index,
+  ].filter(Boolean);
+  const selectedMembers = selectConfigured(
+    home.featuredMemberSlugs?.length
+      ? [...members, ...(data.team?.alumni ?? [])]
+      : members,
+    home.featuredMemberSlugs ?? [],
+    "slug",
+    5,
   );
-  const memberSlugs = home.featuredMemberSlugs?.length
-    ? home.featuredMemberSlugs
-    : teamMembers.slice(0, 8).map((item: any) => item.slug);
-  const featuredMembers = memberSlugs
-    .map((slug: string) => teamMembers.find((item: any) => item.slug === slug))
-    .filter(Boolean);
-  const newsIds = home.newsPreviewIds ?? [];
-  const newsItems = (
-    newsIds.length
-      ? newsIds
-          .map((id: string) =>
-            (data.news?.items ?? []).find((item: any) => item.id === id),
-          )
-          .filter(Boolean)
-      : (data.news?.items ?? [])
-  ).slice(0, 4);
-  const configured = Array.isArray(home.sectionOrder)
-    ? home.sectionOrder.filter((key: string) => defaultOrder.includes(key))
-    : [];
-  const order = [...new Set([...configured, ...defaultOrder])];
-  const visible = (key: string) => home.sectionVisibility?.[key] !== false;
-
+  const news = selectConfigured(
+    publishedItems(data.news?.items ?? []),
+    home.newsPreviewIds ?? [],
+    "id",
+    4,
+  );
+  const areas = publishedItems<any>(home.researchAreas ?? []).slice(0, 4);
+  const heroImage =
+    hero.image?.src && !/示意|demo|example/i.test(hero.image.alt ?? "")
+      ? hero.image
+      : facilities.find((item) => item.image?.src)?.image;
   const modules: Record<string, React.ReactNode> = {
-    researchAreas: (
-      <section className="public-container public-section" key="researchAreas">
-        <PublicSectionHeading
-          eyebrow={locale === "zh" ? "研究议题" : "RESEARCH THEMES"}
-          href="/research"
-          linkLabel={
-            getLocalizedText(sections.researchAreasCta, locale) ||
-            (locale === "zh" ? "查看研究" : "Explore research")
-          }
+    directions: visible("researchAreas") && (
+      <section className="v41-wrap v41-section" key="directions">
+        <Heading
           title={
-            getLocalizedText(sections.researchAreasTitle, locale) ||
-            (locale === "zh" ? "核心研究方向" : "Core research areas")
+            text(sections.researchAreasTitle) ||
+            (zh ? "研究方向" : "Research directions")
           }
+          eyebrow="RESEARCH DIRECTIONS"
+          href="/directions"
+          action={zh ? "查看全部" : "Explore"}
         />
-        <div className="-mx-5 flex snap-x gap-4 overflow-x-auto px-5 pb-2 sm:mx-0 sm:grid sm:grid-cols-2 sm:px-0 lg:grid-cols-4">
-          {(home.researchAreas ?? []).map((item: any, index: number) => (
-            <article
-              className="min-w-[78vw] snap-start rounded-xl border border-[#e4eaf2] bg-white p-6 sm:min-w-0"
+        <div
+          className="v41-direction-teasers"
+          style={{ "--card-count": areas.length || 1 } as React.CSSProperties}
+        >
+          {areas.map((area: any, index: number) => (
+            <Link
+              href={`/directions#direction-${index + 1}`}
+              className="v41-direction-teaser"
               key={index}
             >
-              <span className="text-xs font-bold text-[#1266f1]">
-                {item.icon || String(index + 1).padStart(2, "0")}
-              </span>
-              <h3 className="mt-6 text-xl font-semibold text-[#09275f]">
-                {getLocalizedText(item.title, locale)}
-              </h3>
-              <p className="mt-3 text-sm leading-6 text-[#66758f]">
-                {getLocalizedText(item.description, locale)}
-              </p>
-            </article>
-          ))}
-        </div>
-      </section>
-    ),
-    featuredResearch: (
-      <section className="bg-[#f4f8fc]" key="featuredResearch">
-        <div className="public-container public-section">
-          <PublicSectionHeading
-            eyebrow={
-              getLocalizedText(sections.featuredEyebrow, locale) ||
-              (locale === "zh" ? "代表成果" : "SELECTED WORK")
-            }
-            href="/research"
-            linkLabel={
-              getLocalizedText(sections.archiveLabel, locale) ||
-              (locale === "zh" ? "全部成果" : "All research")
-            }
-            title={
-              getLocalizedText(sections.featuredTitle, locale) ||
-              (locale === "zh" ? "近期研究成果" : "Featured research")
-            }
-          />
-          <div className="grid gap-5 lg:grid-cols-3">
-            {featuredResearch.map((item: any) => (
-              <PublicationCard
-                compact
-                item={item}
-                key={item.id}
-                locale={locale}
+              <Media
+                image={
+                  area.image ||
+                  facilities[index % Math.max(facilities.length, 1)]?.image
+                }
+                alt={text(area.title)}
               />
-            ))}
-          </div>
-        </div>
-      </section>
-    ),
-    facilities: (
-      <section className="public-container public-section" key="facilities">
-        <PublicSectionHeading
-          eyebrow={locale === "zh" ? "实验基础" : "INFRASTRUCTURE"}
-          href="/facilities"
-          linkLabel={locale === "zh" ? "全部设备" : "All facilities"}
-          title={
-            locale === "zh" ? "实验平台与设备" : "Platforms and facilities"
-          }
-        />
-        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-          {featuredFacilities.map((item: any) => (
-            <FacilityCard item={item} key={String(item.id)} locale={locale} />
-          ))}
-        </div>
-      </section>
-    ),
-    members: (
-      <section className="border-y border-[#e4eaf2] bg-white" key="members">
-        <div className="public-container public-section">
-          <PublicSectionHeading
-            eyebrow={locale === "zh" ? "共同研究" : "OUR PEOPLE"}
-            href="/team"
-            linkLabel={locale === "zh" ? "全部成员" : "Meet the team"}
-            title={locale === "zh" ? "团队成员" : "Research team"}
-          />
-          <div className="-mx-5 flex snap-x gap-4 overflow-x-auto px-5 pb-3 sm:-mx-7 sm:px-7 lg:-mx-10 lg:px-10">
-            {featuredMembers.map((member: any) => (
-              <div
-                className="w-[72vw] max-w-[270px] shrink-0 snap-start"
-                key={member.slug}
-              >
-                <MemberCard locale={locale} member={member} />
+              <div>
+                <h3>{text(area.title)}</h3>
+                <p className="v41-english">{area.title?.en}</p>
+                <p>{text(area.description)}</p>
+                <span className="v41-card-arrow" aria-hidden="true">
+                  →
+                </span>
               </div>
-            ))}
-          </div>
-        </div>
-      </section>
-    ),
-    news: (
-      <section className="public-container public-section" key="news">
-        <PublicSectionHeading
-          eyebrow={
-            getLocalizedText(sections.newsEyebrow, locale) ||
-            (locale === "zh" ? "最新动态" : "LATEST NEWS")
-          }
-          href="/news"
-          linkLabel={locale === "zh" ? "全部新闻" : "All news"}
-          title={
-            getLocalizedText(sections.newsTitle, locale) ||
-            (locale === "zh" ? "团队近况" : "Recent updates")
-          }
-        />
-        <div className="border-t border-[#e4eaf2]">
-          {newsItems.map((item: any) => (
-            <NewsRow item={item} key={item.id} locale={locale} />
+            </Link>
           ))}
         </div>
       </section>
     ),
-    monitor: (
-      <Monitor
-        key="monitor"
-        preview={data.monitorPreview}
-        status={hero.status}
+    work: (visible("featuredResearch") || visible("facilities")) && (
+      <section className="v41-band" key="work">
+        <div
+          className={`v41-wrap v41-section v41-pair ${!visible("featuredResearch") || !visible("facilities") ? "v41-pair-single" : ""}`}
+        >
+          {visible("featuredResearch") && (
+            <div>
+              <Heading
+                title={
+                  text(sections.featuredTitle) ||
+                  (zh ? "论文成果" : "Selected publications")
+                }
+                eyebrow="SELECTED PUBLICATIONS"
+                href="/research"
+                action={zh ? "全部成果" : "View all"}
+              />
+              <div className="v41-stack">
+                {publications.length ? (
+                  publications.map((item: any) => (
+                    <Publication item={item} locale={locale} key={item.id} />
+                  ))
+                ) : (
+                  <Empty>
+                    {zh
+                      ? "正式论文成果发布后将在这里展示。"
+                      : "Published research will appear here when available."}
+                  </Empty>
+                )}
+              </div>
+            </div>
+          )}
+          {visible("facilities") && (
+            <div>
+              <Heading
+                title={zh ? "实验平台" : "Experimental platforms"}
+                eyebrow="EXPERIMENTAL PLATFORMS"
+                href="/facilities"
+                action={zh ? "查看全部" : "View all"}
+              />
+              <div className="v41-facility-teasers">
+                {selectedFacilities.map((item) => (
+                  <Link
+                    className="v41-facility-teaser"
+                    href="/facilities"
+                    key={item.displayKey}
+                  >
+                    <Media image={item.image} alt={text(item.title)} />
+                    <h3>
+                      {text(item.title)} <span aria-hidden="true">→</span>
+                    </h3>
+                  </Link>
+                ))}
+              </div>
+              {!selectedFacilities.length && (
+                <Empty>
+                  {zh ? "暂无公开实验平台" : "No public platforms yet"}
+                </Empty>
+              )}
+            </div>
+          )}
+        </div>
+      </section>
+    ),
+    people: (visible("members") || visible("news")) && (
+      <section
+        className={`v41-wrap v41-section v41-pair ${!visible("members") || !visible("news") ? "v41-pair-single" : ""}`}
+        key="people"
+      >
+        {visible("members") && (
+          <div>
+            <Heading
+              title={zh ? "团队成员" : "Our team"}
+              eyebrow="OUR TEAM"
+              href="/team"
+              action={zh ? "认识团队" : "Meet the team"}
+            />
+            <div className="v41-home-members">
+              {selectedMembers.map((member: any) => (
+                <Link href={`/team#${member.slug}`} key={member.slug}>
+                  <Media image={member.image} alt={text(member.name)} />
+                  <h3>{text(member.name)}</h3>
+                  <p>{text(member.degree) || text(member.role)}</p>
+                  <p className="line-clamp-2">
+                    {text(member.research) || text(member.focus)}
+                  </p>
+                </Link>
+              ))}
+            </div>
+            {!selectedMembers.length && (
+              <Empty>
+                {zh ? "暂无公开成员信息" : "No public profiles yet"}
+              </Empty>
+            )}
+          </div>
+        )}
+        {visible("news") && (
+          <div>
+            <Heading
+              title={
+                text(sections.newsTitle) || (zh ? "新闻动态" : "Latest news")
+              }
+              eyebrow="LATEST NEWS"
+              href="/news"
+              action={zh ? "查看全部" : "View all"}
+            />
+            <div className="v41-news-teasers">
+              {news.length ? (
+                news.map((item: any) => (
+                  <Link href="/news" key={item.id}>
+                    <time>{text(item.date)}</time>
+                    <h3>{text(item.title)}</h3>
+                    <span aria-hidden="true">→</span>
+                  </Link>
+                ))
+              ) : (
+                <Empty>
+                  {zh
+                    ? "正式团队动态发布后将在这里展示。"
+                    : "Team updates will appear here when published."}
+                </Empty>
+              )}
+            </div>
+          </div>
+        )}
+      </section>
+    ),
+    status: visible("monitor") && (
+      <section className="v41-wrap v41-status" key="status">
+        <div>
+          <span className="v41-eyebrow">LAB STATUS</span>
+          <h2>{zh ? "实验室运行状态" : "Lab status"}</h2>
+        </div>
+        <div className="v41-status-devices">
+          {data.monitorPreview?.devices?.length ? (
+            data.monitorPreview.devices.slice(0, 4).map((device: any) => (
+              <span key={device.code}>
+                <i className={device.isOnline ? "is-online" : ""} />
+                {device.displayName || device.code}
+                <small>
+                  {device.statusLabel ||
+                    (device.isOnline
+                      ? zh
+                        ? "在线"
+                        : "Online"
+                      : zh
+                        ? "离线"
+                        : "Offline")}
+                </small>
+              </span>
+            ))
+          ) : (
+            <p>
+              {zh
+                ? "当前没有可用的公开设备状态"
+                : "Public device status is currently unavailable"}
+            </p>
+          )}
+        </div>
+        <Link href="/monitor">{zh ? "查看状态" : "View status"} →</Link>
+      </section>
+    ),
+    contact: visible("contact") && (
+      <ContactCta
+        key="contact"
+        locale={locale}
+        title={data.contact?.header?.title}
+        description={data.contact?.header?.description}
       />
     ),
-    contact: (
-      <section className="public-container pb-8 pt-4" key="contact">
-        <div className="overflow-hidden rounded-2xl bg-[#09275f] px-6 py-9 text-white sm:px-10 sm:py-11">
-          <div className="flex flex-col justify-between gap-7 md:flex-row md:items-end">
-            <div>
-              <span className="text-[11px] font-bold uppercase tracking-[.14em] text-[#7cd7f5]">
-                {locale === "zh" ? "联系与加入" : "CONTACT & OPPORTUNITIES"}
-              </span>
-              <h2 className="mt-3 max-w-3xl text-3xl font-semibold tracking-[-0.025em] sm:text-4xl">
-                {getLocalizedText(data.contact?.header?.title, locale) ||
-                  (locale === "zh"
-                    ? "与我们一起探索复杂环境中的自主系统"
-                    : "Explore autonomous systems with us")}
-              </h2>
-              <p className="mt-4 max-w-2xl leading-7 text-blue-100">
-                {getLocalizedText(data.contact?.header?.description, locale)}
-              </p>
-            </div>
-            <PublicButton
-              className="shrink-0 !bg-white !text-[#09275f] hover:!bg-blue-50"
-              href="/contact"
-            >
-              {locale === "zh" ? "联系课题组" : "Contact the lab"}
-            </PublicButton>
-          </div>
-        </div>
-      </section>
-    ),
   };
-
   return (
     <main>
-      <section className="border-b border-[#e4eaf2] bg-white">
-        <div className="public-container grid gap-10 py-12 sm:py-16 lg:grid-cols-[.9fr_1.1fr] lg:items-center lg:py-20">
-          <div>
-            <span className="public-kicker">
-              {getLocalizedText(hero.eyebrow, locale)}
-            </span>
-            <h1 className="public-title mt-5">
-              {getLocalizedText(hero.title, locale)}{" "}
-              <span className="text-[#1266f1]">
-                {getLocalizedText(hero.highlight, locale)}
-              </span>
-            </h1>
-            <p className="public-copy mt-6 max-w-2xl">
-              {getLocalizedText(hero.description, locale)}
-            </p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              {(hero.actions ?? [])
-                .slice(0, 2)
-                .map((action: any, index: number) => (
-                  <PublicButton
-                    href={action.href}
-                    key={index}
-                    variant={
-                      action.variant === "secondary" ? "secondary" : "primary"
-                    }
-                  >
-                    {getLocalizedText(action.label, locale)}
-                  </PublicButton>
-                ))}
-            </div>
-          </div>
-          <PublicImage
-            alt={getLocalizedText(hero.title, locale)}
-            className="aspect-[16/10] rounded-2xl"
-            eager
-            image={hero.image}
-          />
-        </div>
-      </section>
-      {order.filter(visible).map((key) => modules[key])}
+      <Hero home header={hero} locale={locale} image={heroImage}>
+        {(hero.actions?.length
+          ? hero.actions
+          : [
+              {
+                href: "/directions",
+                label: { zh: "了解我们的研究", en: "Explore research" },
+              },
+              {
+                href: "/facilities",
+                label: { zh: "了解实验平台", en: "Explore platforms" },
+                variant: "secondary",
+              },
+            ]
+        )
+          .slice(0, 2)
+          .map((action: any, index: number) => (
+            <Action
+              key={index}
+              href={
+                action.href === "/research" &&
+                /方向|directions/i.test(text(action.label))
+                  ? "/directions"
+                  : action.href
+              }
+              secondary={action.variant === "secondary"}
+            >
+              {text(action.label)}
+            </Action>
+          ))}
+      </Hero>
+      {homeSlots(home.sectionOrder).map((slot) => modules[slot])}
     </main>
   );
 }

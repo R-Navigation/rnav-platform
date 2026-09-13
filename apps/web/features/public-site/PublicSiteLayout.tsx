@@ -6,7 +6,9 @@ import { useEffect, useState, type ReactNode } from "react";
 import { LanguageProvider, useLanguage } from "./LanguageProvider";
 import { getLocalizedText, normalizeInternalHref, type Locale } from "./i18n";
 import { Icon } from "./ui/PublicUi";
-import { sanitizePublicUrl } from "./url-sanitizer";
+import { Footer } from "./ui4/Footer";
+import { publicNavigation } from "./ui4/navigation";
+import "./ui4/public.css";
 
 function Chrome({
   site,
@@ -22,7 +24,7 @@ function Chrome({
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const navigation = site.navigation ?? [];
+  const navigation = publicNavigation;
   const brand = getLocalizedText(site.brand?.name, locale) || "R·NAV";
   const filteredNavigation = navigation.filter((item: any) =>
     getLocalizedText(item.label, locale)
@@ -44,21 +46,19 @@ function Chrome({
   return (
     <div className="public-site min-h-screen">
       <header className="sticky top-0 z-50 border-b border-[#e4eaf2] bg-white/95 backdrop-blur-xl">
-        <div className="public-container flex h-16 items-center justify-between gap-4 sm:h-[72px]">
+        <div className="v41-wrap v41-nav-row flex h-16 items-center justify-between gap-4 sm:h-[72px]">
           <Link
             className="flex min-w-0 items-center gap-3"
             href="/"
             onClick={() => setMenuOpen(false)}
           >
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#09275f] text-xs font-black tracking-tight text-white">
-              R·N
+            <span className="v41-wordmark">
+              R<span>NAV</span>
             </span>
-            <span className="truncate text-base font-bold tracking-[-0.02em] text-[#09275f] sm:text-lg">
-              {brand}
-            </span>
+            <span className="v41-brand-name">{brand}</span>
           </Link>
           <nav
-            className="hidden h-full items-center gap-6 lg:flex"
+            className="hidden h-full items-center gap-5 lg:flex"
             aria-label={locale === "zh" ? "主导航" : "Primary navigation"}
           >
             {navigation.map((item: any) => {
@@ -89,7 +89,7 @@ function Chrome({
             </button>
             <div
               aria-label={locale === "zh" ? "语言" : "Language"}
-              className="hidden items-center rounded-lg border border-[#e4eaf2] p-1 sm:flex"
+              className="flex items-center"
             >
               {(["en", "zh"] as Locale[]).map((item, index) => (
                 <span className="flex items-center" key={item}>
@@ -100,7 +100,7 @@ function Chrome({
                   ) : null}
                   <button
                     aria-pressed={locale === item}
-                    className={`min-h-9 px-2 text-xs font-bold ${locale === item ? "text-[#09275f]" : "text-[#8494a8] hover:text-[#1266f1]"}`}
+                    className={`min-h-11 min-w-11 px-2 text-xs font-bold ${locale === item ? "text-[#09275f]" : "text-[#61728a] hover:text-[#1266f1]"}`}
                     onClick={() => setLocale(item)}
                     type="button"
                   >
@@ -219,67 +219,7 @@ function Chrome({
         </div>
       ) : null}
       {children}
-      <footer className="mt-16 border-t border-[#e4eaf2] bg-white">
-        <div className="public-container grid gap-10 py-12 md:grid-cols-[1.3fr_.8fr_1fr]">
-          <div>
-            <div className="flex items-center gap-3">
-              <span className="grid h-9 w-9 place-items-center rounded-lg bg-[#09275f] text-xs font-black text-white">
-                R·N
-              </span>
-              <span className="font-bold text-[#09275f]">{brand}</span>
-            </div>
-            <p className="mt-4 max-w-md text-sm leading-6 text-[#66758f]">
-              {getLocalizedText(site.footer?.description, locale)}
-            </p>
-          </div>
-          <nav aria-label={locale === "zh" ? "页脚导航" : "Footer navigation"}>
-            <h2 className="text-xs font-bold uppercase tracking-[.14em] text-[#09275f]">
-              {locale === "zh" ? "快速访问" : "Explore"}
-            </h2>
-            <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3">
-              {navigation.slice(0, 6).map((item: any) => (
-                <Link
-                  className="text-sm text-[#66758f] hover:text-[#1266f1]"
-                  href={normalizeInternalHref(item.href)}
-                  key={item.key}
-                >
-                  {getLocalizedText(item.label, locale)}
-                </Link>
-              ))}
-            </div>
-          </nav>
-          <div>
-            <h2 className="text-xs font-bold uppercase tracking-[.14em] text-[#09275f]">
-              {locale === "zh" ? "相关链接" : "Links"}
-            </h2>
-            <div className="mt-4 flex flex-wrap gap-x-5 gap-y-3">
-              {(site.footer?.links ?? []).map((link: any, index: number) => {
-                const href = sanitizePublicUrl(link.href);
-                return href ? (
-                  <a
-                    className="text-sm text-[#66758f] hover:text-[#1266f1]"
-                    href={href}
-                    key={index}
-                    rel={
-                      href.startsWith("http")
-                        ? "noopener noreferrer"
-                        : undefined
-                    }
-                    target={href.startsWith("http") ? "_blank" : undefined}
-                  >
-                    {getLocalizedText(link.label, locale)}
-                  </a>
-                ) : null;
-              })}
-            </div>
-          </div>
-        </div>
-        <div className="border-t border-[#e4eaf2]">
-          <div className="public-container py-5 text-xs leading-5 text-[#8494a8]">
-            {getLocalizedText(site.footer?.copyright, locale)}
-          </div>
-        </div>
-      </footer>
+      <Footer site={site} locale={locale} />
     </div>
   );
 }

@@ -17,8 +17,9 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
     <html lang="zh-CN">
-      <body>{children}</body>
+      <body>{children}
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({ "@context": "https://schema.org", "@type": "Organization", name: "RNAV Lab", url: process.env.PUBLIC_BASE_URL ?? "http://localhost:4090", description: "RNAV 实验室统一网站与管理平台" }).replace(/</g,"\\u003c") }} />
+      </body>
     </html>
   );
 }

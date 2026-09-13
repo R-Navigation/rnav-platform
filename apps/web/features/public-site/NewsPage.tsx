@@ -1,99 +1,183 @@
 "use client";
-
-import Link from "next/link";
-import { PageHeader } from "./PageHeader";
+import { useState } from "react";
 import { useLanguage } from "./LanguageProvider";
+import { getLocalizedText } from "./i18n";
 import {
-  getLocalizedText,
-  isExternalHref,
-  normalizeInternalHref,
-} from "./i18n";
-import { NewsRow, PublicButton, PublicImage, PublicTag } from "./ui/PublicUi";
+  Action,
+  ContactCta,
+  Empty,
+  Heading,
+  Hero,
+  Media,
+  Search,
+  Tag,
+} from "./ui4/Primitives";
+import { isDemoContent, publishedItems } from "./ui4/content";
 
-export function NewsPage({ data }: { data: any }) {
-  const { locale } = useLanguage();
-  const items = data.items ?? [];
-  const featured = items.find((item: any) => item.featured) || items[0];
-  const rest = featured
-    ? items.filter((item: any) => item.id !== featured.id)
-    : items;
+export function NewsPage({ data, heroImage }: { data: any; heroImage?: any }) {
+  const { locale } = useLanguage(),
+    zh = locale === "zh",
+    text = (value: unknown) => getLocalizedText(value, locale);
+  const [year, setYear] = useState("all"),
+    [category, setCategory] = useState("all"),
+    [query, setQuery] = useState("");
+  const dateOf = (item: any) =>
+    getLocalizedText(item.date, "en") || getLocalizedText(item.date, "zh");
+  const yearOf = (item: any) =>
+    dateOf(item).match(/\b(?:19|20)\d{2}\b/)?.[0] || "";
+  const all = publishedItems<any>(data.items ?? []).sort(
+    (a, b) => (Date.parse(dateOf(b)) || 0) - (Date.parse(dateOf(a)) || 0),
+  );
+  const years = [...new Set(all.map(yearOf).filter(Boolean))].sort().reverse(),
+    categories = [
+      ...new Set<string>(
+        all.map((item) => text(item.category)).filter(Boolean),
+      ),
+    ];
+  const filtered = all.filter(
+    (item) =>
+      (year === "all" || yearOf(item) === year) &&
+      (category === "all" || text(item.category) === category) &&
+      `${text(item.title)} ${text(item.excerpt)} ${text(item.description)}`
+        .toLocaleLowerCase()
+        .includes(query.trim().toLocaleLowerCase()),
+  );
+  const featured =
+      filtered.find((item) => item.pinned || item.featured) || filtered[0],
+    archive = filtered.filter((item) => item !== featured);
+  const linkOf = (item: any) =>
+    item.link?.href || item.links?.[0]?.href || item.href || "";
   return (
     <main>
-      <PageHeader header={data.header} image={featured?.image} />
-      <div className="public-container public-section">
+      <Hero
+        header={{
+          ...data.header,
+          title: { zh: "新闻动态", en: "News and events" },
+          eyebrow: "NEWS & EVENTS",
+          description: isDemoContent(data.header)
+            ? {
+                zh: "关注团队公开发布的科研进展、活动与公告。",
+                en: "Follow the team’s published research updates, events and announcements.",
+              }
+            : data.header?.description,
+        }}
+        locale={locale}
+        image={featured?.image || heroImage}
+      />
+      <section className="v41-wrap v41-section">
+        <Heading
+          title={zh ? "重点动态" : "Featured update"}
+          eyebrow="FEATURED NEWS"
+        />
         {featured ? (
-          <article className="mb-14 overflow-hidden rounded-2xl border border-[#e4eaf2] bg-white shadow-[0_16px_45px_rgba(9,39,95,.06)] lg:grid lg:grid-cols-[1.05fr_.95fr]">
-            <PublicImage
-              alt={getLocalizedText(featured.title, locale)}
-              className="min-h-[280px]"
-              image={featured.image}
-            />
-            <div className="flex flex-col justify-center p-7 sm:p-10">
-              <div className="flex flex-wrap items-center gap-3">
-                <PublicTag>
-                  {getLocalizedText(featured.badge, locale) ||
-                    (locale === "zh" ? "最新动态" : "Latest")}
-                </PublicTag>
-                <time className="text-sm text-[#66758f]">
-                  {getLocalizedText(featured.date, locale)}
-                </time>
-              </div>
-              <h2 className="mt-5 text-3xl font-semibold tracking-[-0.025em] text-[#09275f]">
-                {getLocalizedText(featured.title, locale)}
-              </h2>
-              <p className="mt-4 leading-7 text-[#66758f]">
-                {getLocalizedText(featured.description, locale)}
+          <article className="v41-featured-news">
+            <Media image={featured.image} alt={text(featured.title)} />
+            <div className="v41-card-body">
+              <p className="v41-eyebrow">
+                <time>{text(featured.date)}</time>
               </p>
-              {featured.link ? (
-                isExternalHref(featured.link.href) ? (
-                  <a
-                    className="mt-6 inline-flex min-h-11 items-center self-start font-semibold text-[#1266f1]"
-                    href={normalizeInternalHref(featured.link.href)}
-                    rel="noopener noreferrer"
-                    target="_blank"
-                  >
-                    {getLocalizedText(featured.link.label, locale)}
-                  </a>
-                ) : (
-                  <PublicButton
-                    className="mt-6 self-start"
-                    href={normalizeInternalHref(featured.link.href)}
-                    variant="ghost"
-                  >
-                    {getLocalizedText(featured.link.label, locale)}
-                  </PublicButton>
-                )
-              ) : null}
+              {text(featured.category) && <Tag>{text(featured.category)}</Tag>}
+              <h2>{text(featured.title)}</h2>
+              <p className="v41-description">
+                {text(featured.excerpt) || text(featured.description)}
+              </p>
+              <Action href={linkOf(featured)}>
+                {text(featured.link?.label) || (zh ? "阅读详情" : "Read more")}
+              </Action>
             </div>
           </article>
-        ) : null}
-        <section>
-          <div className="mb-5 flex items-center justify-between border-b border-[#e4eaf2] pb-4">
-            <h2 className="text-2xl font-semibold text-[#09275f]">
-              {locale === "zh" ? "全部动态" : "All updates"}
-            </h2>
-            <span className="text-sm text-[#66758f]">{items.length}</span>
+        ) : (
+          <div className="v41-featured-news v41-news-empty">
+            <Media alt={zh ? "新闻动态" : "News"} />
+            <Empty>
+              {zh
+                ? "正式团队动态发布后将在这里展示。"
+                : "Team updates will appear here when published."}
+            </Empty>
           </div>
-          {rest.length ? (
-            rest.map((item: any) =>
-              item.link ? (
-                <Link
-                  href={normalizeInternalHref(item.link.href)}
-                  key={item.id}
-                >
-                  <NewsRow item={item} locale={locale} />
-                </Link>
-              ) : (
-                <NewsRow item={item} key={item.id} locale={locale} />
-              ),
-            )
-          ) : !featured ? (
-            <p className="rounded-xl border border-[#e4eaf2] bg-white p-8 text-[#66758f]">
-              {locale === "zh" ? "暂无公开动态" : "No public updates available"}
-            </p>
-          ) : null}
-        </section>
-      </div>
+        )}
+      </section>
+      <section className="v41-wrap v41-section">
+        <div className="v41-news-filter">
+          <Heading
+            title={zh ? "全部动态" : "News archive"}
+            eyebrow="NEWS ARCHIVE"
+          />
+          <label>
+            {zh ? "年份" : "Year"}
+            <select
+              value={year}
+              onChange={(event) => setYear(event.target.value)}
+            >
+              <option value="all">{zh ? "全部年份" : "All years"}</option>
+              {years.map((value) => (
+                <option key={value}>{value}</option>
+              ))}
+            </select>
+          </label>
+          {categories.length > 0 && (
+            <label>
+              {zh ? "分类" : "Category"}
+              <select
+                value={category}
+                onChange={(event) => setCategory(event.target.value)}
+              >
+                <option value="all">
+                  {zh ? "全部分类" : "All categories"}
+                </option>
+                {categories.map((value) => (
+                  <option key={value}>{value}</option>
+                ))}
+              </select>
+            </label>
+          )}
+          <Search
+            value={query}
+            onChange={setQuery}
+            placeholder={zh ? "搜索团队动态…" : "Search updates…"}
+          />
+        </div>
+        <p className="v41-muted" role="status">
+          {zh
+            ? `共 ${filtered.length} 条正式动态`
+            : `${filtered.length} published updates`}
+        </p>
+        <div className="v41-news-grid">
+          {archive.map((item) => (
+            <article className="v41-news-card" key={item.id}>
+              <Media image={item.image} alt={text(item.title)} />
+              <div>
+                <time>{text(item.date)}</time>
+                {text(item.category) && <Tag>{text(item.category)}</Tag>}
+                <h3>{text(item.title)}</h3>
+                <p>{text(item.excerpt) || text(item.description)}</p>
+                {text(item.description) &&
+                  text(item.description) !== text(item.excerpt) && (
+                    <details>
+                      <summary>{zh ? "展开全文" : "Full update"}</summary>
+                      <p>{text(item.description)}</p>
+                    </details>
+                  )}
+                <Action href={linkOf(item)} secondary>
+                  {zh ? "阅读详情" : "Read more"}
+                </Action>
+              </div>
+            </article>
+          ))}
+        </div>
+        {!archive.length && (
+          <Empty>
+            {zh
+              ? featured
+                ? "更多动态将在发布后展示。"
+                : "暂无正式新闻，可调整筛选或稍后访问。"
+              : featured
+                ? "More updates will appear here when published."
+                : "No published news. Adjust filters or check back later."}
+          </Empty>
+        )}
+      </section>
+      <ContactCta locale={locale} />
     </main>
   );
 }
