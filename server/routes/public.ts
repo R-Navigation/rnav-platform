@@ -14,6 +14,7 @@ export function createPublicRouter({
   const image = createPublicImageService(() =>
     Promise.all([
       service.getHome(),
+      service.getDirections(),
       service.getTeam(),
       service.getResearch(),
       service.getNews(),
@@ -42,6 +43,7 @@ export function createPublicRouter({
   const routes = {
     bootstrap: service.getBootstrap,
     home: service.getHome,
+    directions: service.getDirections,
     homepage: service.getHomepage,
     research: service.getResearch,
     news: service.getNews,

@@ -66,7 +66,7 @@ export function HomePage({ data }: { data: any }) {
     "id",
     4,
   );
-  const areas = publishedItems<any>(home.researchAreas ?? []).slice(0, 4);
+  const areas = publishedItems<any>(data.directions?.directions ?? home.researchAreas ?? []).slice(0, 4);
   const heroImage =
     hero.image?.src && !/示意|demo|example/i.test(hero.image.alt ?? "")
       ? hero.image
@@ -336,7 +336,7 @@ export function HomePage({ data }: { data: any }) {
             </Action>
           ))}
       </Hero>
-      {homeSlots(home.sectionOrder).map((slot) => modules[slot])}
+      {homeSlots(home.compositionOrder ?? home.sectionOrder).map((slot) => modules[slot])}
     </main>
   );
 }

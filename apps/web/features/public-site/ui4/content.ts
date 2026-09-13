@@ -81,13 +81,17 @@ export function selectConfigured<T extends Record<string, unknown>>(
 
 export function homeSlots(order: string[] = []) {
   const mapping: Record<string, string> = {
+    directions: "directions",
+    work: "work",
+    people: "people",
+    status: "status",
+    contact: "contact",
     researchAreas: "directions",
     featuredResearch: "work",
     facilities: "work",
     members: "people",
     news: "people",
     monitor: "status",
-    contact: "contact",
   };
   return [
     ...new Set(

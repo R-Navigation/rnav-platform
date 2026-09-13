@@ -137,7 +137,7 @@ export function ResearchPage({
         variant="editorialSplit"
         header={{
           ...data.header,
-          title: { zh: "论文成果", en: "Publications" },
+          title: data.header?.title || { zh: "论文成果", en: "Publications" },
           eyebrow: "PUBLICATIONS",
           description: isDemoContent(data.header)
             ? {
@@ -147,7 +147,7 @@ export function ResearchPage({
             : data.header?.description,
         }}
         locale={locale}
-        image={featured?.image}
+        image={data.header?.image || featured?.image}
         focalPosition={[74, 50]}
         mobileFocalPosition={[68, 48]}
       />

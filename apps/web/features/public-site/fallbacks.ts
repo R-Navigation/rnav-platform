@@ -22,6 +22,7 @@ export const homeFallback = {
   featuredFacilityIds: [],
   featuredMemberSlugs: [],
   newsPreviewIds: [],
+  compositionOrder: ["directions", "work", "people", "status", "contact"],
   sectionOrder: [
     "researchAreas",
     "featuredResearch",
@@ -40,6 +41,18 @@ export const homeFallback = {
     monitor: true,
     contact: true,
   },
+};
+export const directionsFallback = {
+  header: {
+    eyebrow: { zh: "研究方向", en: "RESEARCH DIRECTIONS" },
+    title: { zh: "研究方向", en: "Research directions" },
+    description: {
+      zh: "我们研究机器人在复杂环境中的定位、建图、决策与协作。",
+      en: "We study robot localization, mapping, decision-making and collaboration in complex environments.",
+    },
+  },
+  hero: { image: null },
+  directions: [],
 };
 export const researchFallback = {
   header: {

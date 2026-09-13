@@ -5,7 +5,9 @@ import Link from "next/link";
 import { DiscardDialog } from "./DiscardDialog";
 import { PageEditor } from "./PageEditor";
 import { HomeComposer } from "./HomeComposer";
-import { HeaderImageEditor } from "./HeaderImageEditor";
+import { DirectionsEditor } from "./DirectionsEditor";
+import { NewsLibraryEditor, PublicationLibraryEditor } from "./LibraryEditors";
+import { ContactItemsEditor, ContactPageEditor, FacilitiesPageEditor, LegacyFacilitiesEditor, PublicPageSettingsEditor, SiteSettingsEditor, TeamPageEditor } from "./PageEditors";
 import { readSiteAdminError } from "./api";
 import { ConsoleAlert, ConsoleButton, ConsoleIcon } from "@/features/console/ui";
 import {
@@ -26,7 +28,14 @@ import {
 type Props = { permissions?: string[] };
 type LoadState = "loading" | "ready" | "error";
 type SaveState = "idle" | "saving" | "saved";
-type EditorMode = "form" | "json";
+type EditorMode = "form" | "generic" | "json";
+const moduleGroups = [
+  { label: "站点", keys: ["site"] },
+  { label: "页面", keys: ["home", "directions-page", "research-page", "facilities-page", "team-page", "news-page", "contact-page"] },
+  { label: "内容", keys: ["research-items", "news-items", "contact-items"] },
+  { label: "兼容", keys: ["facility-items"] },
+];
+const publicPages: Record<string, string> = { home: "/", "directions-page": "/directions", "research-page": "/research", "facilities-page": "/facilities", "team-page": "/team", "news-page": "/news", "contact-page": "/contact" };
 
 export function SiteContentConsole({ permissions }: Props) {
   const [modules, setModules] = useState<SiteModule[]>([]);
@@ -339,15 +348,13 @@ export function SiteContentConsole({ permissions }: Props) {
         className="min-w-0"
         disabled={editorInteraction.disabled}
       >
-        <nav
-          aria-label="官网内容模块"
-          className="mt-5 overflow-x-auto border-b border-slate-300"
-        >
-          <div className="flex min-w-max gap-1" role="tablist">
-            {availableModules.map((module) => (
+        <div className="mt-6 grid gap-6 xl:grid-cols-[13rem_minmax(0,1fr)]">
+        <nav aria-label="官网内容模块" className="self-start rounded-xl border border-slate-200 bg-white p-3 xl:sticky xl:top-24">
+          <div className="space-y-4" role="tablist">
+            {moduleGroups.map((group) => { const grouped = availableModules.filter((module) => group.keys.includes(module.key)); return grouped.length ? <div key={group.label}><p className="mb-1 px-2 text-[10px] font-bold uppercase tracking-[.16em] text-slate-400">{group.label}</p><div className="space-y-1">{grouped.map((module) => (
               <button
                 aria-selected={module.key === selectedModule.key}
-                className={`border-b-2 px-3 py-2.5 text-sm font-semibold ${module.key === selectedModule.key ? "border-cyan-700 text-cyan-800" : "border-transparent text-slate-600 hover:text-slate-950"}`}
+                className={`w-full rounded-lg px-3 py-2.5 text-left text-sm font-semibold transition ${module.key === selectedModule.key ? "bg-blue-950 text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"}`}
                 data-module-key={module.key}
                 key={module.key}
                 onClick={() => requestModuleSwitch(module.key)}
@@ -359,12 +366,11 @@ export function SiteContentConsole({ permissions }: Props) {
                 type="button"
               >
                 {module.label}
-              </button>
-            ))}
+              </button>))}</div></div> : null; })}
           </div>
         </nav>
-
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-4">
+        <div className="min-w-0">
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h2 className="text-xl font-bold text-slate-950">
               {selectedModule.label}
@@ -372,6 +378,7 @@ export function SiteContentConsole({ permissions }: Props) {
             <p className="mt-1 text-xs text-slate-500">
               修订版本 {selectedModule.revision ?? "未提供"}
             </p>
+            {publicPages[selectedModule.key] ? <Link className="mt-2 inline-block text-xs font-semibold text-cyan-800 underline underline-offset-4" href={publicPages[selectedModule.key]} target="_blank">打开公开页面 ↗</Link> : null}
           </div>
           <div
             aria-label="编辑模式"
@@ -384,7 +391,15 @@ export function SiteContentConsole({ permissions }: Props) {
               onClick={() => setMode("form")}
               type="button"
             >
-              表单
+              日常编辑
+            </button>
+            <button
+              aria-pressed={mode === "generic"}
+              className={`rounded-md px-3 py-1.5 text-xs font-semibold ${mode === "generic" ? "bg-amber-50 text-amber-900" : "text-slate-500 hover:bg-slate-50 hover:text-slate-800"}`}
+              onClick={() => setMode("generic")}
+              type="button"
+            >
+              通用字段
             </button>
             <button
               aria-pressed={mode === "json"}
@@ -392,13 +407,12 @@ export function SiteContentConsole({ permissions }: Props) {
               onClick={() => setMode("json")}
               type="button"
             >
-              <ConsoleIcon name="settings"/>高级
+              <ConsoleIcon name="settings"/>原始 JSON
             </button>
           </div>
         </div>
 
         <div className="mt-6" role="tabpanel">
-          {mode === "form" && selectedModule.kind === "page" && selectedModule.key !== "site" && <HeaderImageEditor key={selectedModule.key} pageKey={selectedModule.pageKey!} value={draftValue} onChange={updateDraft} />}
           {mode === "json" ? (
             <div>
               <ConsoleAlert tone="warning" title="高级编辑模式">这里会直接修改模块的原始 JSON。通常应优先使用表单；保存前请确认字段结构和数据类型。</ConsoleAlert>
@@ -412,20 +426,30 @@ export function SiteContentConsole({ permissions }: Props) {
                 value={jsonSource}
               />
             </div>
-          ) : selectedModule.key === "home" ? (
-            <HomeComposer
-              modules={modules}
-              onChange={updateDraft}
-              value={draftValue}
-            />
-          ) : (
+          ) : mode === "generic" ? (
             <PageEditor onChange={updateDraft} value={draftValue} />
+          ) : selectedModule.key === "site" ? <SiteSettingsEditor onChange={updateDraft} value={draftValue}/>
+          : selectedModule.key === "home" ? <HomeComposer modules={modules} onChange={updateDraft} value={draftValue}/>
+          : selectedModule.key === "directions-page" ? <DirectionsEditor modules={modules} onChange={updateDraft} value={draftValue}/>
+          : selectedModule.key === "research-page" ? <PublicPageSettingsEditor pageName="论文成果" onChange={updateDraft} value={draftValue}/>
+          : selectedModule.key === "news-page" ? <PublicPageSettingsEditor pageName="新闻动态" onChange={updateDraft} value={draftValue}/>
+          : selectedModule.key === "team-page" ? <TeamPageEditor onChange={updateDraft} value={draftValue}/>
+          : selectedModule.key === "facilities-page" ? <FacilitiesPageEditor onChange={updateDraft} value={draftValue}/>
+          : selectedModule.key === "contact-page" ? <ContactPageEditor onChange={updateDraft} value={draftValue}/>
+          : selectedModule.key === "research-items" ? <PublicationLibraryEditor modules={modules} onChange={updateDraft} value={draftValue}/>
+          : selectedModule.key === "news-items" ? <NewsLibraryEditor onChange={updateDraft} value={draftValue}/>
+          : selectedModule.key === "contact-items" ? <ContactItemsEditor onChange={updateDraft} value={draftValue}/>
+          : selectedModule.key === "facility-items" ? <LegacyFacilitiesEditor onChange={updateDraft} value={draftValue}/>
+          : (
+            <PageEditor onChange={updateDraft} value={draftValue}/>
           )}
           {jsonError ? (
             <p className="mt-3 text-sm font-semibold text-red-700" role="alert">
               JSON 格式错误：{jsonError}
             </p>
           ) : null}
+        </div>
+        </div>
         </div>
 
         <p

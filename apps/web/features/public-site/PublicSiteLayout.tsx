@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { LanguageProvider, useLanguage } from "./LanguageProvider";
@@ -24,7 +25,7 @@ function Chrome({
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const navigation = publicNavigation;
+  const navigation = Array.isArray(site.navigation) && site.navigation.length ? site.navigation : publicNavigation;
   const filteredNavigation = navigation.filter((item: any) =>
     getLocalizedText(item.label, locale)
       .toLowerCase()
@@ -51,12 +52,10 @@ function Chrome({
             href="/"
             onClick={() => setMenuOpen(false)}
           >
-            <span className="v41-wordmark">
-              R<span>NAV</span>
-            </span>
+            {site.brand?.mark?.src ? <Image alt={site.brand.mark.alt || "RNAV"} className="h-9 w-auto object-contain" height={36} src={site.brand.mark.src} unoptimized width={96}/> : <span className="v41-wordmark">R<span>NAV</span></span>}
             <span className="v41-brand-name">
-              <strong>Resilient Navigation</strong>
-              <span>砺行导航·机器人实验室</span>
+              <strong>{site.brand?.name?.en === "R-Nav Robotics Navigation Lab" ? "Resilient Navigation" : site.brand?.name?.en || "Resilient Navigation"}</strong>
+              <span>{site.brand?.name?.zh === "R-Nav 砺行导航·机器人实验室" ? "砺行导航·机器人实验室" : site.brand?.name?.zh || "砺行导航·机器人实验室"}</span>
             </span>
           </Link>
           <nav

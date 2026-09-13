@@ -90,7 +90,7 @@ export function TeamPage({ data }: { data: any }) {
         variant="fullBleed"
         header={{
           ...data.header,
-          title: { zh: "团队成员", en: "Our team" },
+          title: data.header?.title || { zh: "团队成员", en: "Our team" },
           eyebrow: "PEOPLE DRIVE RESEARCH",
         }}
         locale={locale}

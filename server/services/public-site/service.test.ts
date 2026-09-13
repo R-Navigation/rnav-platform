@@ -119,7 +119,7 @@ test("homepage returns only configured authoritative records in configured order
     newsPreviewIds: ["news-2"],
   });
   repository.research = [{ id: "paper-1" }, { id: "paper-2" }];
-  repository.facilities = [{ id: "facility-1" }, { id: "facility-2" }];
+  repository.publicPlatforms = [{ id: "facility-1" }, { id: "facility-2" }];
   repository.team = [
     { slug: "phd-first", group: "phd", name: { en: "First" } },
     { slug: "phd-second", group: "phd", name: { en: "Second" } },
@@ -216,7 +216,11 @@ test("facilities preserves an explicitly empty facilitySections array", async ()
   assert.deepEqual(facilities.facilitySections, []);
 });
 
-test("facilities combines safe live platforms and assets with legacy fallback",async()=>{const repository=new MemoryPublicSiteRepository();repository.publicPlatforms=[{id:"platform-1",category:"robot",categoryLabel:{zh:"机器人",en:"Robots"},title:{zh:"导航平台",en:"Navigation platform"},components:[{role:{zh:"前视",en:"Front"},deviceType:"相机",manufacturer:"Intel",model:"D455",count:1}]}];repository.publicAssets=[{id:"asset-1",category:"lidar",categoryLabel:{zh:"激光雷达",en:"LiDAR"},title:{zh:"核心雷达",en:"Core LiDAR"}}];repository.facilities=[{id:"legacy-1",category:"quadrupeds",title:{zh:"旧设施",en:"Legacy"}}];const facilities=await createPublicSiteService(repository).getFacilities();assert.deepEqual(facilities.facilitySections.map((section:any)=>section.category),["platform:robot","asset:lidar","quadrupeds"]);assert.deepEqual(facilities.facilitySections[0].subtitle,{zh:"机器人",en:"Robots"});assert.equal(facilities.facilitySections[0].items[0].components[0].role.zh,"前视");});
+test("facilities uses asset-backed public profiles and suppresses legacy duplicates",async()=>{const repository=new MemoryPublicSiteRepository();repository.publicPlatforms=[{id:"platform-1",category:"robot",categoryLabel:{zh:"机器人",en:"Robots"},title:{zh:"导航平台",en:"Navigation platform"},components:[{role:{zh:"前视",en:"Front"},deviceType:"相机",manufacturer:"Intel",model:"D455",count:1}]}];repository.publicAssets=[{id:"asset-1",category:"lidar",categoryLabel:{zh:"激光雷达",en:"LiDAR"},title:{zh:"核心雷达",en:"Core LiDAR"}}];repository.facilities=[{id:"legacy-1",category:"quadrupeds",title:{zh:"旧设施",en:"Legacy"}}];const facilities=await createPublicSiteService(repository).getFacilities();assert.deepEqual(facilities.facilitySections.map((section:any)=>section.category),["platform:robot","asset:lidar"]);assert.deepEqual(facilities.facilitySections[0].subtitle,{zh:"机器人",en:"Robots"});assert.equal(facilities.facilitySections[0].items[0].components[0].role.zh,"前视");});
+
+test("directions prefers the independent page, falls back to legacy home, and shares homepage authority",async()=>{const repository=new MemoryPublicSiteRepository();repository.pages.set("home",{hero:{description:{zh:"旧简介"}},researchAreas:[{title:{zh:"旧方向"}}],directionsHeroImage:{src:"/legacy.jpg"}});const service=createPublicSiteService(repository);const legacy=await service.getDirections();assert.equal(legacy.directions[0].title.zh,"旧方向");assert.equal(legacy.header.description.zh,"旧简介");assert.equal(legacy.hero.image.src,"/legacy.jpg");repository.pages.set("directions_page",{header:{title:{zh:"新方向"}},hero:{image:{src:"/new.jpg"}},directions:[{key:"new",topicKey:"slam",title:{zh:"新权威"}}]});const current=await service.getDirections(),homepage=await service.getHomepage();assert.equal(current.directions[0].topicKey,"slam");assert.equal(homepage.directions.directions[0].title.zh,"新权威");assert.equal(homepage.home.researchAreas[0].title.zh,"新权威");});
+
+test("directions preserves an explicitly empty authoritative collection",async()=>{const repository=new MemoryPublicSiteRepository();repository.pages.set("home",{researchAreas:[{title:{zh:"旧方向"}}]});repository.pages.set("directions_page",{directions:[]});const service=createPublicSiteService(repository);assert.deepEqual((await service.getDirections()).directions,[]);assert.deepEqual((await service.getHomepage()).home.researchAreas,[]);});
 
 test("public page projections recursively strip unknown and internal JSON fields", async () => {
   const repository = new MemoryPublicSiteRepository();

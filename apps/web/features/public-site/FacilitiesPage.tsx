@@ -34,7 +34,7 @@ export function FacilitiesPage({
     platforms.find((item) => String(item.id) === String(featuredIds[0])) ||
     platforms[0];
   const overview = sections.filter((section: any) => section.kind !== "asset");
-  const video = sections.find((section: any) =>
+  const video = data.video || sections.find((section: any) =>
     (section.items?.length ? section.items : [section]).some((item: any) =>
       item.id
         ? String(item.id) === String(featured?.id)
@@ -61,7 +61,7 @@ export function FacilitiesPage({
             : data.header?.description,
         }}
         locale={locale}
-        image={featured?.image}
+        image={data.header?.image || featured?.image}
         focalPosition={[70, 52]}
         mobileFocalPosition={[64, 50]}
       >

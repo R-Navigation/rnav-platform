@@ -7,6 +7,7 @@ import type { PublicSiteService } from "../services/public-site/service.js";
 const methods = {
   bootstrap: "getBootstrap",
   home: "getHome",
+  directions: "getDirections",
   homepage: "getHomepage",
   research: "getResearch",
   news: "getNews",

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const pageKeys = ["site", "home", "research_page", "news_page", "team_page", "facilities_page", "contact_page"] as const;
+export const pageKeys = ["site", "home", "directions_page", "research_page", "news_page", "team_page", "facilities_page", "contact_page"] as const;
 export const pageKeySchema = z.enum(pageKeys);
 export type PageKey = z.infer<typeof pageKeySchema>;
 
@@ -106,6 +106,7 @@ const researchItem = z.object({
 
 const newsItem = z.object({
   id: identifier, sortOrder, date: localized.optional(), badge: localized.optional(), badgeTone: optionalText,
+  category: localized.optional(),
   title: localized.optional(), description: localized.optional(), excerpt: localized.optional(), featured: z.boolean().optional(),
   image, link: link.nullable().optional()
 }).strict();
@@ -128,7 +129,10 @@ const facilityItem = z.object({
 
 const primaryChannel = z.object({ icon: optionalText, title: localized.optional(), value: localized.optional(), href: optionalText }).strict();
 const socialLink = z.object({ icon: optionalText, label: localized.optional(), handle: localized.optional(), href: optionalText }).strict();
-const extraCard = z.object({ title: localized.optional(), description: localized.optional(), value: localized.optional() }).strict();
+const extraCard = z.object({
+  icon: optionalText, title: localized.optional(), description: localized.optional(), value: localized.optional(),
+  href: optionalText, buttonLabel: localized.optional()
+}).strict();
 
 export const collectionRequestSchemas = {
   research: uniqueField(researchItem, "id"),

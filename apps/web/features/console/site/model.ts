@@ -23,15 +23,15 @@ export const adminRedirects = [
 ];
 
 const pageModules = [
-  ["site", "站点设置", "site"], ["home", "首页", "home"], ["research-page", "论文页面", "research_page"],
+  ["site", "品牌与导航", "site"], ["home", "首页", "home"], ["directions-page", "研究方向", "directions_page"], ["research-page", "论文成果", "research_page"],
   ["news-page", "新闻页面", "news_page"], ["team-page", "团队页面", "team_page"],
-  ["facilities-page", "设备页面", "facilities_page"], ["contact-page", "联系页面", "contact_page"]
+  ["facilities-page", "设备页面", "facilities_page"], ["contact-page", "联系页外观", "contact_page"]
 ] as const;
 const collectionModules = [
-  ["research-items", "论文条目", "researchItems", "/research-items"],
-  ["news-items", "新闻条目", "newsItems", "/news-items"],
-  ["facility-items", "设备条目", "facilityItems", "/facility-items"],
-  ["contact-items", "联系结构", "contactItems", "/contact-items"]
+  ["research-items", "论文库", "researchItems", "/research-items"],
+  ["news-items", "新闻库", "newsItems", "/news-items"],
+  ["facility-items", "旧版设备条目", "facilityItems", "/facility-items"],
+  ["contact-items", "联系我们", "contactItems", "/contact-items"]
 ] as const;
 
 function versioned(value: unknown, fallback: unknown) {

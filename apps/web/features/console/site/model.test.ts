@@ -27,6 +27,7 @@ test("snapshot normalization supports versioned pages and structured collections
   });
 
   assert.equal(modules.find((item) => item.key === "home")?.revision, "r1");
+  assert.equal(modules.find((item) => item.key === "directions-page")?.endpoint, "/pages/directions_page");
   assert.equal(modules.some((item) => item.key === "team-members"), false);
 });
 

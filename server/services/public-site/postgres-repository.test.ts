@@ -35,6 +35,33 @@ test("public repository preserves asset-only and src-only media references outsi
   assert.equal(facilities[0].image.assetId, "55555555-5555-4555-8555-555555555555");
 });
 
+test("public repository exposes news categories and complete contact extra cards", async () => {
+  const queryable = { async query(sql: string) {
+    if (sql.includes("FROM news_items")) return { rows: [{
+      id: "news-1", sort_order: 0, category_zh: "学术动态", category_en: "Research"
+    }] };
+    if (sql.includes("FROM contact_extra_cards")) return { rows: [{
+      icon: "map-pin", title_zh: "位置", title_en: "Location",
+      description_zh: "来访前请联系", description_en: "Contact us before visiting",
+      value_zh: "武汉大学", value_en: "Wuhan University",
+      href: "https://maps.example.test", button_label_zh: "查看地图", button_label_en: "Open map"
+    }] };
+    return { rows: [] };
+  } };
+  const repository = createPostgresPublicSiteRepository(queryable as never);
+  const [news, contact] = await Promise.all([repository.getNewsItems(), repository.getContactItems()]);
+
+  assert.deepEqual(news[0].category, { zh: "学术动态", en: "Research" });
+  assert.deepEqual(contact.extraCards[0], {
+    icon: "map-pin",
+    title: { zh: "位置", en: "Location" },
+    description: { zh: "来访前请联系", en: "Contact us before visiting" },
+    value: { zh: "武汉大学", en: "Wuhan University" },
+    href: "https://maps.example.test",
+    buttonLabel: { zh: "查看地图", en: "Open map" }
+  });
+});
+
 test("public members come from visible account profiles and honor field visibility", async () => {
   let teamSql="";const queryable = { async query(sql: string) {
     teamSql=sql;

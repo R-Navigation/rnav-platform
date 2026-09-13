@@ -53,7 +53,7 @@ export function NewsPage({ data }: { data: any }) {
         variant="editorialSplit"
         header={{
           ...data.header,
-          title: { zh: "新闻动态", en: "News and events" },
+          title: data.header?.title || { zh: "新闻动态", en: "News and events" },
           eyebrow: "NEWS & EVENTS",
           description: isDemoContent(data.header)
             ? {
@@ -63,7 +63,7 @@ export function NewsPage({ data }: { data: any }) {
             : data.header?.description,
         }}
         locale={locale}
-        image={featured?.image}
+        image={data.header?.image || featured?.image}
         focalPosition={[72, 48]}
         mobileFocalPosition={[65, 46]}
       />

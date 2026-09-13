@@ -1,7 +1,7 @@
 import { PublicPage } from "@/features/public-site/PublicPage";
 import { fallbackBootstrap, getPublicData } from "@/features/public-site/data";
 import {
-  homeFallback,
+  directionsFallback,
   researchFallback,
   facilitiesFallback,
 } from "@/features/public-site/fallbacks";
@@ -15,19 +15,19 @@ export const metadata = publicMetadata(
 );
 
 export default async function Page() {
-  const [bootstrap, home, research, facilities] = await Promise.all([
+  const [bootstrap, directions, research, facilities] = await Promise.all([
     getPublicData("bootstrap", fallbackBootstrap),
-    getPublicData("home", homeFallback),
+    getPublicData("directions", directionsFallback),
     getPublicData("research", researchFallback),
     getPublicData("facilities", facilitiesFallback),
   ]);
   return (
     <PublicPage
       bootstrap={bootstrap}
-      degraded={home.degraded || research.degraded || facilities.degraded}
+      degraded={directions.degraded || research.degraded || facilities.degraded}
     >
       <DirectionsPage
-        home={home.data}
+        directions={directions.data}
         research={research.data}
         facilities={facilities.data}
       />

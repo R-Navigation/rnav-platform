@@ -8,6 +8,7 @@ import {
 
 test("page keys are restricted to the public page allowlist", () => {
   assert.equal(pageKeySchema.safeParse("home").success, true);
+  assert.equal(pageKeySchema.safeParse("directions_page").success, true);
   assert.equal(pageKeySchema.safeParse("admin").success, false);
 });
 
@@ -89,6 +90,14 @@ test("research, team, and news schemas preserve link variants", () => {
   assert.equal(research.items[0].links?.[0].variant, "primary");
   assert.equal(team.items[0].links?.[0].variant, "subtle");
   assert.equal(news.items[0].link?.variant, "secondary");
+});
+
+test("news category and contact action fields survive CMS validation", () => {
+  const news = collectionRequestSchemas.news.parse({ expectedUpdatedAt: "0", items: [{ id: "news-1", category: { zh: "科研进展", en: "Research" } }] });
+  const contact = collectionRequestSchemas.contact.parse({ expectedUpdatedAt: "0", items: { primaryChannels: [], socialLinks: [], extraCards: [{ icon: "groups", title: { zh: "合作" }, description: { zh: "说明" }, value: { zh: "" }, href: "mailto:lab@example.com", buttonLabel: { zh: "联系" } }] } });
+  assert.equal(news.items[0].category?.en, "Research");
+  assert.equal(contact.items.extraCards[0].buttonLabel?.zh, "联系");
+  assert.equal(contact.items.extraCards[0].href, "mailto:lab@example.com");
 });
 
 test("team collections use the public group allowlist and preserve legacy member fields", () => {

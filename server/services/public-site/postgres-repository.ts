@@ -25,7 +25,7 @@ export function createPostgresPublicSiteRepository(pool: Queryable): PublicSiteR
     },
     async getNewsItems() {
       const { rows } = await pool.query("SELECT * FROM news_items ORDER BY sort_order, title_en, id");
-      return rows.map((row) => ({ id: row.id, sortOrder: row.sort_order, date: locale(row, "date"), badge: locale(row, "badge"), badgeTone: row.badge_tone, title: locale(row, "title"), description: locale(row, "description"), excerpt: locale(row, "excerpt"), featured: row.featured, image: image(row), link: row.link_href ? { label: locale(row, "link_label"), href: row.link_href, icon: row.link_icon ?? "", variant: row.link_variant ?? "" } : null }));
+      return rows.map((row) => ({ id: row.id, sortOrder: row.sort_order, date: locale(row, "date"), badge: locale(row, "badge"), badgeTone: row.badge_tone, category: locale(row, "category"), title: locale(row, "title"), description: locale(row, "description"), excerpt: locale(row, "excerpt"), featured: row.featured, image: image(row), link: row.link_href ? { label: locale(row, "link_label"), href: row.link_href, icon: row.link_icon ?? "", variant: row.link_variant ?? "" } : null }));
     },
     async getTeamMembers() {
       const { rows } = await pool.query(`SELECT p.*, u.username, m.url AS avatar_url
@@ -80,7 +80,7 @@ export function createPostgresPublicSiteRepository(pool: Queryable): PublicSiteR
     },
     async getContactItems() {
       const [channels, social, cards] = await Promise.all([pool.query("SELECT * FROM contact_primary_channels ORDER BY sort_order, id"), pool.query("SELECT * FROM contact_social_links ORDER BY sort_order, id"), pool.query("SELECT * FROM contact_extra_cards ORDER BY sort_order, id")]);
-      return { primaryChannels: channels.rows.map((row) => ({ icon: row.icon, title: locale(row, "title"), value: locale(row, "value"), href: row.href })), socialLinks: social.rows.map((row) => ({ icon: row.icon, label: locale(row, "label"), handle: locale(row, "handle"), href: row.href })), extraCards: cards.rows.map((row) => ({ title: locale(row, "title"), description: locale(row, "description"), value: locale(row, "value") })) };
+      return { primaryChannels: channels.rows.map((row) => ({ icon: row.icon, title: locale(row, "title"), value: locale(row, "value"), href: row.href })), socialLinks: social.rows.map((row) => ({ icon: row.icon, label: locale(row, "label"), handle: locale(row, "handle"), href: row.href })), extraCards: cards.rows.map((row) => ({ icon: row.icon, title: locale(row, "title"), description: locale(row, "description"), value: locale(row, "value"), href: row.href, buttonLabel: locale(row, "button_label") })) };
     }
   };
 }

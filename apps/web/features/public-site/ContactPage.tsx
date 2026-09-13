@@ -43,7 +43,7 @@ export function ContactPage({ data }: { data: any }) {
           : "Wuhan University campus landscape, from the LIESMARS website",
       }
     : undefined;
-  const configuredImage = data.campusImage || data.heroImage;
+  const configuredImage = data.header?.image || data.campusImage || data.heroImage;
   const image =
     configuredImage?.src &&
     !isDemoContent({
@@ -187,7 +187,7 @@ export function ContactPage({ data }: { data: any }) {
             <p>{text(item.description)}</p>
             {text(item.value) && <p>{text(item.value)}</p>}
             <Action href={item.href || email?.href || ""} secondary>
-              {zh ? "取得联系" : "Get in touch"}
+              {text(item.buttonLabel) || (zh ? "取得联系" : "Get in touch")}
             </Action>
           </article>
         ))}

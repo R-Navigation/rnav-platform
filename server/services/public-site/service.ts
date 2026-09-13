@@ -100,6 +100,7 @@ const itemFields: Allowlist = {
   label: localized,
   value: localized,
   handle: localized,
+  buttonLabel: localized,
   year: true,
   type: true,
   topic: true,
@@ -118,6 +119,13 @@ const itemFields: Allowlist = {
   tags:[true],
   components:[{role:localized,deviceType:true,manufacturer:true,model:true,count:true}],
 };
+const directionFields: Allowlist = {
+  ...itemFields,
+  key: true,
+  topicKey: true,
+  capability: localized,
+  scenario: localized,
+};
 const facilityVideoFields: Allowlist = {
   title: localized,
   description: localized,
@@ -134,6 +142,8 @@ const facilitySectionFields: Allowlist = {
 const pageAllowlists: Record<string, Allowlist> = {
   site: {
     brandName: localized,
+    brandMark: imageFields,
+    navigation: [{ key: true, label: localized, href: true, visible: true, sortOrder: true }],
     footerDescription: localized,
     footerCopyright: localized,
     footerLinks: [linkFields],
@@ -163,6 +173,7 @@ const pageAllowlists: Record<string, Allowlist> = {
     featuredResearchIds: [true],
     featuredFacilityIds: [true],
     featuredMemberSlugs: [true],
+    compositionOrder: [true],
     sectionOrder: [true],
     sectionVisibility: true,
     featuredPublication: {
@@ -172,6 +183,11 @@ const pageAllowlists: Record<string, Allowlist> = {
       archiveHref: true,
     },
     newsPreviewIds: [true],
+  },
+  directions_page: {
+    header: headerFields,
+    hero: { image: imageFields },
+    directions: [directionFields],
   },
   research_page: {
     header: headerFields,
@@ -210,6 +226,8 @@ const pageAllowlists: Record<string, Allowlist> = {
       handheldSensors: facilitySectionFields,
     },
     facilitySections: [facilitySectionFields],
+    scenarios: [directionFields],
+    video: facilityVideoFields,
     cta: {
       title: localized,
       description: localized,
@@ -295,6 +313,7 @@ export const defaults = {
     featuredResearchIds: [],
     featuredFacilityIds: [],
     featuredMemberSlugs: [],
+    compositionOrder: ["directions", "work", "people", "status", "contact"],
     sectionOrder: [
       "researchAreas",
       "featuredResearch",
@@ -320,6 +339,15 @@ export const defaults = {
       archiveHref: "/research",
     },
     newsPreviewIds: [],
+  },
+  directions: {
+    header: {
+      eyebrow: { zh: "研究方向", en: "RESEARCH DIRECTIONS" },
+      title: { zh: "研究方向", en: "Research directions" },
+      description: { zh: "", en: "" },
+    },
+    hero: { image: null },
+    directions: [],
   },
   research: {
     header: {
@@ -469,6 +497,7 @@ function normalizeItem(item: PublicRecord): PublicRecord {
     "label",
     "value",
     "handle",
+    "buttonLabel",
   ]) {
     if (key in item) normalized[key] = text(item[key]);
   }
@@ -630,12 +659,30 @@ export function createPublicSiteService(repository: PublicSiteRepository) {
     );
     return sanitizeConfig(mergeLocalized(fallback, stored)) as PublicRecord;
   };
+  const resolveDirections = async (providedHome?: PublicRecord): Promise<PublicRecord> => {
+    const [raw, home] = await Promise.all([
+      repository.getPageContent("directions_page"),
+      providedHome ? Promise.resolve(providedHome) : page("home", defaults.home),
+    ]);
+    const source = object(raw);
+    const projected = project(source, pageAllowlists.directions_page);
+    const resolved = sanitizeConfig(mergeLocalized(defaults.directions, projected)) as PublicRecord;
+    if (!Object.prototype.hasOwnProperty.call(source, "directions")) resolved.directions = array(home.researchAreas);
+    if (!object(resolved.header).description?.zh && !object(resolved.header).description?.en) {
+      resolved.header = { ...object(resolved.header), description: object(home.hero).description };
+    }
+    if (!object(resolved.hero).image) resolved.hero = { ...object(resolved.hero), image: home.directionsHeroImage ?? null };
+    return resolved;
+  };
   return {
     async getBootstrap() {
       const site = await page("site", defaults.site);
+      const navigation = array(site.navigation)
+        .filter((item) => item.visible !== false)
+        .sort((left, right) => Number(left.sortOrder ?? 0) - Number(right.sortOrder ?? 0));
       return {
-        brand: { name: site.brandName },
-        navigation: publicNavigation,
+        brand: { name: site.brandName, mark: site.brandMark ?? null },
+        navigation: navigation.length ? navigation : publicNavigation,
         header: {
           searchPlaceholder: {
             zh: "搜索论文...",
@@ -654,16 +701,20 @@ export function createPublicSiteService(repository: PublicSiteRepository) {
       };
     },
     getHome: () => page("home", defaults.home),
+    getDirections: () => resolveDirections(),
     async getHomepage(): Promise<PublicRecord> {
-      const [home, research, facilities, members, news, contact] =
+      const [home, research, publicPlatforms, publicAssets, members, news, contact] =
         await Promise.all([
           page("home", defaults.home),
           repository.getResearchItems(),
-          Promise.all([repository.getPublicLabPlatforms?.()??Promise.resolve([]),repository.getPublicLabAssets?.()??Promise.resolve([]),repository.getFacilityItems()]).then(([platforms,assets,legacy])=>[...platforms,...assets,...legacy]),
+          repository.getPublicLabPlatforms?.()??Promise.resolve([]),
+          repository.getPublicLabAssets?.()??Promise.resolve([]),
           repository.getTeamMembers(),
           repository.getNewsItems(),
           page("contact_page", defaults.contact),
         ]);
+      const directions = await resolveDirections(home);
+      const facilities = [...publicPlatforms, ...publicAssets];
       const select = (
         items: PublicRecord[],
         ids: unknown,
@@ -691,7 +742,8 @@ export function createPublicSiteService(repository: PublicSiteRepository) {
           ? [home.featuredPublicationId]
           : [];
       return {
-        home,
+        home: { ...home, researchAreas: directions.directions },
+        directions,
         research: {
           publications: select(research, legacyResearchIds, "id", 3),
         },
@@ -768,11 +820,12 @@ export function createPublicSiteService(repository: PublicSiteRepository) {
         "facilitySections",
       );
       const dynamic=(items:PublicRecord[],kind:"platform"|"asset")=>{const grouped=new Map<string,PublicRecord[]>();for(const item of items){const group=clean(item.category)||"other";grouped.set(group,[...(grouped.get(group)??[]),normalizeItem(item)]);}return[...grouped.entries()].map(([category,items])=>({category:`${kind}:${category}`,kind,subtitle:items[0]?.categoryLabel??{zh:category,en:category},items}));};
+      const dynamicSections = [...dynamic(publicPlatforms,"platform"),...dynamic(publicAssets,"asset")];
       return {
         ...config,
-        facilitySections: [...dynamic(publicPlatforms,"platform"),...dynamic(publicAssets,"asset"),...(hasExplicitSections
+        facilitySections: dynamicSections.length ? dynamicSections : (hasExplicitSections
           ? array(config.facilitySections).map(normalizeFacilitySection)
-          : buildFacilitySections(config, legacyItems))],
+          : buildFacilitySections(config, legacyItems)),
       };
     },
     async getContact(): Promise<PublicRecord> {

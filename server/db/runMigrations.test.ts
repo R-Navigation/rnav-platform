@@ -116,11 +116,15 @@ test("getMigrationFiles returns SQL migrations in lexical order", async () => {
       "034_lab_asset_specs.sql",
       "035_lab_asset_public_profiles.sql",
       "036_lab_type_templates.sql",
+      "037_cms_content_fields.sql",
+      "038_bridge_legacy_public_facilities.sql",
     ],
   );
 });
 
 test("2.3 migrations are additive, preserve legacy relationships, and default public profiles to private",async()=>{const {readFile}=await import("node:fs/promises");const read=(name:string)=>readFile(new URL(`./migrations/${name}`,import.meta.url),"utf8");const [accounts,condition,platforms,specs,profiles,templates]=await Promise.all([read("031_user_account_kind.sql"),read("032_lab_asset_condition_components.sql"),read("033_lab_platform_attributes.sql"),read("034_lab_asset_specs.sql"),read("035_lab_asset_public_profiles.sql"),read("036_lab_type_templates.sql")]);assert.match(accounts,/ADD COLUMN IF NOT EXISTS account_kind/);assert.match(accounts,/DEFAULT 'person'/);assert.match(condition,/ADD COLUMN IF NOT EXISTS condition/);assert.match(condition,/UPDATE lab_assets SET condition=CASE status/);assert.doesNotMatch(condition,/DROP TABLE|TRUNCATE|DELETE FROM lab_assets/);assert.match(platforms,/maintainer_user_id uuid REFERENCES users\(id\) ON DELETE SET NULL/);assert.match(specs,/REFERENCES lab_assets\(id\) ON DELETE CASCADE/);assert.match(profiles,/public_visible boolean NOT NULL DEFAULT false/g);assert.match(profiles,/source_platform_id bigint REFERENCES lab_platforms\(id\) ON DELETE SET NULL/);assert.match(templates,/CREATE TABLE IF NOT EXISTS lab_platform_type_slots/);assert.match(templates,/CREATE TABLE IF NOT EXISTS lab_device_type_spec_definitions/);});
+
+test("CMS 5.0 migrations are additive, revision guarded, and preserve legacy facility rows",async()=>{const {readFile}=await import("node:fs/promises");const fields=await readFile(new URL("./migrations/037_cms_content_fields.sql",import.meta.url),"utf8"),bridge=await readFile(new URL("./migrations/038_bridge_legacy_public_facilities.sql",import.meta.url),"utf8");assert.match(fields,/page:directions_page/);assert.match(fields,/ADD COLUMN IF NOT EXISTS category_zh/);assert.match(fields,/ADD COLUMN IF NOT EXISTS button_label_zh/);assert.doesNotMatch(fields,/DELETE|TRUNCATE|DROP TABLE/i);assert.match(bridge,/ON CONFLICT \(platform_id\) DO NOTHING/);assert.match(bridge,/source_platform_id IS NULL/);assert.doesNotMatch(bridge,/DELETE|TRUNCATE|DROP TABLE/i);});
 
 test("asset procurement source migration is additive and keeps procurement deletion safe", async () => {
   const migration = await import("node:fs/promises").then(({ readFile }) =>

@@ -1,257 +1,37 @@
 "use client";
+/* eslint-disable @typescript-eslint/no-explicit-any -- CMS documents are heterogeneous schema-validated JSON. */
 
 import { useEffect, useMemo, useState } from "react";
 import type { SiteModule } from "./model";
-import { PageEditor } from "./PageEditor";
+import { asList, asRecord, EditorPanel, LocalizedFields, MediaField, MoveButtons, moveItem } from "./CmsFields";
 
-type Props = {
-  value: unknown;
-  modules: SiteModule[];
-  onChange(value: unknown): void;
-};
-// Site content is a schema-validated, heterogeneous JSON document.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type RecordValue = Record<string, any>;
-const defaultOrder = [
-  "researchAreas",
-  "featuredResearch",
-  "facilities",
-  "members",
-  "news",
-  "monitor",
-  "contact",
-];
-const labels: Record<string, string> = {
-  researchAreas: "研究方向",
-  featuredResearch: "代表成果",
-  facilities: "实验平台与设备",
-  members: "团队成员",
-  news: "最新动态",
-  monitor: "实验状态",
-  contact: "联系 / 加入",
-};
+type Item = Record<string, any>;
+const slots = ["directions", "work", "people", "status", "contact"];
+const labels: Record<string, string> = { directions: "研究方向", work: "研究与实验", people: "团队与动态", status: "实验状态", contact: "联系与加入" };
+const children: Record<string, [string, string][]> = { directions: [["researchAreas", "显示研究方向"]], work: [["featuredResearch", "显示论文成果"], ["facilities", "显示实验平台"]], people: [["members", "显示团队成员"], ["news", "显示新闻"]], status: [["monitor", "显示实验状态"]], contact: [["contact", "显示联系与加入"]] };
+const title = (item: Item) => item.title?.zh || item.name?.zh || item.title?.en || item.name?.en || item.id || item.slug || "未命名";
 
-const object = (value: unknown): RecordValue =>
-  value && typeof value === "object" && !Array.isArray(value)
-    ? (value as RecordValue)
-    : {};
-const list = (module: SiteModule | undefined) =>
-  Array.isArray(module?.value) ? (module.value as RecordValue[]) : [];
-const title = (item: RecordValue) =>
-  item.title?.zh || item.name?.zh || item.id || item.slug || "未命名";
-
-function Selector({
-  titleText,
-  items,
-  selected,
-  identity,
-  onChange,
-}: {
-  titleText: string;
-  items: RecordValue[];
-  selected: string[];
-  identity(item: RecordValue): string;
-  onChange(value: string[]): void;
-}) {
-  return (
-    <section className="border border-slate-200 p-4">
-      <div className="flex items-center justify-between">
-        <h3 className="font-bold text-blue-950">{titleText}</h3>
-        <span className="text-xs text-slate-500">已选 {selected.length}</span>
-      </div>
-      <div className="mt-3 grid max-h-64 gap-2 overflow-y-auto sm:grid-cols-2">
-        {items.map((item) => {
-          const id = identity(item);
-          return (
-            <label
-              className="flex items-start gap-2 border border-slate-200 p-3 text-sm"
-              key={id}
-            >
-              <input
-                checked={selected.includes(id)}
-                onChange={(event) =>
-                  onChange(
-                    event.target.checked
-                      ? [...selected, id]
-                      : selected.filter((value) => value !== id),
-                  )
-                }
-                type="checkbox"
-              />
-              <span>{title(item)}</span>
-            </label>
-          );
-        })}
-        {!items.length ? (
-          <p className="text-sm text-slate-500">权威内容集合中暂无可选项。</p>
-        ) : null}
-      </div>
-    </section>
-  );
+function Selector({ titleText, items, selected, identity, onChange }: { titleText: string; items: Item[]; selected: string[]; identity: (item: Item) => string; onChange: (ids: string[]) => void }) {
+  return <EditorPanel title={titleText} description={`已选 ${selected.length}`}><div className="grid max-h-64 gap-2 overflow-y-auto sm:grid-cols-2">{items.map((item) => { const id = identity(item); return <label className="flex items-start gap-2 rounded-lg border border-slate-200 p-3 text-sm transition hover:border-cyan-300" key={id}><input checked={selected.includes(id)} onChange={(event) => onChange(event.target.checked ? [...selected, id] : selected.filter((value) => value !== id))} type="checkbox"/><span>{title(item)}</span></label>; })}{!items.length ? <p className="text-sm text-slate-500">权威内容集合中暂无可选项。</p> : null}</div></EditorPanel>;
 }
 
-export function HomeComposer({ value, modules, onChange }: Props) {
-  const home = object(value);
-  const [members, setMembers] = useState<RecordValue[]>([]);
-  useEffect(() => {
-    void fetch("/api/public/team", { cache: "no-store" })
-      .then((response) => (response.ok ? response.json() : Promise.reject()))
-      .then((data) => {
-        const root = object(data);
-        setMembers(
-          [
-            root.facultyLead,
-            ...(root.advisors ?? []),
-            ...(root.postdocs ?? []),
-            ...(root.phdStudents ?? []),
-            ...(root.masterStudents ?? []),
-            ...(root.undergraduateStudents ?? []),
-          ].filter(
-            (item, index, all) =>
-              item &&
-              all.findIndex((candidate) => candidate.slug === item.slug) ===
-                index,
-          ),
-        );
-      })
-      .catch(() => setMembers([]));
-  }, []);
-  const research = list(
-    modules.find((module) => module.key === "research-items"),
-  );
-  const facilities = list(
-    modules.find((module) => module.key === "facility-items"),
-  ).filter((item) => item.id != null);
-  const news = list(modules.find((module) => module.key === "news-items"));
-  const order = useMemo(
-    () =>
-      [
-        ...new Set([
-          ...(Array.isArray(home.sectionOrder) ? home.sectionOrder : []),
-          ...defaultOrder,
-        ]),
-      ]
-        .filter((key) => defaultOrder.includes(String(key)))
-        .map(String),
-    [home.sectionOrder],
-  );
-  const visibility = object(home.sectionVisibility);
-  const set = (key: string, next: unknown) =>
-    onChange({ ...home, [key]: next });
-  const move = (key: string, direction: number) => {
-    const index = order.indexOf(key),
-      target = index + direction;
-    if (target < 0 || target >= order.length) return;
-    const next = [...order];
-    [next[index], next[target]] = [next[target], next[index]];
-    set("sectionOrder", next);
-  };
-  const editableContent = {
-    hero: home.hero ?? {},
-    sections: home.sections ?? {},
-    researchAreas: home.researchAreas ?? [],
-    featuredPublication: home.featuredPublication ?? {},
-  };
-
-  return (
-    <div className="space-y-7">
-      <section>
-        <h3 className="font-bold text-blue-950">首页模块编排</h3>
-        <p className="mt-1 text-xs text-slate-500">
-          Hero 固定在首屏；其余模块可显示、隐藏和调整顺序。
-        </p>
-        <div className="mt-3 divide-y divide-slate-200 border-y border-slate-200">
-          {order.map((key, index) => (
-            <div className="flex items-center gap-3 py-3" key={key}>
-              <input
-                aria-label={`显示${labels[key]}`}
-                checked={visibility[key] !== false}
-                onChange={(event) =>
-                  set("sectionVisibility", {
-                    ...visibility,
-                    [key]: event.target.checked,
-                  })
-                }
-                type="checkbox"
-              />
-              <strong className="flex-1 text-sm text-slate-800">
-                {index + 1}. {labels[key]}
-              </strong>
-              <button
-                className="border border-slate-300 px-2 py-1 text-xs disabled:opacity-30"
-                disabled={index === 0}
-                onClick={() => move(key, -1)}
-                type="button"
-              >
-                上移
-              </button>
-              <button
-                className="border border-slate-300 px-2 py-1 text-xs disabled:opacity-30"
-                disabled={index === order.length - 1}
-                onClick={() => move(key, 1)}
-                type="button"
-              >
-                下移
-              </button>
-            </div>
-          ))}
-        </div>
-      </section>
-      <div className="grid gap-4 xl:grid-cols-2">
-        <Selector
-          identity={(item) => String(item.id)}
-          items={research}
-          onChange={(next) => set("featuredResearchIds", next)}
-          selected={
-            Array.isArray(home.featuredResearchIds)
-              ? home.featuredResearchIds.map(String)
-              : home.featuredPublicationId
-                ? [String(home.featuredPublicationId)]
-                : []
-          }
-          titleText="代表成果"
-        />
-        <Selector
-          identity={(item) => String(item.id)}
-          items={facilities}
-          onChange={(next) => set("featuredFacilityIds", next)}
-          selected={
-            Array.isArray(home.featuredFacilityIds)
-              ? home.featuredFacilityIds.map(String)
-              : []
-          }
-          titleText="实验设备"
-        />
-        <Selector
-          identity={(item) => String(item.slug)}
-          items={members}
-          onChange={(next) => set("featuredMemberSlugs", next)}
-          selected={
-            Array.isArray(home.featuredMemberSlugs)
-              ? home.featuredMemberSlugs.map(String)
-              : []
-          }
-          titleText="团队成员"
-        />
-        <Selector
-          identity={(item) => String(item.id)}
-          items={news}
-          onChange={(next) => set("newsPreviewIds", next)}
-          selected={
-            Array.isArray(home.newsPreviewIds)
-              ? home.newsPreviewIds.map(String)
-              : []
-          }
-          titleText="新闻预览"
-        />
-      </div>
-      <section className="border-t border-slate-200 pt-6">
-        <h3 className="mb-4 font-bold text-blue-950">首页文案与研究方向</h3>
-        <PageEditor
-          onChange={(next) => onChange({ ...home, ...object(next) })}
-          value={editableContent}
-        />
-      </section>
-    </div>
-  );
+export function HomeComposer({ value, modules, onChange }: { value: unknown; modules: SiteModule[]; onChange: (value: unknown) => void }) {
+  const home = asRecord(value), [members, setMembers] = useState<Item[]>([]), [facilities, setFacilities] = useState<Item[]>([]);
+  useEffect(() => { void fetch("/api/public/team", { cache: "no-store" }).then((response) => response.ok ? response.json() : Promise.reject()).then((data) => { const root = asRecord(data); setMembers([root.facultyLead, ...(root.advisors ?? []), ...(root.postdocs ?? []), ...(root.phdStudents ?? []), ...(root.masterStudents ?? []), ...(root.undergraduateStudents ?? []), ...(root.alumni ?? [])].filter((item, index, all) => item && all.findIndex((candidate) => candidate.slug === item.slug) === index)); }).catch(() => setMembers([])); }, []);
+  useEffect(() => { void fetch("/api/public/facilities", { cache: "no-store" }).then((response) => response.ok ? response.json() : Promise.reject()).then((data) => setFacilities(asList(asRecord(data).facilitySections).flatMap((section) => ["platform", "asset"].includes(String(section.kind)) ? asList(section.items) : []))).catch(() => setFacilities([])); }, []);
+  const research = asList(modules.find((module) => module.key === "research-items")?.value), news = asList(modules.find((module) => module.key === "news-items")?.value);
+  const order = useMemo(() => [...new Set([...(Array.isArray(home.compositionOrder) ? home.compositionOrder : []), ...slots])].map(String).filter((key) => slots.includes(key)), [home.compositionOrder]);
+  const visibility = asRecord(home.sectionVisibility), hero = asRecord(home.hero), sections = asRecord(home.sections);
+  const set = (key: string, next: unknown) => onChange({ ...home, [key]: next });
+  const selected = (key: string, legacy?: unknown) => (Array.isArray(home[key]) ? home[key] : legacy ? [legacy] : []).map(String);
+  const slotVisible = (slot: string) => children[slot].some(([key]) => visibility[key] !== false);
+  const toggleSlot = (slot: string, visible: boolean) => set("sectionVisibility", { ...visibility, ...Object.fromEntries(children[slot].map(([key]) => [key, visible])) });
+  return <div className="space-y-5">
+    <p className="text-xs font-semibold text-cyan-800">来源：官网内容 · 首页编排</p>
+    <EditorPanel title="首页组合编排" description="Hero 固定在首屏；组合槽可以调整顺序，组合内部可单独控制显示。"><div className="divide-y divide-slate-200 border-y border-slate-200">{order.map((slot, index) => <div className="flex flex-wrap items-center gap-3 py-3" key={slot}><input aria-label={`显示${labels[slot]}`} checked={slotVisible(slot)} onChange={(event) => toggleSlot(slot, event.target.checked)} type="checkbox"/><strong className="min-w-36 flex-1 text-sm text-slate-900">{index + 1}. {labels[slot]}</strong>{children[slot].length > 1 ? <div className="flex flex-wrap gap-3">{children[slot].map(([key, childLabel]) => <label className="flex items-center gap-1.5 text-xs text-slate-600" key={key}><input checked={visibility[key] !== false} onChange={(event) => set("sectionVisibility", { ...visibility, [key]: event.target.checked })} type="checkbox"/>{childLabel}</label>)}</div> : null}<MoveButtons index={index} length={order.length} onMove={(target) => set("compositionOrder", moveItem(order, index, target))}/></div>)}</div></EditorPanel>
+    <div className="grid gap-4 xl:grid-cols-2"><Selector identity={(item) => String(item.id)} items={research} onChange={(ids) => set("featuredResearchIds", ids)} selected={selected("featuredResearchIds", home.featuredPublicationId)} titleText="代表论文"/><Selector identity={(item) => String(item.id)} items={facilities} onChange={(ids) => set("featuredFacilityIds", ids)} selected={selected("featuredFacilityIds")} titleText="公开平台与设备"/><Selector identity={(item) => String(item.slug)} items={members} onChange={(ids) => set("featuredMemberSlugs", ids)} selected={selected("featuredMemberSlugs")} titleText="精选成员"/><Selector identity={(item) => String(item.id)} items={news} onChange={(ids) => set("newsPreviewIds", ids)} selected={selected("newsPreviewIds")} titleText="新闻预览"/></div>
+    {!facilities.length ? <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-950">实验室资产中暂无已公开的 Public Profile。请先完成“实验室资产 → 对外展示”，这里不再提供 legacy 设备作为候选。</p> : null}
+    <EditorPanel title="首页 Hero" description="研究方向由独立模块维护，不在首页重复编辑。"><div className="space-y-5"><LocalizedFields label="眉题" value={hero.eyebrow} onChange={(next) => set("hero", { ...hero, eyebrow: next })}/><LocalizedFields label="主标题" value={hero.title} onChange={(next) => set("hero", { ...hero, title: next })}/><LocalizedFields label="强调文字" value={hero.highlight} onChange={(next) => set("hero", { ...hero, highlight: next })}/><LocalizedFields label="简介" multiline value={hero.description} onChange={(next) => set("hero", { ...hero, description: next })}/><MediaField label="Hero 图片" value={hero.image} onChange={(next) => set("hero", { ...hero, image: next })}/></div></EditorPanel>
+    <EditorPanel title="首页区块标题"><div className="space-y-5"><LocalizedFields label="研究方向" value={sections.researchAreasTitle} onChange={(next) => set("sections", { ...sections, researchAreasTitle: next })}/><LocalizedFields label="代表成果" value={sections.featuredTitle} onChange={(next) => set("sections", { ...sections, featuredTitle: next })}/><LocalizedFields label="新闻动态" value={sections.newsTitle} onChange={(next) => set("sections", { ...sections, newsTitle: next })}/></div></EditorPanel>
+  </div>;
 }

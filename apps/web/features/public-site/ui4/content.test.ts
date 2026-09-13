@@ -21,6 +21,13 @@ test("4.1 composition pairs old CMS sections without duplication", () => {
     "status",
     "contact",
   ]);
+  assert.deepEqual(homeSlots(["people", "directions", "contact", "work"]), [
+    "people",
+    "directions",
+    "contact",
+    "work",
+    "status",
+  ]);
 });
 test("featured selections preserve ID order and never invent missing records", () => {
   const items = [

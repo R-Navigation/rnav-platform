@@ -157,17 +157,46 @@ test("snapshot-style media parse and reach repository mapping without loss", asy
   }
 });
 
-test("news replacements persist link variants", async () => {
+test("news replacements persist categories and link variants", async () => {
   const newsClient = new FakeClient();
   const newsRepository = createPostgresSiteAdminRepository({ connect: async () => newsClient } as never);
   await newsRepository.replaceNewsItems([{
     id: "news-1",
+    category: { zh: "学术动态", en: "Research" },
     link: { label: { en: "Details" }, href: "/news", icon: "arrow", variant: "secondary" }
   }], "7", "user-1");
 
   const newsInsert = newsClient.calls.find(({ sql }) => sql.includes("INSERT INTO news_items"));
+  assert.match(newsInsert?.sql ?? "", /category_zh, category_en/);
+  assert.equal(newsInsert?.values?.includes("学术动态"), true);
+  assert.equal(newsInsert?.values?.includes("Research"), true);
   assert.match(newsInsert?.sql ?? "", /link_href, link_icon, link_variant/);
   assert.equal(newsInsert?.values?.at(-1), "secondary");
+});
+
+test("contact extra cards persist icons, links, and localized button labels", async () => {
+  const client = new FakeClient();
+  const repository = createPostgresSiteAdminRepository({ connect: async () => client } as never);
+  await repository.replaceContactItems({
+    primaryChannels: [],
+    socialLinks: [],
+    extraCards: [{
+      icon: "map-pin",
+      title: { zh: "位置", en: "Location" },
+      description: { zh: "来访前请联系", en: "Contact us before visiting" },
+      value: { zh: "武汉大学", en: "Wuhan University" },
+      href: "https://maps.example.test",
+      buttonLabel: { zh: "查看地图", en: "Open map" }
+    }]
+  }, "7", "user-1");
+
+  const cardInsert = client.calls.find(({ sql }) => sql.includes("INSERT INTO contact_extra_cards"));
+  assert.match(cardInsert?.sql ?? "", /icon/);
+  assert.match(cardInsert?.sql ?? "", /href, button_label_zh, button_label_en/);
+  assert.equal(cardInsert?.values?.includes("map-pin"), true);
+  assert.equal(cardInsert?.values?.includes("https://maps.example.test"), true);
+  assert.equal(cardInsert?.values?.includes("查看地图"), true);
+  assert.equal(cardInsert?.values?.includes("Open map"), true);
 });
 
 test("facility replacement preserves a supplied bigint id", async () => {

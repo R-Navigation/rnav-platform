@@ -14,11 +14,11 @@ import {
 import { flattenFacilities, publishedItems } from "./ui4/content";
 
 export function DirectionsPage({
-  home,
+  directions,
   research,
   facilities,
 }: {
-  home: any;
+  directions: any;
   research: any;
   facilities: any;
 }) {
@@ -26,7 +26,7 @@ export function DirectionsPage({
   const zh = locale === "zh",
     text = (value: unknown) => getLocalizedText(value, locale);
   const platforms = flattenFacilities(facilities),
-    areas = publishedItems<any>(home.researchAreas ?? []),
+    areas = publishedItems<any>(directions.directions ?? []),
     papers = publishedItems<any>(research.publications ?? []);
   const topicFor = (area: any) =>
     area.topicKey ||
@@ -52,12 +52,8 @@ export function DirectionsPage({
       <Hero
         variant="editorialSplit"
         locale={locale}
-        header={{
-          title: { zh: "研究方向", en: "Research directions" },
-          eyebrow: "RESEARCH DIRECTIONS",
-          description: home.hero?.description,
-        }}
-        image={home.directionsHeroImage}
+        header={{ ...directions.header, eyebrow: "RESEARCH DIRECTIONS" }}
+        image={directions.hero?.image || directions.header?.image}
         focalPosition={[72, 50]}
         mobileFocalPosition={[68, 48]}
       >
