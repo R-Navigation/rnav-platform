@@ -76,6 +76,22 @@ export function createUsersRouter({
       handle(e, res, next);
     }
   });
+  router.get(
+    "/api/users/:id/deletion-check",
+    requirePermission("users.write"),
+    async (r, res, next) => {
+      try {
+        res.json(
+          await service.getDeletionCheck(
+            userIdSchema.parse(r.params.id),
+            actor(r),
+          ),
+        );
+      } catch (e) {
+        handle(e, res, next);
+      }
+    },
+  );
   router.get("/api/users/:id/profile", requirePermission("site.members.write"), async (r, res, next) => {
     try { if (!profileService) throw new Error("Profile service unavailable"); const profile = await profileService.getProfile(userIdSchema.parse(r.params.id)); profile ? res.json(profile) : res.status(404).json({ error: "Profile not found" }); }
     catch (e) { handle(e, res, next); }
@@ -199,6 +215,20 @@ export function createUsersRouter({
             userIdSchema.parse(r.params.id),
             actor(r),
           ),
+        );
+      } catch (e) {
+        handle(e, res, next);
+      }
+    },
+  );
+  router.delete(
+    "/api/users/:id",
+    requirePermission("users.write"),
+    same,
+    async (r, res, next) => {
+      try {
+        res.json(
+          await service.deleteUser(userIdSchema.parse(r.params.id), actor(r)),
         );
       } catch (e) {
         handle(e, res, next);

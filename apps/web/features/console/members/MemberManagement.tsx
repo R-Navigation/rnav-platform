@@ -12,9 +12,16 @@ import { consoleApi } from "@/lib/consoleApi";
 import { MemberProfileEditor } from "./MemberProfileEditor";
 import { MemberImportDialog } from "./MemberImportDialog";
 import { AccountEmailEditor } from "./AccountEmailEditor";
+import { AccountDeletionPanel } from "./AccountDeletionPanel";
+import {
+  accountLifecycleCopy,
+  canShowPermanentDelete,
+  removeDeletedMember,
+} from "./accountDeletion";
 import { groupMembers,memberGroups,type MemberGroupKey } from "./memberGrouping";
 import { ConsoleIcon } from "@/features/console/ui/ConsoleIcon";
 import { ConsoleSearchInput } from "@/features/console/ui/ConsoleFormControls";
+import { ConsoleToast } from "@/features/console/ui/ConsoleToast";
 
 export type Member = {
   id: string;
@@ -157,9 +164,12 @@ export function MemberManagement({
     if(loginFilter)query.set("login",loginFilter);
     const result = await consoleApi<{ users: Member[] }>(`/api/users?${query}`);
     setMembers(result.users);
-    setSelectedId(
-      (current) => current || initialMemberId || result.users[0]?.id || "",
-    );
+    setSelectedId((current) => {
+      const preferred = current || initialMemberId;
+      if (preferred && result.users.some((user) => user.id === preferred))
+        return preferred;
+      return result.users[0]?.id || "";
+    });
   }, [initialMemberId, search, status,profileFilter,visibilityFilter,loginFilter]);
 
   useEffect(() => {
@@ -279,6 +289,17 @@ export function MemberManagement({
     }, "角色与权限已保存，目标账号的旧会话已失效。");
   }
 
+  async function handleDeleted(userId: string, username: string) {
+    setMembers((current) => removeDeletedMember(current, userId));
+    setSelectedId("");
+    setDetail(null);
+    setAudit([]);
+    window.history.replaceState(null, "", "/console/members");
+    await loadMembers();
+    setSelectedId("");
+    setMessage(`账号 @${username} 已永久删除。`);
+  }
+
   return (
     <section aria-labelledby="members-heading">
       <header className="flex flex-wrap items-end justify-between gap-4 border-b border-slate-200 pb-5">
@@ -307,12 +328,10 @@ export function MemberManagement({
         </p>
       ) : null}
       {message ? (
-        <p
-          className="mt-4 border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800"
-          role="status"
-        >
-          {message}
-        </p>
+        <ConsoleToast
+          message={message}
+          onDismiss={() => setMessage("")}
+        />
       ) : null}
       <div className="mt-5 grid gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm md:grid-cols-2 xl:grid-cols-4">
         <ConsoleSearchInput
@@ -619,6 +638,9 @@ export function MemberManagement({
                   <p className="text-sm text-slate-600">
                     敏感操作会保留审计记录；密码重置后旧会话立即失效，临时密码只显示一次。
                   </p>
+                  <p className="mt-2 text-xs leading-5 text-slate-500">
+                    {accountLifecycleCopy.disable}
+                  </p>
                   {canWriteUsers ? (
                     <div className="mt-5 flex flex-wrap gap-3">
                       <button
@@ -720,6 +742,14 @@ export function MemberManagement({
                       你没有账号安全管理权限。
                     </p>
                   )}
+                  {canShowPermanentDelete(actorTier, canWriteUsers) ? (
+                    <AccountDeletionPanel
+                      displayName={selected.displayName}
+                      onDeleted={handleDeleted}
+                      userId={selected.id}
+                      username={selected.username}
+                    />
+                  ) : null}
                 </div>
               ) : null}
               {tab === "audit" ? (

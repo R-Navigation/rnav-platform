@@ -23,6 +23,169 @@ export class UserAdminError extends Error {
 }
 type Actor = { id: string; baseTier: BaseTier };
 const SUPER_LOCK = 724866120014;
+
+export type AccountDeletionDependency = {
+  type: string;
+  label: string;
+  count: number;
+  blocking: boolean;
+};
+
+export type AccountDeletionCheck = {
+  deletable: boolean;
+  target: {
+    id: string;
+    username: string;
+    displayName: string;
+    accountKind: "person" | "system";
+    baseTier: BaseTier;
+    status: string;
+    lastLoginAt: Date | null;
+  };
+  dependencies: AccountDeletionDependency[];
+};
+
+const deletionDependencies: Record<
+  string,
+  { label: string; blocking: boolean }
+> = {
+  profile: { label: "成员资料", blocking: false },
+  sessions: { label: "登录会话", blocking: false },
+  direct_permissions: { label: "账号权限", blocking: false },
+  permission_grants_authored: { label: "权限授予归因", blocking: false },
+  permission_templates: { label: "岗位角色模板", blocking: false },
+  permission_templates_assigned: { label: "岗位模板分配归因", blocking: false },
+  permission_overrides: { label: "权限覆盖配置", blocking: false },
+  permission_overrides_changed: { label: "权限变更归因", blocking: false },
+  notifications: { label: "个人通知", blocking: false },
+  audit_activity: { label: "历史操作审计", blocking: false },
+  procurement_requests: { label: "采购申请", blocking: true },
+  procurement_reviews: { label: "采购审批记录", blocking: true },
+  procurement_purchases: { label: "采购执行记录", blocking: true },
+  procurement_comments: { label: "采购评论", blocking: true },
+  procurement_status_changes: { label: "采购状态历史", blocking: true },
+  procurement_items_processed: { label: "采购条目处理记录", blocking: true },
+  procurement_spend_authorship: { label: "采购支出记录", blocking: true },
+  asset_assignments: { label: "设备使用人关联", blocking: true },
+  platform_maintenance: { label: "实验平台维护关系", blocking: true },
+  asset_usage_requests: { label: "设备使用申请", blocking: true },
+  asset_usage_reviews: { label: "设备使用审批", blocking: true },
+  inventory_batches: { label: "资产盘点批次", blocking: true },
+  inventory_scans: { label: "资产盘点记录", blocking: true },
+  device_alert_acknowledgements: { label: "设备告警处置记录", blocking: true },
+  system_setting_updates: { label: "系统配置责任记录", blocking: true },
+};
+
+const deletionDependencySql = `
+  SELECT 'profile' type,count(*)::int count FROM user_profiles WHERE user_id=$1
+  UNION ALL SELECT 'sessions',count(*)::int FROM session_tokens WHERE user_id=$1
+  UNION ALL SELECT 'direct_permissions',count(*)::int FROM user_permissions WHERE user_id=$1
+  UNION ALL SELECT 'permission_grants_authored',count(*)::int FROM user_permissions WHERE granted_by=$1
+  UNION ALL SELECT 'permission_templates',count(*)::int FROM user_permission_templates WHERE user_id=$1
+  UNION ALL SELECT 'permission_templates_assigned',count(*)::int FROM user_permission_templates WHERE assigned_by=$1
+  UNION ALL SELECT 'permission_overrides',count(*)::int FROM user_permission_overrides WHERE user_id=$1
+  UNION ALL SELECT 'permission_overrides_changed',count(*)::int FROM user_permission_overrides WHERE changed_by=$1
+  UNION ALL SELECT 'notifications',count(*)::int FROM notifications WHERE user_id=$1
+  UNION ALL SELECT 'audit_activity',count(*)::int FROM audit_logs WHERE actor_id=$1
+  UNION ALL SELECT 'procurement_requests',count(*)::int FROM procurement_requests WHERE requester_id=$1
+  UNION ALL SELECT 'procurement_reviews',count(*)::int FROM procurement_requests WHERE reviewed_by=$1
+  UNION ALL SELECT 'procurement_purchases',count(*)::int FROM procurement_requests WHERE purchased_by=$1
+  UNION ALL SELECT 'procurement_comments',count(*)::int FROM procurement_comments WHERE author_id=$1
+  UNION ALL SELECT 'procurement_status_changes',count(*)::int FROM procurement_status_history WHERE actor_id=$1
+  UNION ALL SELECT 'procurement_items_processed',count(*)::int FROM procurement_request_items WHERE processed_by=$1
+  UNION ALL SELECT 'procurement_spend_authorship',count(*)::int FROM procurement_spend_entries WHERE created_by=$1 OR updated_by=$1
+  UNION ALL SELECT 'asset_assignments',count(*)::int FROM lab_assets WHERE assigned_user_id=$1
+  UNION ALL SELECT 'platform_maintenance',count(*)::int FROM lab_platforms WHERE maintainer_user_id=$1
+  UNION ALL SELECT 'asset_usage_requests',count(*)::int FROM lab_asset_usage_requests WHERE requester_id=$1
+  UNION ALL SELECT 'asset_usage_reviews',count(*)::int FROM lab_asset_usage_requests WHERE reviewed_by=$1
+  UNION ALL SELECT 'inventory_batches',count(*)::int FROM lab_asset_inventory_batches WHERE created_by=$1
+  UNION ALL SELECT 'inventory_scans',count(*)::int FROM lab_asset_inventory_items WHERE scanned_by=$1
+  UNION ALL SELECT 'device_alert_acknowledgements',count(*)::int FROM device_alerts WHERE acknowledged_by=$1
+  UNION ALL SELECT 'system_setting_updates',count(*)::int FROM system_settings WHERE updated_by=$1`;
+
+type DeletionTargetRow = {
+  id: string;
+  username: string;
+  display_name: string;
+  account_kind: "person" | "system";
+  base_tier: BaseTier;
+  status: string;
+  last_login_at: Date | null;
+};
+
+type RunDeletionQuery = (
+  sql: string,
+  values?: unknown[],
+) => Promise<{ rows: any[]; rowCount?: number | null }>;
+
+async function buildDeletionCheck(
+  query: RunDeletionQuery,
+  userId: string,
+  actor: Actor,
+  options: { lockTarget?: boolean } = {},
+): Promise<AccountDeletionCheck> {
+  if (actor.baseTier !== "super")
+    throw new UserAdminError(
+      "Only super administrators can permanently delete users",
+      "SUPER_REQUIRED",
+      403,
+    );
+
+  const targetResult = await query(
+    `SELECT id,username,display_name,account_kind,base_tier,status,last_login_at
+     FROM users WHERE id=$1${options.lockTarget ? " FOR UPDATE" : ""}`,
+    [userId],
+  );
+  const target = targetResult.rows[0] as DeletionTargetRow | undefined;
+  if (!target)
+    throw new UserAdminError("User not found", "NOT_FOUND", 404);
+
+  const rows = await query(deletionDependencySql, [userId]);
+  const dependencies = rows.rows
+    .map((row: { type: string; count: number | string }) => ({
+      type: row.type,
+      label: deletionDependencies[row.type]?.label ?? "关联记录",
+      count: Number(row.count),
+      blocking: deletionDependencies[row.type]?.blocking ?? true,
+    }))
+    .filter((dependency: AccountDeletionDependency) => dependency.count > 0);
+
+  if (userId === actor.id) {
+    dependencies.unshift({
+      type: "self_protection",
+      label: "当前登录账号",
+      count: 1,
+      blocking: true,
+    });
+  }
+  if (target.base_tier === "super" && target.status === "active") {
+    const activeSuperResult = await query(
+      "SELECT count(*)::text count FROM users WHERE base_tier='super' AND status='active'",
+    );
+    if (Number(activeSuperResult.rows[0]?.count ?? 0) <= 1) {
+      dependencies.unshift({
+        type: "last_active_super",
+        label: "最后一个启用的超级管理员",
+        count: 1,
+        blocking: true,
+      });
+    }
+  }
+
+  return {
+    deletable: !dependencies.some((dependency) => dependency.blocking),
+    target: {
+      id: target.id,
+      username: target.username,
+      displayName: target.display_name,
+      accountKind: target.account_kind,
+      baseTier: target.base_tier,
+      status: target.status,
+      lastLoginAt: target.last_login_at,
+    },
+    dependencies,
+  };
+}
 function temporaryPassword() {
   return `Rnav!${randomBytes(9).toString("base64url")}9aA`;
 }
@@ -125,6 +288,86 @@ export function createUserAdminService(pool: Pick<Pool, "query" | "connect">) {
         createdAt: row.created_at,
         actorName: row.actor_name,
       }));
+    },
+    async getDeletionCheck(userId: string, actor: Actor) {
+      return buildDeletionCheck(
+        (sql, values) => pool.query(sql, values),
+        userId,
+        actor,
+      );
+    },
+    async deleteUser(userId: string, actor: Actor) {
+      if (actor.baseTier !== "super")
+        throw new UserAdminError(
+          "Only super administrators can permanently delete users",
+          "SUPER_REQUIRED",
+          403,
+        );
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query("SELECT pg_advisory_xact_lock($1)", [SUPER_LOCK]);
+        const check = await buildDeletionCheck(
+          (sql, values) => client.query(sql, values),
+          userId,
+          actor,
+          { lockTarget: true },
+        );
+        if (userId === actor.id)
+          throw new UserAdminError(
+            "Cannot permanently delete yourself",
+            "SELF_DELETE",
+            409,
+          );
+        if (
+          check.dependencies.some(
+            (dependency) => dependency.type === "last_active_super",
+          )
+        )
+          throw new UserAdminError(
+            "At least one active super is required",
+            "LAST_SUPER",
+            409,
+          );
+        if (!check.deletable)
+          throw new UserAdminError(
+            "User has business dependencies and cannot be permanently deleted",
+            "USER_HAS_DEPENDENCIES",
+            409,
+          );
+
+        await client.query("DELETE FROM session_tokens WHERE user_id=$1", [
+          userId,
+        ]);
+        await client.query(
+          "INSERT INTO audit_logs(actor_id,action,target_type,target_id,detail) VALUES($1,'user.delete','user',$2,$3::jsonb)",
+          [
+            actor.id,
+            userId,
+            JSON.stringify({
+              username: check.target.username,
+              displayName: check.target.displayName,
+              accountKind: check.target.accountKind,
+              baseTier: check.target.baseTier,
+              reason: "permanent_delete",
+            }),
+          ],
+        );
+        await client.query("DELETE FROM users WHERE id=$1", [userId]);
+        await client.query("COMMIT");
+        return { deleted: true as const, id: userId };
+      } catch (error: any) {
+        await client.query("ROLLBACK");
+        if (error?.code === "23503")
+          throw new UserAdminError(
+            "User still has related data and cannot be permanently deleted",
+            "USER_HAS_DEPENDENCIES",
+            409,
+          );
+        throw error;
+      } finally {
+        client.release();
+      }
     },
     async createUser(body: z.input<typeof createUserSchema>, actor: Actor) {
       if (body.baseTier === "super" && actor.baseTier !== "super")
