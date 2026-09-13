@@ -677,12 +677,17 @@ export function createPublicSiteService(repository: PublicSiteRepository) {
   return {
     async getBootstrap() {
       const site = await page("site", defaults.site);
-      const navigation = array(site.navigation)
+      const configuredNavigation = array(site.navigation);
+      const navigation: PublicRecord[] = publicNavigation
+        .map((fallback, index): PublicRecord => {
+          const configured = configuredNavigation.find((item) => item.key === fallback.key || item.href === fallback.href);
+          return { ...fallback, sortOrder: index, ...configured, label: { ...fallback.label, ...object(configured?.label) } };
+        })
         .filter((item) => item.visible !== false)
         .sort((left, right) => Number(left.sortOrder ?? 0) - Number(right.sortOrder ?? 0));
       return {
         brand: { name: site.brandName, mark: site.brandMark ?? null },
-        navigation: navigation.length ? navigation : publicNavigation,
+        navigation,
         header: {
           searchPlaceholder: {
             zh: "搜索论文...",

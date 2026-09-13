@@ -71,6 +71,23 @@ test("bootstrap supplies bilingual defaults and the required public navigation",
   assert.equal(bootstrap.navigation[2].label.zh, "论文成果");
 });
 
+test("bootstrap completes a legacy six-item CMS navigation without losing configured labels", async () => {
+  const repository = new MemoryPublicSiteRepository();
+  repository.pages.set("site", { navigation: [
+    { key: "home", label: { zh: "主页", en: "Start" }, href: "/" },
+    { key: "research", label: { zh: "论文", en: "Research" }, href: "/research" },
+    { key: "team", label: { zh: "团队", en: "Team" }, href: "/team" },
+    { key: "facilities", label: { zh: "设备", en: "Facilities" }, href: "/facilities" },
+    { key: "news", label: { zh: "新闻", en: "News" }, href: "/news" },
+    { key: "contact", label: { zh: "联系", en: "Contact" }, href: "/contact" },
+  ] });
+
+  const navigation = (await createPublicSiteService(repository).getBootstrap()).navigation;
+  assert.deepEqual(navigation.map((item) => item.href), ["/", "/directions", "/research", "/facilities", "/team", "/news", "/contact"]);
+  assert.deepEqual(navigation[0].label, { zh: "主页", en: "Start" });
+  assert.deepEqual(navigation[1].label, { zh: "研究方向", en: "Directions" });
+});
+
 test("research merges stored page content with normalized repository items", async () => {
   const repository = new MemoryPublicSiteRepository();
   repository.pages.set("research_page", {
