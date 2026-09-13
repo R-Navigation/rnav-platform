@@ -1,11 +1,7 @@
 import { NewsPage } from "@/features/public-site/NewsPage";
 import { PublicPage } from "@/features/public-site/PublicPage";
 import { fallbackBootstrap, getPublicData } from "@/features/public-site/data";
-import {
-  newsFallback,
-  facilitiesFallback,
-} from "@/features/public-site/fallbacks";
-import { flattenFacilities } from "@/features/public-site/ui4/content";
+import { newsFallback } from "@/features/public-site/fallbacks";
 import { publicMetadata } from "@/lib/publicMetadata";
 
 export const metadata = publicMetadata(
@@ -17,17 +13,13 @@ export const metadata = publicMetadata(
 export default async function Page() {
   const bootstrapPromise = getPublicData("bootstrap", fallbackBootstrap);
   const dataPromise = getPublicData("news", newsFallback);
-  const [bootstrap, result, facilities] = await Promise.all([
+  const [bootstrap, result] = await Promise.all([
     bootstrapPromise,
     dataPromise,
-    getPublicData("facilities", facilitiesFallback),
   ]);
   return (
     <PublicPage bootstrap={bootstrap} degraded={result.degraded}>
-      <NewsPage
-        data={result.data}
-        heroImage={flattenFacilities(facilities.data)[0]?.image}
-      />
+      <NewsPage data={result.data} />
     </PublicPage>
   );
 }

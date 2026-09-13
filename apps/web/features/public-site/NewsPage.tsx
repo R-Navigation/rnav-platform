@@ -14,7 +14,7 @@ import {
 } from "./ui4/Primitives";
 import { isDemoContent, publishedItems } from "./ui4/content";
 
-export function NewsPage({ data, heroImage }: { data: any; heroImage?: any }) {
+export function NewsPage({ data }: { data: any }) {
   const { locale } = useLanguage(),
     zh = locale === "zh",
     text = (value: unknown) => getLocalizedText(value, locale);
@@ -62,7 +62,6 @@ export function NewsPage({ data, heroImage }: { data: any; heroImage?: any }) {
             : data.header?.description,
         }}
         locale={locale}
-        image={featured?.image || heroImage}
       />
       <section className="v41-wrap v41-section">
         <Heading

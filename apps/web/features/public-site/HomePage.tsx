@@ -70,7 +70,7 @@ export function HomePage({ data }: { data: any }) {
   const heroImage =
     hero.image?.src && !/示意|demo|example/i.test(hero.image.alt ?? "")
       ? hero.image
-      : facilities.find((item) => item.image?.src)?.image;
+      : undefined;
   const modules: Record<string, React.ReactNode> = {
     directions: visible("researchAreas") && (
       <section className="v41-wrap v41-section" key="directions">

@@ -21,12 +21,10 @@ export function ResearchPage({
   data,
   initialTopic = "all",
   featuredId,
-  heroImage,
 }: {
   data: any;
   initialTopic?: string;
   featuredId?: string;
-  heroImage?: any;
 }) {
   const { locale } = useLanguage(),
     zh = locale === "zh";
@@ -145,7 +143,6 @@ export function ResearchPage({
             : data.header?.description,
         }}
         locale={locale}
-        image={featured?.image || heroImage}
       />
       <section className="v41-wrap v41-section">
         <div className="v41-filter-bar">

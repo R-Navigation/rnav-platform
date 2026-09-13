@@ -1,180 +1,37 @@
-.public-site .v41-team-mosaic {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  height: 265px;
-  gap: 8px;
-  padding: 18px 0;
-}
-.public-site .v41-team-mosaic .v41-media {
-  border-radius: 6px;
-}
-.public-site .v41-team-mosaic img {
-  position: absolute;
-  inset: 0;
-}
-.public-site .v41-lead {
-  display: grid;
-  grid-template-columns: 170px 1.35fr 1fr;
-  border: 1px solid #dde7f1;
-  background: white;
-  border-radius: 8px;
-  overflow: hidden;
-  scroll-margin-top: 96px;
-}
-.public-site .v41-lead-photo {
-  min-height: 210px;
-}
-.public-site .v41-lead-photo > .v41-media {
-  height: 100%;
-}
-.public-site .v41-lead-photo img {
-  position: absolute;
-  inset: 0;
-}
-.public-site .v41-lead-contact {
-  padding: 24px;
-  background: #f0f6fd;
-  border-left: 1px solid #e2eaf3;
-}
-.public-site .v41-lead-contact h3 {
-  font-size: 13px;
-  font-weight: 650;
-  margin-bottom: 14px;
-}
 .public-site .v41-team-groups {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 18px;
-  align-items: start;
+  gap: 40px;
 }
 .public-site .v41-team-group {
-  border: 1px solid #dde7f1;
-  border-radius: 8px;
-  padding: 16px;
-  background: #f1f7fd;
+  min-width: 0;
+  padding-top: 24px;
+  border-top: 1px solid #d8e3f0;
 }
-.public-site .v41-team-group header {
+.public-site .v41-team-group > header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 16px;
 }
-.public-site .v41-team-group header h2,
-.public-site .v41-alumni summary > span {
-  font-size: 19px;
+.public-site .v41-team-group h2 {
+  font-size: 22px;
   font-weight: 700;
 }
-.public-site .v41-team-group header span {
+.public-site .v41-team-group .v41-eyebrow {
+  margin: 6px 0 0;
+  font-size: 10px;
+}
+.public-site .v41-team-group > header > span {
   font-size: 12px;
-  color: #516f97;
+  color: #526986;
+  white-space: nowrap;
 }
 .public-site .v41-group-people {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 14px;
-}
-.public-site .v41-person {
-  padding: 10px;
-  background: white;
-  border: 1px solid #dde7f1;
-  border-radius: 6px;
-  scroll-margin-top: 96px;
-}
-.public-site .v41-person-summary {
-  display: flex;
-  gap: 12px;
-}
-.public-site .v41-person-summary > div:last-child {
-  min-width: 0;
-}
-.public-site .v41-person-photo {
-  width: 68px;
-  height: 90px;
-  flex-shrink: 0;
-  overflow: hidden;
-  border-radius: 4px;
-}
-.public-site .v41-person-photo > .v41-media {
-  height: 100%;
-}
-.public-site .v41-person-photo .v41-media-mark {
-  min-height: 0;
-  font-size: 20px;
-}
-.public-site .v41-person h3 {
-  font-size: 14px;
-  font-weight: 700;
-}
-.public-site .v41-person-en {
-  font-size: 10px;
-  color: #3c68a0;
-  margin-top: 2px;
-}
-.public-site .v41-person-research {
-  font-size: 11px;
-  color: #5b7191;
-  margin-top: 7px;
-  line-height: 1.65;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.public-site .v41-person-details {
-  font-size: 11px;
-  margin-top: 8px;
-  color: #566e8e;
-  border-top: 1px solid #e2eaf3;
-}
-.public-site .v41-person-details summary,
-.public-site .v41-group-more summary {
-  min-height: 44px;
-  padding: 12px 0;
-  cursor: pointer;
-  color: #315d97;
-  font-size: 11px;
-}
-.public-site .v41-person-details dl > div {
-  margin-top: 8px;
-  display: grid;
-  grid-template-columns: 70px minmax(0, 1fr);
-  gap: 8px;
-}
-.public-site .v41-person-details p {
-  line-height: 1.8;
-}
-.public-site .v41-profile-links {
-  font-size: 12px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0 12px;
-  overflow-wrap: anywhere;
-}
-.public-site .v41-profile-links a {
-  color: #165bd2;
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-}
-.public-site .v41-profile-links p {
-  width: 100%;
-  margin-top: 8px;
-}
-.public-site .v41-profile-links p span {
-  color: #566e8e;
-}
-.public-site .v41-alumni > summary {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  min-height: 44px;
-  cursor: pointer;
-  gap: 10px;
-}
-.public-site .v41-alumni summary small {
-  font-size: 10px;
-  color: #516f97;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+  align-items: start;
 }
 .v41-photo-dialog {
   border: 0;
@@ -1345,8 +1202,8 @@
   .public-site .v41-news-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .public-site .v41-team-groups {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .public-site .v41-group-people {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
   .public-site .v41-filter-bar {
     flex-wrap: wrap;
@@ -1390,7 +1247,7 @@
 }
 @media (min-width: 768px) and (max-width: 991px) {
   .public-site .v41-group-people {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .public-site .v41-platform-overview,
   .public-site .v41-featured-platform {
@@ -1429,18 +1286,6 @@
   }
   .public-site .v41-team-groups {
     grid-template-columns: 1fr;
-  }
-  .public-site .v41-lead {
-    grid-template-columns: 110px 1fr;
-  }
-  .public-site .v41-lead-contact {
-    grid-column: 1/-1;
-    border-left: 0;
-    border-top: 1px solid #e2eaf3;
-  }
-  .public-site .v41-team-mosaic {
-    height: 200px;
-    padding-top: 0;
   }
   .public-site .v41-platform-overview,
   .public-site .v41-featured-platform {

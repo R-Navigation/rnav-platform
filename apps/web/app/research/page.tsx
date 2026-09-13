@@ -4,9 +4,7 @@ import { fallbackBootstrap, getPublicData } from "@/features/public-site/data";
 import {
   researchFallback,
   homeFallback,
-  facilitiesFallback,
 } from "@/features/public-site/fallbacks";
-import { flattenFacilities } from "@/features/public-site/ui4/content";
 import { publicMetadata } from "@/lib/publicMetadata";
 
 export const metadata = publicMetadata(
@@ -22,11 +20,10 @@ export default async function Page({
 }) {
   const bootstrapPromise = getPublicData("bootstrap", fallbackBootstrap);
   const dataPromise = getPublicData("research", researchFallback);
-  const [bootstrap, result, home, facilities, params] = await Promise.all([
+  const [bootstrap, result, home, params] = await Promise.all([
     bootstrapPromise,
     dataPromise,
     getPublicData("home", { ...homeFallback, featuredPublicationId: "" }),
-    getPublicData("facilities", facilitiesFallback),
     searchParams,
   ]);
   const initialTopic = typeof params.topic === "string" ? params.topic : "all";
@@ -39,7 +36,6 @@ export default async function Page({
         featuredId={
           home.data.featuredResearchIds?.[0] || home.data.featuredPublicationId
         }
-        heroImage={flattenFacilities(facilities.data)[0]?.image}
       />
     </PublicPage>
   );

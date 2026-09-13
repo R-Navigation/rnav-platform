@@ -64,6 +64,7 @@ const linkFields: Allowlist = {
   variant: true,
 };
 const headerFields: Allowlist = {
+  image: imageFields,
   eyebrow: localized,
   title: localized,
   description: localized,
@@ -138,6 +139,7 @@ const pageAllowlists: Record<string, Allowlist> = {
     footerLinks: [linkFields],
   },
   home: {
+    directionsHeroImage: imageFields,
     hero: {
       eyebrow: localized,
       title: localized,
@@ -526,7 +528,7 @@ function sanitizeConfig(value: unknown): unknown {
     else if (["href", "buttonHref", "archiveHref"].includes(key))
       result[key] = sanitizeActionUrl(nested);
     else if (key === "url") result[key] = sanitizePublicUrl(nested);
-    else if (key === "image" || key === "heroImage" || key === "poster")
+    else if (["image", "heroImage", "directionsHeroImage", "poster"].includes(key))
       result[key] = normalizeImage(nested);
     else result[key] = sanitizeConfig(nested);
   }
@@ -548,7 +550,8 @@ function normalizeMember(item: PublicRecord) {
   member.group = group;
   member.slug =
     clean(item.slug) || `${group}-${slugify(name.en || name.zh) || "member"}`;
-  if (["postdoc", "phd", "master", "undergrad"].includes(group)) {
+  if (["postdoc", "phd", "master", "undergrad"].includes(group) &&
+      (!("degree" in item) || text(item.degree).zh || text(item.degree).en)) {
     const degrees: Record<string, LocaleText> = {
       postdoc: { zh: "博士后", en: "Postdoc" },
       phd: { zh: "博士", en: "PhD" },

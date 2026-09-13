@@ -56,7 +56,7 @@ export function DirectionsPage({
           eyebrow: "RESEARCH DIRECTIONS",
           description: home.hero?.description,
         }}
-        image={platforms[0]?.image}
+        image={home.directionsHeroImage}
       >
         <Action href="#directions">
           {zh ? "探索研究方向" : "Explore directions"}

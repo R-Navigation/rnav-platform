@@ -5,6 +5,7 @@ import Link from "next/link";
 import { DiscardDialog } from "./DiscardDialog";
 import { PageEditor } from "./PageEditor";
 import { HomeComposer } from "./HomeComposer";
+import { HeaderImageEditor } from "./HeaderImageEditor";
 import { readSiteAdminError } from "./api";
 import { ConsoleAlert, ConsoleButton, ConsoleIcon } from "@/features/console/ui";
 import {
@@ -397,6 +398,7 @@ export function SiteContentConsole({ permissions }: Props) {
         </div>
 
         <div className="mt-6" role="tabpanel">
+          {mode === "form" && selectedModule.kind === "page" && selectedModule.key !== "site" && <HeaderImageEditor key={selectedModule.key} pageKey={selectedModule.pageKey!} value={draftValue} onChange={updateDraft} />}
           {mode === "json" ? (
             <div>
               <ConsoleAlert tone="warning" title="高级编辑模式">这里会直接修改模块的原始 JSON。通常应优先使用表单；保存前请确认字段结构和数据类型。</ConsoleAlert>

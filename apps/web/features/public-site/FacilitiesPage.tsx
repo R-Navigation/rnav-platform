@@ -60,7 +60,6 @@ export function FacilitiesPage({
             : data.header?.description,
         }}
         locale={locale}
-        image={featured?.image}
       >
         <Action href="#platform-overview">
           {zh ? "了解实验平台" : "Explore platforms"}

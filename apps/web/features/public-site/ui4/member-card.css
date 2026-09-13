@@ -1,0 +1,129 @@
+.rnav-member-card {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid #dce5ef;
+  border-radius: 8px;
+  background: #fff;
+  color: #173458;
+  scroll-margin-top: 100px;
+  font-family: Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+.rnav-member-summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+.rnav-member-copy {
+  min-width: 0;
+}
+.rnav-member-card h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.rnav-member-card p {
+  margin: 0;
+}
+.rnav-member-card .rnav-member-en {
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #526986;
+  overflow-wrap: anywhere;
+}
+.rnav-member-card .rnav-member-identity {
+  margin-top: 9px;
+  color: #426186;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.rnav-member-card .rnav-member-research {
+  margin-top: 7px;
+  font-size: 12px;
+  line-height: 1.65;
+  color: #526986;
+  overflow-wrap: anywhere;
+}
+.rnav-member-portrait {
+  width: 80px;
+  height: 104px;
+  flex: 0 0 80px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: #eaf1f8;
+}
+.rnav-member-portrait > *,
+.rnav-member-portrait .v41-media {
+  display: block;
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+.rnav-member-portrait button {
+  padding: 0;
+  border: 0;
+  cursor: zoom-in;
+}
+.rnav-member-portrait img {
+  object-fit: cover;
+  width: 100%;
+  height: 100%;
+}
+.rnav-member-portrait .v41-media-mark {
+  display: grid;
+  height: 100%;
+  min-height: 0;
+  place-content: center;
+  font-size: 20px;
+}
+.rnav-member-details {
+  margin-top: 14px;
+  border-top: 1px solid #e4ebf3;
+  color: #526986;
+  font-size: 12px;
+}
+.rnav-member-details summary {
+  min-height: 44px;
+  padding: 13px 0 8px;
+  cursor: pointer;
+  color: #315d97;
+}
+.rnav-member-details p {
+  line-height: 1.8;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.rnav-member-details dl {
+  margin: 0;
+}
+.rnav-member-details dl > div {
+  display: grid;
+  grid-template-columns: 60px minmax(0, 1fr);
+  gap: 8px;
+  margin: 8px 0;
+}
+.rnav-member-details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.rnav-member-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 12px;
+  overflow-wrap: anywhere;
+}
+.rnav-member-links a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: #165bd2;
+}
+.rnav-member-links p {
+  width: 100%;
+}
+.rnav-member-card :focus-visible {
+  outline: 3px solid #226ed8;
+  outline-offset: 3px;
+}

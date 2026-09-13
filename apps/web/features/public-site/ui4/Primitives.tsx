@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useState, type ReactNode } from "react";
 import { getLocalizedText, type Locale } from "../i18n";
 import { sanitizeActionUrl, sanitizePublicUrl } from "../url-sanitizer";
+import { resolveHeroImage } from "./hero-image";
 export { PublicTag as Tag, PublicSearch as Search } from "../ui/PublicUi";
 export { Icon } from "./Icon";
 
@@ -116,14 +117,12 @@ export function Hero({
   image,
   children,
   home = false,
-  media,
 }: {
   header: any;
   locale: Locale;
   image?: any;
   children?: ReactNode;
   home?: boolean;
-  media?: ReactNode;
 }) {
   return (
     <section className={`v41-hero ${home ? "v41-home-hero" : ""}`}>
@@ -146,15 +145,13 @@ export function Hero({
           </p>
           {children ? <div className="v41-actions">{children}</div> : null}
         </div>
-        {media || (
-          <Media
-            image={image}
-            alt={getLocalizedText(header?.title, locale)}
-            eager
-            sizes="(max-width: 767px) 90vw, 55vw"
-            className="v41-hero-media"
-          />
-        )}
+        <Media
+          image={resolveHeroImage(header?.image, image)}
+          alt={getLocalizedText(header?.title, locale)}
+          eager
+          sizes="(max-width: 767px) 90vw, 55vw"
+          className="v41-hero-media"
+        />
       </div>
     </section>
   );

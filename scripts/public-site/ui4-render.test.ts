@@ -2,10 +2,38 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { registerHooks } from "node:module";
+import { ImageConfigContext } from "next/dist/shared/lib/image-config-context.shared-runtime.js";
+import { imageConfigDefault } from "next/dist/shared/lib/image-config.js";
+import nextConfig from "../../apps/web/next.config";
 import { LanguageProvider } from "../../apps/web/features/public-site/LanguageProvider";
-import { ResearchPage } from "../../apps/web/features/public-site/ResearchPage";
-import { NewsPage } from "../../apps/web/features/public-site/NewsPage";
-import { FacilitiesPage } from "../../apps/web/features/public-site/FacilitiesPage";
+// Node's CJS interop differs from Next's bundler. Keep the real Image component.
+registerHooks({
+  load(url, context, nextLoad) {
+    if (url.endsWith("/next/image.js"))
+      return {
+        format: "module",
+        shortCircuit: true,
+        source:
+          'export { Image as default } from "next/dist/client/image-component.js";',
+      };
+    if (url.endsWith(".css"))
+      return {
+        format: "module",
+        shortCircuit: true,
+        source: "export default {};",
+      };
+    return nextLoad(url, context);
+  },
+});
+const { ResearchPage } =
+  await import("../../apps/web/features/public-site/ResearchPage");
+const { NewsPage } =
+  await import("../../apps/web/features/public-site/NewsPage");
+const { FacilitiesPage } =
+  await import("../../apps/web/features/public-site/FacilitiesPage");
+const { TeamPage } =
+  await import("../../apps/web/features/public-site/TeamPage");
 
 // The command-line renderer uses the classic JSX transform, unlike Next's build.
 Object.assign(globalThis, { React });
@@ -16,10 +44,14 @@ const render = (
   locale: "zh" | "en" = "zh",
 ) =>
   renderToStaticMarkup(
-    React.createElement(LanguageProvider, {
-      initialLocale: locale,
-      children: React.createElement(component, props),
-    }),
+    React.createElement(
+      ImageConfigContext.Provider,
+      { value: { ...imageConfigDefault, ...nextConfig.images } },
+      React.createElement(LanguageProvider, {
+        initialLocale: locale,
+        children: React.createElement(component, props),
+      }),
+    ),
   );
 
 test("formal publications render in both languages and topic links constrain results", () => {
@@ -55,6 +87,28 @@ test("formal publications render in both languages and topic links constrain res
     assert.doesNotMatch(html, /Cooperative navigation|javascript:|alert\(1\)/);
     assert.match(html, /v41-publications-layout/);
   }
+});
+
+test("team renders each identity in order with every member and a single landscape hero", () => {
+  const members = Array.from({ length: 19 }, (_, index) => ({
+    slug: `master-${index}`,
+    name: bilingual(`Member ${index}`),
+  }));
+  const lead = { slug: "lead", name: bilingual("Lead") };
+  const html = render(TeamPage, {
+    data: {
+      facultyLead: lead,
+      advisors: [lead],
+      masterStudents: members,
+      alumni: [{ slug: "alumni", name: bilingual("Graduate") }],
+    },
+  });
+  assert.equal((html.match(/class="rnav-member-card"/g) || []).length, 21);
+  assert.equal((html.match(/id="lead"/g) || []).length, 1);
+  assert.ok(html.indexOf('id="lead"') < html.indexOf('id="master-0"'));
+  assert.ok(html.indexOf('id="master-18"') < html.indexOf('id="alumni"'));
+  assert.doesNotMatch(html, /v41-team-mosaic|v41-group-more|v41-lead/);
+  assert.match(html, /202501233.png/);
 });
 
 test("formal news uses featured and archive compositions with real category labels", () => {

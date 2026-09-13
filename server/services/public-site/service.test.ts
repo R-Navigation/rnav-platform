@@ -37,6 +37,27 @@ class MemoryPublicSiteRepository implements PublicSiteRepository {
   }
 }
 
+test("editable page hero images survive public projection without leaking extra fields", async () => {
+  const repository = new MemoryPublicSiteRepository();
+  const image = { src: "https://example.com/campus.jpg", alt: "Campus", secret: "PRIVATE" };
+  for (const key of ["team_page", "research_page", "news_page", "facilities_page", "contact_page"]) repository.pages.set(key, { header: { image } });
+  repository.pages.set("home", { hero: { image }, directionsHeroImage: image });
+  const service = createPublicSiteService(repository);
+  for (const data of await Promise.all([service.getTeam(), service.getResearch(), service.getNews(), service.getFacilities(), service.getContact()])) {
+    assert.equal(data.header.image.src, image.src);
+    assert.equal(data.header.image.secret, undefined);
+  }
+  assert.equal((await service.getHome()).directionsHeroImage.src, image.src);
+  repository.pages.set("team_page", { header: { image: { src: "javascript:alert(1)" } } });
+  assert.equal((await service.getTeam()).header.image, null);
+});
+
+test("member normalization does not restore explicitly hidden academic fields", async () => {
+  const repository = new MemoryPublicSiteRepository();
+  repository.team = [{ group: "master", name: { zh: "成员" }, degree: { zh: "", en: "" } }];
+  assert.deepEqual((await createPublicSiteService(repository).getTeam()).masterStudents[0].degree, { zh: "", en: "" });
+});
+
 test("bootstrap supplies bilingual defaults and the required public navigation", async () => {
   const service = createPublicSiteService(new MemoryPublicSiteRepository());
   const bootstrap = await service.getBootstrap();
