@@ -3,6 +3,215 @@
 import { PageHeader } from "./PageHeader";
 import { useLanguage } from "./LanguageProvider";
 import { getLocalizedText, normalizeInternalHref } from "./i18n";
+import {
+  PublicButton,
+  PublicImage,
+  PublicSectionHeading,
+  PublicTag,
+} from "./ui/PublicUi";
 import { sanitizeEmbedUrl, sanitizePublicUrl } from "./url-sanitizer";
 
-export function FacilitiesPage({ data }: { data: any }) { const { locale } = useLanguage(); return <main className="mx-auto max-w-7xl px-5 pb-20 pt-12 sm:px-6 lg:px-8"><PageHeader header={data.header}/><div className="space-y-16">{(data.facilitySections ?? []).map((section: any, index: number) => { const items = section.items?.length ? section.items : [section]; const embedUrl = sanitizeEmbedUrl(section.video?.embedUrl); const posterSrc = sanitizePublicUrl(section.video?.poster?.src); return <section key={section.category || index}><p className="mb-2 text-xs font-semibold tracking-[.18em] text-cyan-800">{section.kind==="platform"?(locale==="zh"?"实验平台":"EXPERIMENTAL PLATFORMS"):section.kind==="asset"?(locale==="zh"?"核心设备":"CORE EQUIPMENT"):""}</p><h2 className="mb-6 font-serif text-3xl text-primary">{getLocalizedText(section.subtitle, locale)}</h2><div className="grid gap-6 lg:grid-cols-2">{items.map((item: any, itemIndex: number) => { const imageSrc = sanitizePublicUrl(item.image?.src); return <article className="flex flex-col border border-slate-200 bg-white transition hover:border-cyan-600" key={itemIndex}>{imageSrc ? <img className="aspect-video w-full object-cover" src={imageSrc} alt={item.image.alt || getLocalizedText(item.title, locale)} /> : <div className="aspect-video bg-slate-200"/>}<div className="flex flex-1 flex-col p-6"><span className="public-kicker">{getLocalizedText(item.tag, locale)}</span><h3 className="mt-3 text-2xl font-semibold text-primary">{getLocalizedText(item.title, locale)}</h3><p className="mt-3 leading-7 text-on-surface-variant">{getLocalizedText(item.description, locale)}</p>{item.tags?.length?<div className="mt-4 flex flex-wrap gap-2">{item.tags.map((tag:string)=><span className="bg-cyan-50 px-2 py-1 text-xs font-semibold text-cyan-900" key={tag}>{tag}</span>)}</div>:null}<dl className="mt-6 space-y-2 border-t border-slate-200 pt-4">{(item.specs ?? []).map((spec: any, specIndex: number) => <div className="flex justify-between gap-4 text-sm" key={specIndex}><dt className="text-slate-500">{getLocalizedText(spec.label, locale)}</dt><dd className="text-right font-medium text-primary">{getLocalizedText(spec.value, locale)}</dd></div>)}</dl>{item.components?.length?<section className="mt-6 border-t border-slate-200 pt-4"><h4 className="text-xs font-bold text-primary">{locale==="zh"?"主要配置":"Core components"}</h4><div className="mt-3 space-y-2">{item.components.map((component:any,componentIndex:number)=><div className="flex items-start justify-between gap-3 text-sm" key={componentIndex}><div><b>{getLocalizedText(component.role,locale)||component.deviceType}</b><p className="text-slate-500">{[component.manufacturer,component.model].filter(Boolean).join(" ")}</p></div>{component.count>1?<span className="font-mono text-slate-500">× {component.count}</span>:null}</div>)}</div></section>:null}</div></article>; })}</div>{embedUrl || posterSrc || getLocalizedText(section.video?.title, locale) ? <article className="mt-6 flex min-h-[320px] flex-col bg-primary text-white">{embedUrl ? <iframe allow="fullscreen; picture-in-picture" className="min-h-[320px] flex-1" referrerPolicy="strict-origin-when-cross-origin" sandbox="allow-scripts allow-same-origin allow-presentation" src={embedUrl} title={getLocalizedText(section.video.title, locale)} /> : posterSrc ? <img className="min-h-[320px] flex-1 object-cover" src={posterSrc} alt={section.video.poster.alt || ""}/> : <div className="min-h-[220px] flex-1 bg-slate-950"/>}<div className="p-6"><h3 className="text-xl font-semibold">{getLocalizedText(section.video?.title, locale)}</h3><p className="mt-2 text-blue-100">{getLocalizedText(section.video?.description, locale)}</p></div></article> : null}</section>; })}</div><section className="mt-20 bg-primary p-9 text-white sm:flex sm:items-center sm:justify-between"><div><h2 className="font-serif text-3xl">{getLocalizedText(data.cta?.title, locale)}</h2><p className="mt-3 max-w-2xl text-blue-100">{getLocalizedText(data.cta?.description, locale)}</p></div><a className="mt-6 inline-block bg-cyan-300 px-5 py-3 font-semibold text-primary sm:mt-0" href={normalizeInternalHref(data.cta?.buttonHref || "/contact")}>{getLocalizedText(data.cta?.buttonLabel, locale)}</a></section></main>; }
+export function FacilitiesPage({ data }: { data: any }) {
+  const { locale } = useLanguage();
+  const sections = data.facilitySections ?? [];
+  const firstImage = sections
+    .flatMap((section: any) =>
+      section.items?.length ? section.items : [section],
+    )
+    .find((item: any) => sanitizePublicUrl(item.image?.src))?.image;
+  return (
+    <main>
+      <PageHeader header={data.header} image={firstImage} />
+      <div className="public-container public-section">
+        <section className="mb-16">
+          <PublicSectionHeading
+            eyebrow={locale === "zh" ? "平台概览" : "PLATFORM OVERVIEW"}
+            title={
+              locale === "zh" ? "真实实验能力一览" : "Experimental capabilities"
+            }
+          />
+          <div className="flex gap-3 overflow-x-auto pb-2">
+            {sections.map((section: any, index: number) => (
+              <a
+                className="min-w-48 rounded-xl border border-[#e4eaf2] bg-white p-4 hover:border-[#1266f1]"
+                href={`#facility-${index}`}
+                key={section.category || index}
+              >
+                <span className="public-kicker">
+                  {String(index + 1).padStart(2, "0")}
+                </span>
+                <span className="mt-2 block font-semibold text-[#09275f]">
+                  {getLocalizedText(section.subtitle, locale) ||
+                    getLocalizedText(section.title, locale)}
+                </span>
+              </a>
+            ))}
+          </div>
+        </section>
+        <div className="space-y-20">
+          {sections.map((section: any, index: number) => {
+            const items = section.items?.length ? section.items : [section];
+            const embedUrl = sanitizeEmbedUrl(section.video?.embedUrl);
+            const posterSrc = sanitizePublicUrl(section.video?.poster?.src);
+            return (
+              <section id={`facility-${index}`} key={section.category || index}>
+                <PublicSectionHeading
+                  eyebrow={
+                    section.kind === "platform"
+                      ? locale === "zh"
+                        ? "实验平台"
+                        : "EXPERIMENTAL PLATFORMS"
+                      : section.kind === "asset"
+                        ? locale === "zh"
+                          ? "核心设备"
+                          : "CORE EQUIPMENT"
+                        : ""
+                  }
+                  title={getLocalizedText(section.subtitle, locale)}
+                />
+                <div className="grid gap-6 lg:grid-cols-2">
+                  {items.map((item: any, itemIndex: number) => (
+                    <article
+                      className="overflow-hidden rounded-xl border border-[#e4eaf2] bg-white"
+                      key={String(item.id ?? itemIndex)}
+                    >
+                      <PublicImage
+                        alt={getLocalizedText(item.title, locale)}
+                        className="aspect-video"
+                        image={item.image}
+                      />
+                      <div className="p-6">
+                        {getLocalizedText(item.tag, locale) ? (
+                          <span className="public-kicker">
+                            {getLocalizedText(item.tag, locale)}
+                          </span>
+                        ) : null}
+                        <h3 className="mt-3 text-2xl font-semibold text-[#09275f]">
+                          {getLocalizedText(item.title, locale)}
+                        </h3>
+                        <p className="mt-3 leading-7 text-[#66758f]">
+                          {getLocalizedText(item.description, locale)}
+                        </p>
+                        {item.tags?.length ? (
+                          <div className="mt-5 flex flex-wrap gap-2">
+                            {item.tags.map((tag: string) => (
+                              <PublicTag key={tag}>{tag}</PublicTag>
+                            ))}
+                          </div>
+                        ) : null}
+                        {item.specs?.length ? (
+                          <dl className="mt-6 divide-y divide-[#e4eaf2] border-t border-[#e4eaf2]">
+                            {item.specs.map((spec: any, specIndex: number) => (
+                              <div
+                                className="grid grid-cols-[minmax(0,.8fr)_minmax(0,1.2fr)] gap-4 py-3 text-sm"
+                                key={specIndex}
+                              >
+                                <dt className="text-[#66758f]">
+                                  {getLocalizedText(spec.label, locale)}
+                                </dt>
+                                <dd className="text-right font-medium text-[#09275f]">
+                                  {getLocalizedText(spec.value, locale)}
+                                </dd>
+                              </div>
+                            ))}
+                          </dl>
+                        ) : null}
+                        {item.components?.length ? (
+                          <section className="mt-6 border-t border-[#e4eaf2] pt-5">
+                            <h4 className="text-sm font-bold text-[#09275f]">
+                              {locale === "zh" ? "主要配置" : "Core components"}
+                            </h4>
+                            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                              {item.components.map(
+                                (component: any, componentIndex: number) => (
+                                  <div
+                                    className="rounded-lg bg-[#f4f8fc] p-3 text-sm"
+                                    key={componentIndex}
+                                  >
+                                    <b className="text-[#09275f]">
+                                      {getLocalizedText(
+                                        component.role,
+                                        locale,
+                                      ) || component.deviceType}
+                                    </b>
+                                    <p className="mt-1 text-[#66758f]">
+                                      {[component.manufacturer, component.model]
+                                        .filter(Boolean)
+                                        .join(" ")}
+                                      {component.count > 1
+                                        ? ` × ${component.count}`
+                                        : ""}
+                                    </p>
+                                  </div>
+                                ),
+                              )}
+                            </div>
+                          </section>
+                        ) : null}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+                {embedUrl ||
+                posterSrc ||
+                getLocalizedText(section.video?.title, locale) ? (
+                  <article className="mt-6 overflow-hidden rounded-xl border border-[#e4eaf2] bg-white lg:grid lg:grid-cols-[1.4fr_.6fr]">
+                    {embedUrl ? (
+                      <iframe
+                        allow="fullscreen; picture-in-picture"
+                        className="min-h-[320px] w-full"
+                        referrerPolicy="strict-origin-when-cross-origin"
+                        sandbox="allow-scripts allow-same-origin allow-presentation"
+                        src={embedUrl}
+                        title={getLocalizedText(section.video.title, locale)}
+                      />
+                    ) : (
+                      <PublicImage
+                        alt={
+                          section.video?.poster?.alt ||
+                          getLocalizedText(section.video?.title, locale)
+                        }
+                        className="min-h-[280px]"
+                        image={{
+                          src: posterSrc,
+                          alt: section.video?.poster?.alt,
+                        }}
+                      />
+                    )}
+                    <div className="p-6 lg:self-center">
+                      <span className="public-kicker">
+                        {locale === "zh" ? "平台影像" : "PLATFORM MEDIA"}
+                      </span>
+                      <h3 className="mt-3 text-xl font-semibold text-[#09275f]">
+                        {getLocalizedText(section.video?.title, locale)}
+                      </h3>
+                      <p className="mt-3 text-sm leading-6 text-[#66758f]">
+                        {getLocalizedText(section.video?.description, locale)}
+                      </p>
+                    </div>
+                  </article>
+                ) : null}
+              </section>
+            );
+          })}
+        </div>
+        <section className="mt-20 rounded-2xl bg-[#09275f] p-7 text-white sm:flex sm:items-center sm:justify-between sm:p-10">
+          <div>
+            <h2 className="text-3xl font-semibold">
+              {getLocalizedText(data.cta?.title, locale)}
+            </h2>
+            <p className="mt-3 max-w-2xl text-blue-100">
+              {getLocalizedText(data.cta?.description, locale)}
+            </p>
+          </div>
+          <PublicButton
+            className="mt-6 !bg-white !text-[#09275f] sm:mt-0"
+            href={normalizeInternalHref(data.cta?.buttonHref || "/contact")}
+          >
+            {getLocalizedText(data.cta?.buttonLabel, locale)}
+          </PublicButton>
+        </section>
+      </div>
+    </main>
+  );
+}

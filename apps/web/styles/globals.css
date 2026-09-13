@@ -80,9 +80,31 @@
 }
 
 @layer utilities {
-  .public-kicker { @apply text-xs font-bold uppercase text-secondary; letter-spacing: 0.1em; }
-  .public-title { @apply font-serif text-4xl font-semibold leading-tight text-primary sm:text-5xl; }
-  .public-copy { @apply text-base leading-7 text-on-surface-variant sm:text-lg; }
+  .public-site {
+    --public-bg: #f7fafc;
+    --public-surface: #ffffff;
+    --public-soft: #f4f8fc;
+    --public-primary: #09275f;
+    --public-accent: #1266f1;
+    --public-cyan: #1688b9;
+    --public-text: #0b1f45;
+    --public-muted: #66758f;
+    --public-border: #e4eaf2;
+    background: var(--public-bg);
+    color: var(--public-text);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+
+  .public-site :where(a, button, input) {
+    transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+  }
+
+  .public-site :where(button:not(:disabled)):active { transform: translateY(1px); }
+  .public-kicker { @apply text-[11px] font-bold uppercase; color: var(--public-cyan); letter-spacing: 0.14em; }
+  .public-title { @apply text-4xl font-semibold leading-[1.08] tracking-[-0.035em] sm:text-5xl lg:text-6xl; color: var(--public-primary); }
+  .public-copy { @apply text-base leading-7 sm:text-lg; color: var(--public-muted); }
+  .public-container { @apply mx-auto w-full max-w-[1360px] px-5 sm:px-7 lg:px-10; }
+  .public-section { @apply py-14 sm:py-16 lg:py-20; }
 
   .team-member-grid {
     grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr));

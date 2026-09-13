@@ -4,17 +4,152 @@ import { useMemo, useState } from "react";
 import { PageHeader } from "./PageHeader";
 import { useLanguage } from "./LanguageProvider";
 import { getLocalizedText } from "./i18n";
-import { filterPublications, groupPublications, type ResearchMode } from "./research";
-import { sanitizePublicUrl } from "./url-sanitizer";
+import {
+  filterPublications,
+  groupPublications,
+  type ResearchMode,
+} from "./research";
+import { PublicationCard, PublicSearch } from "./ui/PublicUi";
 
 export function ResearchPage({ data }: { data: any }) {
   const { locale } = useLanguage();
   const [mode, setMode] = useState<ResearchMode>("chronological");
   const [query, setQuery] = useState("");
-  const topicLabels = useMemo(() => new Map<string, string>((data.topicLabels ?? []).map((item: any) => [String(item.key), getLocalizedText(item.label, locale) || String(item.key)])), [data.topicLabels, locale]);
-  const typeLabels = useMemo(() => new Map<string, string>((data.typeLabels ?? []).map((item: any) => [String(item.key), getLocalizedText(item.label, locale) || String(item.key)])), [data.typeLabels, locale]);
-  const filtered = useMemo(() => filterPublications(data.publications ?? [], query, locale), [data.publications, locale, query]);
-  const groups = useMemo(() => groupPublications(filtered, mode, mode === "topic" ? data.topicOrder ?? [] : mode === "type" ? data.typeOrder ?? [] : []), [data.topicOrder, data.typeOrder, filtered, mode]);
-  const filters = data.filters?.length ? data.filters : [{ mode: "chronological", label: { zh: "按年份", en: "Year" } }, { mode: "topic", label: { zh: "按主题", en: "Topic" } }, { mode: "type", label: { zh: "按类型", en: "Type" } }];
-  return <main className="mx-auto max-w-7xl px-5 pb-20 pt-12 sm:px-6 lg:px-8"><PageHeader header={data.header}/><section className="mb-14 flex flex-col gap-5 border-b border-slate-300 pb-6 sm:flex-row sm:items-center sm:justify-between"><div className="flex flex-wrap gap-2">{filters.map((filter: any) => <button className={mode === filter.mode ? "bg-primary px-4 py-2 text-xs font-bold uppercase text-white" : "px-4 py-2 text-xs font-bold uppercase text-slate-600 hover:text-secondary"} key={filter.mode} onClick={() => setMode(filter.mode as ResearchMode)} type="button">{getLocalizedText(filter.label, locale)}</button>)}</div><label className="min-w-0 sm:w-80"><span className="sr-only">{getLocalizedText(data.ui?.searchPlaceholder, locale)}</span><input className="w-full border border-slate-300 bg-white px-4 py-2.5 text-sm text-primary" onChange={(event) => setQuery(event.target.value)} placeholder={getLocalizedText(data.ui?.searchPlaceholder, locale)} type="search" value={query}/></label></section><div className="space-y-14">{groups.map(([key, items]) => { const title = mode === "topic" ? topicLabels.get(key) || key : mode === "type" ? typeLabels.get(key) || key : key; return <section key={key}><div className="mb-7 flex items-baseline gap-4 border-l-4 border-cyan-600 pl-5"><h2 className="font-serif text-3xl text-primary">{title}</h2><span className="text-sm text-slate-500">{items.length} {getLocalizedText(items.length === 1 ? data.ui?.countSingle : data.ui?.countPlural, locale)}</span></div><div className="space-y-8">{items.map((item: any) => { const imageSrc = sanitizePublicUrl(item.image?.src); const pdfSrc = sanitizePublicUrl(item.pdf?.src); return <article className="grid gap-6 border-b border-slate-200 pb-8 md:grid-cols-[160px_1fr]" key={item.id}>{imageSrc ? <img className="aspect-[4/3] w-full object-cover" src={imageSrc} alt={item.image.alt || getLocalizedText(item.title, locale)} /> : <div className="grid aspect-[4/3] place-items-center bg-slate-200 px-3 text-center text-xs uppercase text-slate-500">{getLocalizedText(data.ui?.previewFallback, locale)}</div>}<div><h3 className="text-xl font-semibold text-primary">{getLocalizedText(item.title, locale)}</h3><p className="mt-2 text-on-surface-variant">{(item.authors ?? []).map((author: any) => getLocalizedText(author.name, locale)).join(", ")}</p><p className="mt-2 text-sm italic text-secondary">{getLocalizedText(item.venue, locale)}{item.year ? `, ${item.year}` : ""}</p><div className="mt-4 flex flex-wrap gap-4 text-sm font-semibold">{pdfSrc ? <a href={pdfSrc} rel="noopener noreferrer" target="_blank">{getLocalizedText(item.pdf.label, locale) || "PDF"}</a> : null}{(item.links ?? []).map((link: any, index: number) => { const href = sanitizePublicUrl(link.href); return href ? <a key={index} href={href} rel={href.startsWith("http") ? "noopener noreferrer" : undefined} target={href.startsWith("http") ? "_blank" : undefined}>{getLocalizedText(link.label, locale)}</a> : null; })}</div></div></article>; })}</div></section>; })}{groups.length === 0 ? <section className="border border-slate-200 bg-white p-8"><h2 className="text-2xl font-semibold text-primary">{getLocalizedText(data.ui?.emptyTitle, locale)}</h2><p className="mt-3 text-on-surface-variant">{getLocalizedText(data.ui?.emptyDescription, locale)}</p></section> : null}</div><div className="relative mt-24 flex h-28 items-center justify-center overflow-hidden"><div className="absolute h-px w-full bg-slate-200"/><span className="relative bg-surface px-6 font-serif italic text-slate-500">{getLocalizedText(data.footerGraphicText, locale)}</span></div></main>;
+  const topicLabels = useMemo(
+    () =>
+      new Map<string, string>(
+        (data.topicLabels ?? []).map((item: any) => [
+          String(item.key),
+          getLocalizedText(item.label, locale) || String(item.key),
+        ]),
+      ),
+    [data.topicLabels, locale],
+  );
+  const typeLabels = useMemo(
+    () =>
+      new Map<string, string>(
+        (data.typeLabels ?? []).map((item: any) => [
+          String(item.key),
+          getLocalizedText(item.label, locale) || String(item.key),
+        ]),
+      ),
+    [data.typeLabels, locale],
+  );
+  const filtered: any[] = useMemo(
+    () => filterPublications(data.publications ?? [], query, locale),
+    [data.publications, locale, query],
+  );
+  const featured = query ? null : filtered[0];
+  const groupedItems = featured
+    ? filtered.filter((item: any) => item.id !== featured.id)
+    : filtered;
+  const groups = useMemo(
+    () =>
+      groupPublications(
+        groupedItems,
+        mode,
+        mode === "topic"
+          ? (data.topicOrder ?? [])
+          : mode === "type"
+            ? (data.typeOrder ?? [])
+            : [],
+      ),
+    [data.topicOrder, data.typeOrder, groupedItems, mode],
+  );
+  const filters = data.filters?.length
+    ? data.filters
+    : [
+        { mode: "chronological", label: { zh: "按年份", en: "Year" } },
+        { mode: "topic", label: { zh: "按主题", en: "Topic" } },
+        { mode: "type", label: { zh: "按类型", en: "Type" } },
+      ];
+  const groupTitle = (key: string) =>
+    mode === "topic"
+      ? topicLabels.get(key) || key
+      : mode === "type"
+        ? typeLabels.get(key) || key
+        : key;
+
+  return (
+    <main>
+      <PageHeader header={data.header} image={featured?.image} />
+      <div className="public-container public-section">
+        <section className="sticky top-16 z-30 mb-12 flex flex-col gap-4 rounded-xl border border-[#e4eaf2] bg-white/95 p-3 shadow-[0_10px_30px_rgba(9,39,95,.06)] backdrop-blur sm:top-[72px] lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex gap-1 overflow-x-auto" role="tablist">
+            {filters.map((filter: any) => (
+              <button
+                aria-selected={mode === filter.mode}
+                className={`min-h-11 shrink-0 rounded-lg px-4 text-xs font-bold uppercase tracking-wide ${mode === filter.mode ? "bg-[#09275f] text-white" : "text-[#66758f] hover:bg-[#f4f8fc] hover:text-[#1266f1]"}`}
+                key={filter.mode}
+                onClick={() => setMode(filter.mode as ResearchMode)}
+                role="tab"
+                type="button"
+              >
+                {getLocalizedText(filter.label, locale)}
+              </button>
+            ))}
+          </div>
+          <PublicSearch
+            onChange={setQuery}
+            placeholder={getLocalizedText(data.ui?.searchPlaceholder, locale)}
+            value={query}
+          />
+        </section>
+        {featured ? (
+          <section className="mb-14">
+            <div className="mb-5 flex items-center gap-4">
+              <span className="public-kicker">
+                {locale === "zh" ? "重点成果" : "FEATURED PUBLICATION"}
+              </span>
+              <span className="h-px flex-1 bg-[#e4eaf2]" />
+            </div>
+            <PublicationCard item={featured} locale={locale} />
+          </section>
+        ) : null}
+        <div className="space-y-14">
+          {groups.map(([key, items]) => (
+            <section key={key}>
+              <div className="mb-6 flex items-baseline justify-between gap-4 border-b border-[#e4eaf2] pb-4">
+                <h2 className="text-2xl font-semibold tracking-[-0.02em] text-[#09275f] sm:text-3xl">
+                  {groupTitle(key)}
+                </h2>
+                <span className="text-sm text-[#66758f]">
+                  {items.length}{" "}
+                  {getLocalizedText(
+                    items.length === 1
+                      ? data.ui?.countSingle
+                      : data.ui?.countPlural,
+                    locale,
+                  )}
+                </span>
+              </div>
+              <div className="grid gap-5 xl:grid-cols-2">
+                {items.map((item: any) => (
+                  <PublicationCard
+                    fallback={getLocalizedText(
+                      data.ui?.previewFallback,
+                      locale,
+                    )}
+                    item={item}
+                    key={item.id}
+                    locale={locale}
+                  />
+                ))}
+              </div>
+            </section>
+          ))}
+          {filtered.length === 0 ? (
+            <section className="rounded-xl border border-[#e4eaf2] bg-white p-8 text-center">
+              <h2 className="text-2xl font-semibold text-[#09275f]">
+                {getLocalizedText(data.ui?.emptyTitle, locale)}
+              </h2>
+              <p className="mt-3 text-[#66758f]">
+                {getLocalizedText(data.ui?.emptyDescription, locale)}
+              </p>
+            </section>
+          ) : null}
+        </div>
+      </div>
+    </main>
+  );
 }

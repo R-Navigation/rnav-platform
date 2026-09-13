@@ -3,6 +3,97 @@
 import Link from "next/link";
 import { PageHeader } from "./PageHeader";
 import { useLanguage } from "./LanguageProvider";
-import { getLocalizedText, isExternalHref, normalizeInternalHref } from "./i18n";
+import {
+  getLocalizedText,
+  isExternalHref,
+  normalizeInternalHref,
+} from "./i18n";
+import { NewsRow, PublicButton, PublicImage, PublicTag } from "./ui/PublicUi";
 
-export function NewsPage({ data }: { data: any }) { const { locale } = useLanguage(); return <main className="mx-auto max-w-7xl px-5 pb-20 pt-12 sm:px-6 lg:px-8"><PageHeader header={data.header}/><section className="relative space-y-8 md:pl-36"><div className="absolute bottom-0 left-[5.5rem] top-0 hidden w-px bg-slate-200 md:block"/>{(data.items ?? []).map((item: any, index: number) => <article className="relative" key={item.id}><time className="mb-3 block text-sm text-slate-500 md:absolute md:-left-36 md:top-7 md:w-28">{getLocalizedText(item.date, locale)}</time><div className={`absolute -left-[3.18rem] top-8 hidden h-3 w-3 rounded-full border-2 border-white md:block ${index === 0 ? "bg-cyan-500" : "bg-slate-300"}`}/><div className="border border-slate-200 bg-white p-7 shadow-sm md:p-8"><div className={item.featured && item.image?.src ? "grid gap-7 md:grid-cols-[240px_1fr]" : ""}>{item.featured && item.image?.src ? <img className="h-48 w-full object-cover" src={item.image.src} alt={item.image.alt || getLocalizedText(item.title, locale)}/> : null}<div><span className="public-kicker">{getLocalizedText(item.badge, locale)}</span><h2 className="mt-3 text-2xl font-semibold text-primary">{getLocalizedText(item.title, locale)}</h2><p className="mt-3 leading-7 text-on-surface-variant">{getLocalizedText(item.description, locale)}</p>{item.link ? (isExternalHref(item.link.href) ? <a className="mt-4 inline-block font-semibold text-secondary" href={normalizeInternalHref(item.link.href)}>{getLocalizedText(item.link.label, locale)}</a> : <Link className="mt-4 inline-block font-semibold text-secondary" href={normalizeInternalHref(item.link.href)}>{getLocalizedText(item.link.label, locale)}</Link>) : null}</div></div></div></article>)}</section></main>; }
+export function NewsPage({ data }: { data: any }) {
+  const { locale } = useLanguage();
+  const items = data.items ?? [];
+  const featured = items.find((item: any) => item.featured) || items[0];
+  const rest = featured
+    ? items.filter((item: any) => item.id !== featured.id)
+    : items;
+  return (
+    <main>
+      <PageHeader header={data.header} image={featured?.image} />
+      <div className="public-container public-section">
+        {featured ? (
+          <article className="mb-14 overflow-hidden rounded-2xl border border-[#e4eaf2] bg-white shadow-[0_16px_45px_rgba(9,39,95,.06)] lg:grid lg:grid-cols-[1.05fr_.95fr]">
+            <PublicImage
+              alt={getLocalizedText(featured.title, locale)}
+              className="min-h-[280px]"
+              image={featured.image}
+            />
+            <div className="flex flex-col justify-center p-7 sm:p-10">
+              <div className="flex flex-wrap items-center gap-3">
+                <PublicTag>
+                  {getLocalizedText(featured.badge, locale) ||
+                    (locale === "zh" ? "最新动态" : "Latest")}
+                </PublicTag>
+                <time className="text-sm text-[#66758f]">
+                  {getLocalizedText(featured.date, locale)}
+                </time>
+              </div>
+              <h2 className="mt-5 text-3xl font-semibold tracking-[-0.025em] text-[#09275f]">
+                {getLocalizedText(featured.title, locale)}
+              </h2>
+              <p className="mt-4 leading-7 text-[#66758f]">
+                {getLocalizedText(featured.description, locale)}
+              </p>
+              {featured.link ? (
+                isExternalHref(featured.link.href) ? (
+                  <a
+                    className="mt-6 inline-flex min-h-11 items-center self-start font-semibold text-[#1266f1]"
+                    href={normalizeInternalHref(featured.link.href)}
+                    rel="noopener noreferrer"
+                    target="_blank"
+                  >
+                    {getLocalizedText(featured.link.label, locale)}
+                  </a>
+                ) : (
+                  <PublicButton
+                    className="mt-6 self-start"
+                    href={normalizeInternalHref(featured.link.href)}
+                    variant="ghost"
+                  >
+                    {getLocalizedText(featured.link.label, locale)}
+                  </PublicButton>
+                )
+              ) : null}
+            </div>
+          </article>
+        ) : null}
+        <section>
+          <div className="mb-5 flex items-center justify-between border-b border-[#e4eaf2] pb-4">
+            <h2 className="text-2xl font-semibold text-[#09275f]">
+              {locale === "zh" ? "全部动态" : "All updates"}
+            </h2>
+            <span className="text-sm text-[#66758f]">{items.length}</span>
+          </div>
+          {rest.length ? (
+            rest.map((item: any) =>
+              item.link ? (
+                <Link
+                  href={normalizeInternalHref(item.link.href)}
+                  key={item.id}
+                >
+                  <NewsRow item={item} locale={locale} />
+                </Link>
+              ) : (
+                <NewsRow item={item} key={item.id} locale={locale} />
+              ),
+            )
+          ) : !featured ? (
+            <p className="rounded-xl border border-[#e4eaf2] bg-white p-8 text-[#66758f]">
+              {locale === "zh" ? "暂无公开动态" : "No public updates available"}
+            </p>
+          ) : null}
+        </section>
+      </div>
+    </main>
+  );
+}
