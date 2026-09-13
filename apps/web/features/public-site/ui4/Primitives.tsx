@@ -119,6 +119,7 @@ export function Hero({
   locale,
   image,
   children,
+  titleContent,
   home = false,
   variant = "editorialSplit",
   focalPosition = [68, 50],
@@ -130,6 +131,7 @@ export function Hero({
   locale: Locale;
   image?: any;
   children?: ReactNode;
+  titleContent?: ReactNode;
   home?: boolean;
   variant?: "fullBleed" | "editorialSplit" | "featureShowcase";
   focalPosition?: [number, number];
@@ -169,13 +171,17 @@ export function Hero({
             {getLocalizedText(header?.eyebrow, locale)}
           </p>
           <h1>
-            {getLocalizedText(header?.title, locale)}
-            {header?.highlight ? (
+            {titleContent ?? (
               <>
-                {" "}
-                <span>{getLocalizedText(header.highlight, locale)}</span>
+                {getLocalizedText(header?.title, locale)}
+                {header?.highlight ? (
+                  <>
+                    {" "}
+                    <span>{getLocalizedText(header.highlight, locale)}</span>
+                  </>
+                ) : null}
               </>
-            ) : null}
+            )}
           </h1>
           <p className="v41-description">
             {getLocalizedText(header?.description, locale)}

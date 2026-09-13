@@ -697,10 +697,23 @@
   color: #09275f;
 }
 .public-site .v41-brand-name {
-  max-width: 150px;
+  display: flex;
+  flex-direction: column;
+  max-width: none;
+  white-space: nowrap;
+  color: #09275f;
+  line-height: 1.18;
+}
+.public-site .v41-brand-name strong {
   font-size: 12px;
-  font-weight: 650;
-  line-height: 1.5;
+  font-weight: 750;
+  letter-spacing: 0.01em;
+}
+.public-site .v41-brand-name > span {
+  margin-top: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #536783;
 }
 .public-site .v41-footer {
   margin-top: 0;
@@ -1397,7 +1410,7 @@
   border-bottom: 0;
 }
 .public-site .v42-home-hero {
-  min-height: 600px;
+  min-height: 510px;
 }
 .public-site .v42-hero-fullBleed:not(.v42-home-hero) {
   min-height: 460px;
@@ -1472,6 +1485,14 @@
   letter-spacing: -0.045em;
   text-shadow: 0 2px 22px rgb(3 17 36 / 0.18);
 }
+.public-site .v42-hero h1 .v42-title-line {
+  display: block;
+  color: inherit;
+  white-space: nowrap;
+}
+.public-site .v42-hero h1 .v42-title-highlight {
+  color: #1266f1;
+}
 .public-site .v42-hero-editorialSplit h1 {
   font-size: clamp(38px, 3.5vw, 54px);
   text-shadow: none;
@@ -1502,7 +1523,7 @@
   backdrop-filter: blur(14px);
 }
 .public-site .v42-home-hero .v42-hero-layout {
-  padding-bottom: 146px;
+  padding-bottom: 58px;
 }
 .public-site .v42-home-hero .v42-hero-floating {
   left: 0;
@@ -1658,17 +1679,30 @@
   min-height: 440px;
 }
 .public-site .v41-location {
-  grid-template-columns: minmax(280px, 0.8fr) minmax(0, 1.2fr);
-  box-shadow: 0 18px 48px rgb(20 57 96 / 0.1);
+  grid-template-columns: minmax(320px, 0.82fr) minmax(0, 1.18fr);
+  gap: 18px;
+  padding: 18px;
+  align-items: stretch;
+  box-shadow: 0 18px 48px rgb(20 57 96 / 0.08);
 }
 .public-site .v41-location > .v41-card-body {
-  align-self: center;
-  margin-right: -28px;
-  position: relative;
-  z-index: 2;
-  border: 1px solid #dce7f2;
-  border-radius: 8px;
-  background: #fff;
+  align-self: stretch;
+  margin: 0;
+  border: 0;
+  border-radius: 6px;
+  padding: clamp(26px, 3vw, 42px);
+  background: #f4f8fd;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.public-site .v41-location > .v41-card-body .v41-button {
+  align-self: flex-start;
+}
+.public-site .v41-location-visual {
+  min-height: 330px;
+  overflow: hidden;
+  border-radius: 6px;
 }
 .public-site .v42-cta-layered {
   position: relative;
@@ -1711,7 +1745,7 @@
     min-height: 430px;
   }
   .public-site .v42-home-hero {
-    min-height: 560px;
+    min-height: 500px;
   }
   .public-site .v42-hero-featureShowcase {
     min-height: 480px;
@@ -1743,9 +1777,11 @@
   .public-site .v42-hero-fullBleed:not(.v42-home-hero) {
     min-height: 500px;
   }
-  .public-site .v42-home-hero,
   .public-site .v42-hero-featureShowcase {
     min-height: 610px;
+  }
+  .public-site .v42-home-hero {
+    min-height: 560px;
   }
   .public-site .v42-hero-media img {
     object-position: var(--v42-mobile-position-x) var(--v42-mobile-position-y) !important;
@@ -1779,6 +1815,10 @@
     max-width: 12ch;
     font-size: clamp(36px, 11vw, 48px);
     text-shadow: 0 2px 22px rgb(3 17 36 / 0.24);
+  }
+  .public-site .v42-home-hero h1 {
+    max-width: none;
+    font-size: clamp(25px, 7.8vw, 36px);
   }
   .public-site .v42-hero .v41-eyebrow,
   .public-site .v42-hero-editorialSplit .v41-eyebrow {
@@ -1834,8 +1874,7 @@
   .public-site .v41-featured-platform > .v41-card-body,
   .public-site .v41-featured-news .v41-card-body,
   .public-site .v41-featured-news > .v41-empty,
-  .public-site .v41-contact-pair .v41-contact-info,
-  .public-site .v41-location > .v41-card-body {
+  .public-site .v41-contact-pair .v41-contact-info {
     margin: -28px 12px 0;
     border-radius: 8px;
   }
@@ -1849,7 +1888,15 @@
     margin-top: -18px;
   }
   .public-site .v41-location > .v41-card-body {
-    margin-bottom: -24px;
+    margin: 0;
+    padding: 24px 20px 28px;
+  }
+  .public-site .v41-location {
+    gap: 12px;
+    padding: 12px;
+  }
+  .public-site .v41-location-visual {
+    min-height: 220px;
   }
   .public-site .v42-cta-layered {
     min-height: 300px;

@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useLanguage } from "./LanguageProvider";
 import { getLocalizedText } from "./i18n";
-import { Action, ContactCta, Heading, Hero, Media } from "./ui4/Primitives";
+import { ContactCta, Heading, Hero, Media } from "./ui4/Primitives";
 import { MemberCard } from "./ui4/MemberCard";
 import { isDemoContent } from "./ui4/content";
 import { sanitizePublicUrl } from "./url-sanitizer";
@@ -97,11 +97,7 @@ export function TeamPage({ data }: { data: any }) {
         image={data.header?.image}
         focalPosition={[68, 44]}
         mobileFocalPosition={[65, 42]}
-      >
-        <Action href="#team-members">
-          {zh ? "认识团队" : "Meet our team"}
-        </Action>
-      </Hero>
+      />
       <section id="team-members" className="v41-wrap v41-section">
         <Heading
           title={zh ? "团队成员" : "Team members"}

@@ -221,12 +221,6 @@ export function ContactPage({ data }: { data: any }) {
                   : "Campus landscape. Open the map for the exact location."
               }
             />
-            <a
-              href={sanitizeActionUrl(address?.href) || "#contact-information"}
-            >
-              <Icon name="location_on" />
-              <span>{text(address?.value)}</span>
-            </a>
           </div>
         </div>
       </section>

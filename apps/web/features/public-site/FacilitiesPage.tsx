@@ -64,17 +64,6 @@ export function FacilitiesPage({
         image={featured?.image}
         focalPosition={[70, 52]}
         mobileFocalPosition={[64, 50]}
-        floating={
-          <div className="v42-platform-summary">
-            <span>{zh ? "平台概览" : "Platform overview"}</span>
-            <strong>{platforms.length}</strong>
-            <small>
-              {zh
-                ? `${overview.length} 类实验平台 · ${assets.length} 项公开设备`
-                : `${overview.length} platform groups · ${assets.length} public assets`}
-            </small>
-          </div>
-        }
       >
         <Action href="#platform-overview">
           {zh ? "了解实验平台" : "Explore platforms"}

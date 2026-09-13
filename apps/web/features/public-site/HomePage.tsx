@@ -71,11 +71,6 @@ export function HomePage({ data }: { data: any }) {
     hero.image?.src && !/示意|demo|example/i.test(hero.image.alt ?? "")
       ? hero.image
       : undefined;
-  const publicMemberCount = new Set(
-    [...members, ...(data.team?.alumni ?? [])]
-      .map((member: any) => member?.slug)
-      .filter(Boolean),
-  ).size;
   const modules: Record<string, React.ReactNode> = {
     directions: visible("researchAreas") && (
       <section className="v41-wrap v41-section" key="directions">
@@ -300,21 +295,15 @@ export function HomePage({ data }: { data: any }) {
         image={heroImage}
         focalPosition={[66, 48]}
         mobileFocalPosition={[64, 45]}
-        floating={
-          <nav aria-label={zh ? "首页快速入口" : "Homepage quick links"}>
-            <Link href="/directions">
-              <strong>{areas.length}</strong>
-              <span>{zh ? "研究方向" : "Research areas"}</span>
-            </Link>
-            <Link href="/facilities">
-              <strong>{facilities.length}</strong>
-              <span>{zh ? "公开平台与设备" : "Public platforms"}</span>
-            </Link>
-            <Link href="/team">
-              <strong>{publicMemberCount}</strong>
-              <span>{zh ? "公开成员档案" : "Public profiles"}</span>
-            </Link>
-          </nav>
+        titleContent={
+          zh ? (
+            <>
+              <span className="v42-title-line">面向真实世界机器人的</span>
+              <span className="v42-title-line">
+                安全导航与<span className="v42-title-highlight">具身智能</span>
+              </span>
+            </>
+          ) : undefined
         }
       >
         {(hero.actions?.length

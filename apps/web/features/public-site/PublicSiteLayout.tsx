@@ -25,7 +25,6 @@ function Chrome({
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   const navigation = publicNavigation;
-  const brand = getLocalizedText(site.brand?.name, locale) || "R·NAV";
   const filteredNavigation = navigation.filter((item: any) =>
     getLocalizedText(item.label, locale)
       .toLowerCase()
@@ -55,7 +54,10 @@ function Chrome({
             <span className="v41-wordmark">
               R<span>NAV</span>
             </span>
-            <span className="v41-brand-name">{brand}</span>
+            <span className="v41-brand-name">
+              <strong>Resilient Navigation</strong>
+              <span>砺行导航·机器人实验室</span>
+            </span>
           </Link>
           <nav
             className="hidden h-full items-center gap-5 lg:flex"
