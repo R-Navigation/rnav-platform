@@ -76,3 +76,16 @@
 3. 论文成果页：正式重点论文发布后配置对应论文视觉图。
 4. 新闻动态页：正式活动发布后配置真实活动主图。
 5. 联系页：实验室所在楼宇或室内环境实拍；地址仍以公开地图链接为准。
+
+## 生产部署与线上验收
+
+- 4.2 功能产物提交：`ebd02b844559e1e48e1e3c50721d6ea27e9714ca`，已推送 `origin/main` 并由服务器 `git pull --ff-only` 拉取。
+- 发布前服务 active、健康接口 `database: ok`、代码目录干净；数据基线为 users 38 / lab_assets 76 / procurement_requests 32 / schema_migrations 36。
+- 新数据库备份：`/srv/rnav_platform/backups/public-ui-4.2-20260913/rnav_platform.dump`；`pg_restore --list` 校验通过，SHA-256 `0381019d209c68c022b905a85dc6a70e9c05cee4d567c16fd1af822ac698f7eb`。备份位于权限 700 的目录且文件权限为 600。
+- 未运行 `db:migrate`、seed、import、reset 或任何生产内容写入；未改变数据库结构。
+- 新版本在备份目录中的独立 release 完成 `npm ci` 和完整构建，服务保持在线；随后只短暂停机切换 `.next` 与 `server/dist`，旧产物保留为 `previous-web-next` / `previous-server-dist`。
+- 线上 `/`、`/directions`、`/research`、`/facilities`、`/team`、`/news`、`/contact`、`/monitor`、`/login`、`/sitemap.xml`、`/api/health` 全部返回 200；七页 HTML 的 variant 映射逐项核对通过。
+- 生产公开 API 中 22 个不同 COS 图片地址按顺序经受限代理复验，22/22 返回图片；非法主机为 400，未公开对象为 404。
+- 上线后服务 active、`NRestarts=0`、健康接口 `database: ok`；数据计数仍为 38 / 76 / 32 / 36，和发布前完全一致。
+- 线上首页已在可视浏览器截图确认 full-bleed 主图、蒙版、快速入口和真实数据正常；七页完整五视口矩阵以相同生产数据在上线前完成，线上 HTTP、SSR variant 与图片链路另行逐项复验。
+- `npm audit --omit=dev`：生产依赖 0 项已知漏洞。远端 `npm ci` 报告的 1 项 moderate 位于开发依赖，不进入生产运行依赖。
