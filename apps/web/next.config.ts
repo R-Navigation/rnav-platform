@@ -18,6 +18,14 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  async rewrites() {
+    return [
+      {
+        source: "/api/public/image",
+        destination: `${process.env.RNAV_API_INTERNAL_URL ?? "http://127.0.0.1:4090"}/api/public/image`,
+      },
+    ];
+  },
   async redirects() {
     return [
       { source: "/admin", destination: "/console/site", permanent: true },

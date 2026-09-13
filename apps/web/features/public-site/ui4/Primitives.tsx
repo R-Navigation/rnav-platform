@@ -36,6 +36,14 @@ export function Media({
             )
           }
           src={src}
+          loader={
+            src.startsWith(
+              "https://r-navigation-1326672316.cos.ap-beijing.myqcloud.com/",
+            )
+              ? ({ src, width }) =>
+                  `/api/public/image?src=${encodeURIComponent(src)}&w=${width}`
+              : undefined
+          }
           onError={() => setFailedSrc(src)}
           alt={image?.alt || alt}
           loading={eager ? "eager" : "lazy"}

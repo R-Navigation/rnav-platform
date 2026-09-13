@@ -69,7 +69,7 @@
 - 手机 Hero 纵向、方向卡横向 snap、论文分类抽屉、团队单列分组；平板方向卡双列。768px 平台详情采用双栏 + 下方配置，避免窄列挤压。
 - 实际浏览器验证：公开邮箱复制显示“已复制”；语言切换后跨页保持；移动七项导航可用且选择后关闭；论文主题按钮/选择器/抽屉状态同步；平台切换更新对应图文/参数；照片 dialog 支持 Escape；硕士其余 15 人与校友展开。
 - 新增 5 项数据组合/导航测试和 3 项组件渲染测试，覆盖真实 Example 标题不误隐藏、正式论文双语与主题约束、安全 URL、新闻重点/归档、额外内部资产字段不输出。
-- `npm test`：94 Web + 269 Server + 26 scripts = 389 项全部通过。
+- `npm test`（含生产图片修复后重跑）：94 Web + 274 Server + 26 scripts = 394 项全部通过。
 - `npm run lint`：通过，0 error；4 项既有后台原生 img warning，未新增公开页 warning。
 - `npm run build`：Next 发布构建 + Server TypeScript 编译通过；路由包含 `/directions`，原公开路由及 `/monitor`、后台路由保留。
 - 辅助文字加深以满足浅色背景对比度；交互控件 focus-visible、语言按钮 44×44px、减少动态效果偏好已覆盖。装饰性 RNAV 占位标志不作为信息文字。
@@ -97,3 +97,11 @@
 - SHA-256：`985a36d8f83a8ad34469fe34fa47f9fdaeccdb9f88239d78611a217c9881aef7`。
 - 发布前：users 38 / lab_assets 76 / procurement_requests 32 / schema_migrations 36。
 - 不运行 db:migrate、seed、import、reset，不修改数据库结构/生产内容；独立构建后切换应用产物，保留旧产物回滚。
+
+### 生产图片兼容性复验
+
+- 首次发布的线上视觉检查发现 COS 图全部被图片代理拒绝；日志证明同地域腾讯云 DNS 返回 `169.254.0.49`。该行为与 [腾讯云官方说明](https://cloud.tencent.com/document/product/436/56560) 一致，不是缺失文件。发现后已先恢复旧展示产物，未触碰数据库。
+- 修复采用受限 `/api/public/image` WebP 服务：只接受固定 COS 桶域名、`/rnav/` 路径且必须出现在当前公开 DTO 中的精确 src；拒绝认证 URL、查询参数、其他域名、未公开对象与重定向。未启用 `dangerouslyAllowLocalIP`，未更改系统 DNS。
+- 输入限 16MB / 3200 万像素，仅 JPEG/PNG/WebP/AVIF；输出限 1920px / 4MB；4 并发、16 个在途请求、24MB/64项缓存；公开白名单 30 秒刷新，响应缓存 60 秒。
+- Sharp 固定为已在 Next 依赖树中的 `0.35.4`，提升为 Server 显式依赖，没有启用新的云服务或改变媒体访问权限。
+- 新增 5 项图片安全/缩放/缓存测试，验证未公开对象和非法尺寸不触发请求、WebP 实际尺寸、请求去重、重定向/SVG/超限拒绝。
