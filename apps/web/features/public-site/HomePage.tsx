@@ -71,6 +71,11 @@ export function HomePage({ data }: { data: any }) {
     hero.image?.src && !/示意|demo|example/i.test(hero.image.alt ?? "")
       ? hero.image
       : undefined;
+  const publicMemberCount = new Set(
+    [...members, ...(data.team?.alumni ?? [])]
+      .map((member: any) => member?.slug)
+      .filter(Boolean),
+  ).size;
   const modules: Record<string, React.ReactNode> = {
     directions: visible("researchAreas") && (
       <section className="v41-wrap v41-section" key="directions">
@@ -280,12 +285,38 @@ export function HomePage({ data }: { data: any }) {
         locale={locale}
         title={data.contact?.header?.title}
         description={data.contact?.header?.description}
+        image={heroImage}
+        layered
       />
     ),
   };
   return (
     <main>
-      <Hero home header={hero} locale={locale} image={heroImage}>
+      <Hero
+        home
+        variant="fullBleed"
+        header={hero}
+        locale={locale}
+        image={heroImage}
+        focalPosition={[66, 48]}
+        mobileFocalPosition={[64, 45]}
+        floating={
+          <nav aria-label={zh ? "首页快速入口" : "Homepage quick links"}>
+            <Link href="/directions">
+              <strong>{areas.length}</strong>
+              <span>{zh ? "研究方向" : "Research areas"}</span>
+            </Link>
+            <Link href="/facilities">
+              <strong>{facilities.length}</strong>
+              <span>{zh ? "公开平台与设备" : "Public platforms"}</span>
+            </Link>
+            <Link href="/team">
+              <strong>{publicMemberCount}</strong>
+              <span>{zh ? "公开成员档案" : "Public profiles"}</span>
+            </Link>
+          </nav>
+        }
+      >
         {(hero.actions?.length
           ? hero.actions
           : [

@@ -87,12 +87,16 @@ export function TeamPage({ data }: { data: any }) {
   return (
     <main>
       <Hero
+        variant="fullBleed"
         header={{
           ...data.header,
           title: { zh: "团队成员", en: "Our team" },
           eyebrow: "PEOPLE DRIVE RESEARCH",
         }}
         locale={locale}
+        image={data.header?.image}
+        focalPosition={[68, 44]}
+        mobileFocalPosition={[65, 42]}
       >
         <Action href="#team-members">
           {zh ? "认识团队" : "Meet our team"}
@@ -132,6 +136,8 @@ export function TeamPage({ data }: { data: any }) {
             ? data.recruitment?.description
             : undefined
         }
+        image={data.header?.image}
+        layered
       />
       <dialog
         className="v41-photo-dialog"

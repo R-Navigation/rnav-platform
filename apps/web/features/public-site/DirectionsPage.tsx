@@ -50,6 +50,7 @@ export function DirectionsPage({
   return (
     <main>
       <Hero
+        variant="editorialSplit"
         locale={locale}
         header={{
           title: { zh: "研究方向", en: "Research directions" },
@@ -57,6 +58,8 @@ export function DirectionsPage({
           description: home.hero?.description,
         }}
         image={home.directionsHeroImage}
+        focalPosition={[72, 50]}
+        mobileFocalPosition={[68, 48]}
       >
         <Action href="#directions">
           {zh ? "探索研究方向" : "Explore directions"}

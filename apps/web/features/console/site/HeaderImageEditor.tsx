@@ -90,6 +90,9 @@ function ImageField({
           assetId: asset.id,
           src: asset.url,
           alt: image?.alt || title,
+          positionX: image?.positionX,
+          positionY: image?.positionY,
+          zoom: image?.zoom,
         });
     } catch (reason) {
       setError((reason as Error).message);
@@ -115,6 +118,11 @@ function ImageField({
               src={preview.src}
               alt={preview.alt || title}
               className="object-cover"
+              style={{
+                objectPosition: `${image?.positionX ?? 50}% ${image?.positionY ?? 50}%`,
+                transform: `scale(${image?.zoom ?? 1})`,
+                transformOrigin: `${image?.positionX ?? 50}% ${image?.positionY ?? 50}%`,
+              }}
               onError={() => setFailed(preview.src)}
             />
           ) : (
@@ -133,6 +141,33 @@ function ImageField({
               }
             />
           </label>
+          <div className="grid gap-3 rounded border border-slate-200 bg-white p-3 sm:grid-cols-3">
+            <Range
+              label="水平焦点"
+              value={image?.positionX ?? 50}
+              min={0}
+              max={100}
+              suffix="%"
+              onChange={(positionX) => onChange({ ...image, positionX })}
+            />
+            <Range
+              label="垂直焦点"
+              value={image?.positionY ?? 50}
+              min={0}
+              max={100}
+              suffix="%"
+              onChange={(positionY) => onChange({ ...image, positionY })}
+            />
+            <Range
+              label="画面缩放"
+              value={image?.zoom ?? 1}
+              min={1}
+              max={1.8}
+              step={0.05}
+              suffix="×"
+              onChange={(zoom) => onChange({ ...image, zoom })}
+            />
+          </div>
           <label className="text-xs text-slate-700">
             图片说明
             <input
@@ -171,5 +206,42 @@ function ImageField({
         </p>
       )}
     </section>
+  );
+}
+
+function Range({
+  label,
+  value,
+  min,
+  max,
+  step = 1,
+  suffix,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  suffix: string;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="text-xs font-medium text-slate-700">
+      {label}
+      <span className="ml-2 text-slate-500">
+        {value}
+        {suffix}
+      </span>
+      <input
+        className="mt-2 block w-full accent-cyan-700"
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+      />
+    </label>
   );
 }

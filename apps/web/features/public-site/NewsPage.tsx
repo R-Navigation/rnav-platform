@@ -50,6 +50,7 @@ export function NewsPage({ data }: { data: any }) {
   return (
     <main>
       <Hero
+        variant="editorialSplit"
         header={{
           ...data.header,
           title: { zh: "新闻动态", en: "News and events" },
@@ -62,6 +63,9 @@ export function NewsPage({ data }: { data: any }) {
             : data.header?.description,
         }}
         locale={locale}
+        image={featured?.image}
+        focalPosition={[72, 48]}
+        mobileFocalPosition={[65, 46]}
       />
       <section className="v41-wrap v41-section">
         <Heading

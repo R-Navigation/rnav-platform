@@ -134,15 +134,22 @@ export function ResearchPage({
   return (
     <main>
       <Hero
+        variant="editorialSplit"
         header={{
           ...data.header,
           title: { zh: "论文成果", en: "Publications" },
           eyebrow: "PUBLICATIONS",
           description: isDemoContent(data.header)
-            ? {zh:"按研究方向、年份与论文类型浏览公开成果，检索标题、作者与关键词。",en:"Browse public research by topic, year and publication type. Search titles, authors and keywords."}
+            ? {
+                zh: "按研究方向、年份与论文类型浏览公开成果，检索标题、作者与关键词。",
+                en: "Browse public research by topic, year and publication type. Search titles, authors and keywords.",
+              }
             : data.header?.description,
         }}
         locale={locale}
+        image={featured?.image}
+        focalPosition={[74, 50]}
+        mobileFocalPosition={[68, 48]}
       />
       <section className="v41-wrap v41-section">
         <div className="v41-filter-bar">

@@ -81,9 +81,12 @@ export function ContactPage({ data }: { data: any }) {
   return (
     <main>
       <Hero
+        variant="fullBleed"
         header={{ ...data.header, eyebrow: "CONTACT US" }}
         locale={locale}
         image={image}
+        focalPosition={[68, 48]}
+        mobileFocalPosition={[64, 48]}
       />
       <section className="v41-wrap v41-section v41-contact-pair">
         <div id="contact-information" className="v41-contact-info">
