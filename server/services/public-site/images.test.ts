@@ -97,3 +97,14 @@ test("redirects, SVG and oversized upstream responses are rejected", async () =>
     await assert.rejects(get(src, "640"), rejectsWith(502));
   }
 });
+test("SVG disguised with a raster MIME type is rejected before decoding", async () => {
+  const get = createPublicImageService(
+    async () => ({ image: { src } }),
+    (async () =>
+      new Response(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>',
+        { headers: { "content-type": "image/png" } },
+      )) as typeof fetch,
+  );
+  await assert.rejects(get(src, "640"), rejectsWith(415));
+});

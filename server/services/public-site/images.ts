@@ -104,8 +104,10 @@ export function createPublicImageService(
           ) ||
           Number(response.headers.get("content-length")) > maxSourceBytes ||
           !response.body
-        )
+        ) {
+          await response.body?.cancel();
           throw new PublicImageError(502);
+        }
         const reader = response.body.getReader(),
           chunks: Uint8Array[] = [];
         let size = 0;
@@ -120,7 +122,18 @@ export function createPublicImageService(
         } finally {
           await reader.cancel();
         }
-        const bytes = await sharp(Buffer.concat(chunks), {
+        const input = Buffer.concat(chunks);
+        const raster =
+          input
+            .subarray(0, 8)
+            .equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) ||
+          (input[0] === 255 && input[1] === 216 && input[2] === 255) ||
+          (input.toString("ascii", 0, 4) === "RIFF" &&
+            input.toString("ascii", 8, 12) === "WEBP") ||
+          (input.toString("ascii", 4, 8) === "ftyp" &&
+            /^(avif|avis)$/.test(input.toString("ascii", 8, 12)));
+        if (!raster) throw new PublicImageError(415);
+        const bytes = await sharp(input, {
           limitInputPixels: 32_000_000,
         })
           .rotate()
