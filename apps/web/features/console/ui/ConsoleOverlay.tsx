@@ -6,6 +6,10 @@ import { ConsoleIcon } from "./ConsoleIcon";
 
 function useOverlay(open: boolean, onClose: () => void) {
   const ref = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
   useEffect(() => {
     if (!open) return;
     const previous = document.activeElement as HTMLElement | null;
@@ -13,7 +17,7 @@ function useOverlay(open: boolean, onClose: () => void) {
     const focusable = () => Array.from(node?.querySelectorAll<HTMLElement>('button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])') || []).filter((item) => !item.hasAttribute("disabled"));
     focusable()[0]?.focus();
     const keydown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") onCloseRef.current();
       if (event.key !== "Tab") return;
       const items = focusable(); if (!items.length) return;
       const first = items[0]; const last = items[items.length - 1];
@@ -23,7 +27,7 @@ function useOverlay(open: boolean, onClose: () => void) {
     document.addEventListener("keydown", keydown);
     document.body.style.overflow = "hidden";
     return () => { document.removeEventListener("keydown", keydown); document.body.style.overflow = ""; previous?.focus(); };
-  }, [open, onClose]);
+  }, [open]);
   return ref;
 }
 

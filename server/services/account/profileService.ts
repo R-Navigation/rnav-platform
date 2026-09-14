@@ -1,6 +1,7 @@
 import type { Pool, PoolClient } from "pg";
 import type { AdminProfileUpdate, ProfileUpdate } from "./profileSchemas.js";
 import { profileCompleteness } from "./profileCompleteness.js";
+import { personIdentityFromChineseName } from "../user-admin/memberIdentity.js";
 
 export class ProfileConflictError extends Error {
   constructor() { super("Profile version conflict"); this.name = "ProfileConflictError"; }
@@ -14,8 +15,18 @@ export class ProfilePublicNameError extends Error {
   constructor() { super("官网展示至少需要公开一个已填写的姓名"); this.name = "ProfilePublicNameError"; }
 }
 
+export class ProfileIdentityError extends Error {
+  constructor(message = "人员账号必须使用规范中文姓名，英文名必须为“名-姓”格式") {
+    super(message); this.name = "ProfileIdentityError";
+  }
+}
+
+export class ProfileIdentityConflictError extends Error {
+  constructor() { super("中文姓名生成的用户名已被其他账号使用"); this.name = "ProfileIdentityConflictError"; }
+}
+
 type ProfileRow = {
-  user_id: string; username: string; member_slug: string | null;
+  user_id: string; username: string; account_kind: "person" | "system"; member_slug: string | null;
   member_status: "current" | "alumni"; degree_level: string; public_visible: boolean;
   name_zh: string; name_en: string; email: string; phone: string;
   bio_zh: string; bio_en: string; research_interests_zh: string; research_interests_en: string;
@@ -29,7 +40,7 @@ type ProfileRow = {
 
 function output(row: ProfileRow) {
   return {
-    userId: row.user_id, username: row.username,
+    userId: row.user_id, username: row.username, accountKind: row.account_kind,
     memberSlug: row.member_slug, memberStatus: row.member_status, academicStage: row.degree_level,
     publicVisible: row.public_visible, nameZh: row.name_zh, nameEn: row.name_en, publicEmail: row.email,
     phone: row.phone, bioZh: row.bio_zh, bioEn: row.bio_en,
@@ -50,7 +61,7 @@ function output(row: ProfileRow) {
   };
 }
 
-const selectProfile = `SELECT user_profiles.*, users.username, users.email AS account_email, media_assets.url AS avatar_url
+const selectProfile = `SELECT user_profiles.*, users.username, users.account_kind, users.email AS account_email, media_assets.url AS avatar_url
   FROM user_profiles JOIN users ON users.id = user_profiles.user_id
   LEFT JOIN media_assets ON media_assets.id = user_profiles.avatar_asset_id AND media_assets.status = 'active'
   WHERE user_profiles.user_id = $1`;
@@ -72,8 +83,16 @@ export function createProfileService(pool: Pick<Pool, "query" | "connect">) {
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
-      const current = await client.query<ProfileRow>(`SELECT user_profiles.*,users.username,users.email AS account_email,NULL::text avatar_url FROM user_profiles JOIN users ON users.id=user_profiles.user_id WHERE user_profiles.user_id=$1 FOR UPDATE OF user_profiles`, [targetUserId]);
+      const current = await client.query<ProfileRow>(`SELECT user_profiles.*,users.username,users.account_kind,users.email AS account_email,NULL::text avatar_url FROM user_profiles JOIN users ON users.id=user_profiles.user_id WHERE user_profiles.user_id=$1 FOR UPDATE OF user_profiles`, [targetUserId]);
       if (!current.rows[0]) throw new ProfileConflictError();
+      const identity = current.rows[0].account_kind === "person"
+        ? personIdentityFromChineseName(body.nameZh)
+        : null;
+      if (current.rows[0].account_kind === "person" && (
+        !identity || body.nameZh !== identity.nameZh || body.nameEn !== identity.nameEn
+      )) throw new ProfileIdentityError(identity
+        ? `英文名必须为“名-姓”格式：${identity.nameEn}`
+        : "中文姓名必须为 2–6 个汉字，不得包含头衔、空格或字母");
       if (body.avatarAssetId) {
         const asset = await client.query("SELECT 1 FROM media_assets WHERE id=$1 AND status='active' AND mime_type LIKE 'image/%'", [body.avatarAssetId]);
         if (!asset.rowCount) throw new ProfileAssetError();
@@ -101,9 +120,17 @@ export function createProfileService(pool: Pick<Pool, "query" | "connect">) {
           JSON.stringify(body.personalLinks), body.publicFields, publicVisible]
       );
       if (!updated.rowCount) throw new ProfileConflictError();
-      await client.query("UPDATE users SET display_name=COALESCE(NULLIF($2,''),NULLIF($3,''),username),updated_at=now() WHERE id=$1", [targetUserId, body.nameZh, body.nameEn]);
+      try {
+        await client.query(
+          "UPDATE users SET username=COALESCE($4,username),display_name=COALESCE(NULLIF($2,''),NULLIF($3,''),username),updated_at=now() WHERE id=$1",
+          [targetUserId, body.nameZh, body.nameEn, identity?.username ?? null],
+        );
+      } catch (error) {
+        if ((error as { code?: string }).code === "23505") throw new ProfileIdentityConflictError();
+        throw error;
+      }
       await recycleUnreferencedAvatar(client, current.rows[0].avatar_asset_id === body.avatarAssetId ? null : current.rows[0].avatar_asset_id);
-      const after = { ...body, memberStatus, academicStage, publicVisible } as Record<string, unknown>;
+      const after = { ...body, memberStatus, academicStage, publicVisible, username: identity?.username ?? current.rows[0].username } as Record<string, unknown>;
       const changedFields = Object.keys(after).filter((key) => key !== "version" && JSON.stringify(before[key]) !== JSON.stringify(after[key]));
       await client.query("INSERT INTO audit_logs(actor_id,action,target_type,target_id,detail) VALUES($1,$2,'user',$3::text,$4::jsonb)",
         [actorUserId, admin ? "profile.admin_update" : "profile.update", targetUserId, JSON.stringify({ changedFields })]);

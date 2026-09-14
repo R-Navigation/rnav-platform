@@ -23,6 +23,7 @@ import { ConsoleIcon } from "@/features/console/ui/ConsoleIcon";
 import { ConsoleSearchInput } from "@/features/console/ui/ConsoleFormControls";
 import { ConsoleToast } from "@/features/console/ui/ConsoleToast";
 import { academicStageLabels, type AcademicStage } from "./profileModel";
+import { personIdentityFromChineseName } from "./memberIdentity";
 
 export type Member = {
   id: string;
@@ -140,6 +141,7 @@ export function MemberManagement({
   const [message, setMessage] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [createAccountKind,setCreateAccountKind]=useState<"person"|"system">("person");
+  const [createIdentity, setCreateIdentity] = useState({ username: "", nameZh: "", nameEn: "" });
   const [showImport, setShowImport] = useState(false);
   const [temporaryPassword, setTemporaryPassword] = useState<string | null>(
     null,
@@ -255,6 +257,7 @@ export function MemberManagement({
       setTemporaryPassword(result.temporaryPassword);
       setSelectedId(result.id);
       setShowCreate(false);
+      setCreateIdentity({ username: "", nameZh: "", nameEn: "" });
     }, "成员账号已创建。");
   }
 
@@ -308,7 +311,7 @@ export function MemberManagement({
             围绕成员统一管理账号生命周期与岗位职责；成员自行维护的学术资料仅供查看。
           </p>
         </div>
-        {canWriteUsers ? <div className="flex gap-2"><button className={secondary} onClick={()=>setShowImport(true)} type="button"><span className="inline-flex items-center gap-2"><ConsoleIcon name="upload"/>批量导入</span></button><button className={primary} onClick={() => {setCreateAccountKind("person");setShowCreate(true)}} type="button"><span className="inline-flex items-center gap-2"><ConsoleIcon name="plus"/>创建账号</span></button></div> : null}
+        {canWriteUsers ? <div className="flex gap-2"><button className={secondary} onClick={()=>setShowImport(true)} type="button"><span className="inline-flex items-center gap-2"><ConsoleIcon name="upload"/>批量导入</span></button><button className={primary} onClick={() => {setCreateAccountKind("person");setCreateIdentity({username:"",nameZh:"",nameEn:""});setShowCreate(true)}} type="button"><span className="inline-flex items-center gap-2"><ConsoleIcon name="plus"/>创建账号</span></button></div> : null}
       </header>
       {error ? (
         <p
@@ -827,22 +830,37 @@ export function MemberManagement({
               </button>
             </div>
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
-              {[
-                ["username", "用户名"],
-                ["nameZh", "中文姓名"],
-                ["nameEn", "英文姓名"],
-                ["email", "账号邮箱（可选）"],
-              ].map(([name, label]) => (
-                <label className="text-sm" key={name}>
-                  {name==="nameZh"&&createAccountKind==="system"?"显示名称":label}
-                  <input
-                    className={`${input} mt-1`}
-                    name={name}
-                    required={name === "username" || name === "nameZh"}
-                  />
-                </label>
-              ))}
-              <label className="text-sm sm:col-span-2">账号类型<select className={`${input} mt-1`} name="accountKind" value={createAccountKind} onChange={(event)=>setCreateAccountKind(event.target.value as "person"|"system")}><option value="person">人员账号</option><option value="system">系统账号</option></select><span className="mt-1 block text-xs text-slate-500">系统账号用于自动化、采集或专用管理，不参与官网团队展示。</span></label>
+              <label className="text-sm">
+                {createAccountKind === "person" ? "中文姓名" : "显示名称"}
+                <input
+                  className={`${input} mt-1`}
+                  name="nameZh"
+                  required
+                  value={createIdentity.nameZh}
+                  onChange={(event) => {
+                    const nameZh = event.target.value;
+                    const identity = createAccountKind === "person" ? personIdentityFromChineseName(nameZh) : null;
+                    setCreateIdentity((current) => ({
+                      ...current,
+                      nameZh,
+                      ...(createAccountKind === "person" ? { username: identity?.username ?? "", nameEn: identity?.nameEn ?? "" } : {}),
+                    }));
+                  }}
+                />
+                {createAccountKind === "person" ? <span className="mt-1 block text-xs text-slate-500">仅填写 2–6 个汉字，不包含“教授”等职称。</span> : null}
+              </label>
+              <label className="text-sm">
+                用户名
+                <input className={`${input} mt-1 font-mono`} name="username" readOnly={createAccountKind === "person"} required value={createIdentity.username} onChange={(event)=>setCreateIdentity((current)=>({...current,username:event.target.value.toLowerCase()}))}/>
+                <span className="mt-1 block text-xs text-slate-500">{createAccountKind === "person" ? "自动生成为“姓+名”的小写拼音。" : "系统账号使用稳定的小写技术标识。"}</span>
+              </label>
+              <label className="text-sm">
+                {createAccountKind === "person" ? "英文姓名" : "英文显示名"}
+                <input className={`${input} mt-1`} name="nameEn" readOnly={createAccountKind === "person"} required={createAccountKind === "person"} value={createIdentity.nameEn} onChange={(event)=>setCreateIdentity((current)=>({...current,nameEn:event.target.value}))}/>
+                {createAccountKind === "person" ? <span className="mt-1 block text-xs text-slate-500">自动生成为“名-姓”，例如 Zixuan-Huang。</span> : null}
+              </label>
+              <label className="text-sm">账号邮箱（可选）<input className={`${input} mt-1`} name="email" type="email" /></label>
+              <label className="text-sm sm:col-span-2">账号类型<select className={`${input} mt-1`} name="accountKind" value={createAccountKind} onChange={(event)=>{setCreateAccountKind(event.target.value as "person"|"system");setCreateIdentity({username:"",nameZh:"",nameEn:""});}}><option value="person">人员账号</option><option value="system">系统账号</option></select><span className="mt-1 block text-xs text-slate-500">系统账号用于自动化、采集或专用管理，不参与官网团队展示。</span></label>
               {createAccountKind==="person"?<label className="text-sm">
                 学术身份
                 <select className={`${input} mt-1`} name="academicStage" required defaultValue="master">

@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { ConsoleApiError, consoleApi } from "@/lib/consoleApi";
 import type { Member } from "./MemberManagement";
 import { academicStageLabels, publicProfileFieldGroups, type AcademicStage } from "./profileModel";
+import { personIdentityFromChineseName } from "./memberIdentity";
 
 const field =
   "w-full border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-cyan-700";
@@ -52,6 +53,11 @@ export function MemberProfileEditor({
   }, [member]);
   const update = (key: keyof Member, value: unknown) =>
     setDraft((current) => ({ ...current, [key]: value }));
+  const updateIdentity = (nameZh: string) => setDraft((current) => {
+    if (current.accountKind !== "person") return { ...current, nameZh };
+    const identity = personIdentityFromChineseName(nameZh);
+    return { ...current, nameZh, nameEn: identity?.nameEn ?? "", username: identity?.username ?? current.username };
+  });
   const save = async () => {
     setSaveState("saving");
     setSaveError("");
@@ -242,10 +248,22 @@ export function MemberProfileEditor({
               ) : null}
             </div>
           </section>
+          <label className="text-sm">
+            用户名
+            <input className={`${field} mt-1 bg-slate-100 font-mono`} disabled value={draft.username} />
+            <span className="mt-1 block text-xs text-slate-500">中文姓名的完整拼音，姓在前，保存姓名时同步更新。</span>
+          </label>
+          <label className="text-sm">
+            中文姓名
+            <input className={`${field} mt-1`} disabled={!canEdit || busy} value={draft.nameZh} onChange={(event) => updateIdentity(event.target.value)} />
+          </label>
+          <label className="text-sm">
+            英文姓名
+            <input className={`${field} mt-1 ${draft.accountKind === "person" ? "bg-slate-100" : ""}`} disabled={!canEdit || busy} readOnly={draft.accountKind === "person"} value={draft.nameEn} onChange={(event) => update("nameEn", event.target.value)} />
+            {draft.accountKind === "person" ? <span className="mt-1 block text-xs text-slate-500">按“名-姓”自动生成。</span> : null}
+          </label>
           {(
             [
-              ["nameZh", "中文姓名"],
-              ["nameEn", "英文姓名"],
               ["publicEmail", "公开联系邮箱"],
               ["phone", "联系电话"],
               ["enrollmentYear", "入组年份"],

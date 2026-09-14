@@ -3,7 +3,7 @@ import { ZodError } from "zod";
 import { requireLogin } from "../middleware/auth.js";
 import { requirePasswordChanged } from "../middleware/requirePasswordChanged.js";
 import { createRequireSameOrigin } from "../middleware/requireSameOrigin.js";
-import { ProfileAssetError, ProfileConflictError, ProfilePublicNameError, type ProfileService } from "../services/account/profileService.js";
+import { ProfileAssetError, ProfileConflictError, ProfileIdentityConflictError, ProfileIdentityError, ProfilePublicNameError, type ProfileService } from "../services/account/profileService.js";
 import { profileUpdateSchema } from "../services/account/profileSchemas.js";
 
 export function createProfileRouter({ authMiddleware, service, trustProxy }: { authMiddleware: RequestHandler; service: ProfileService; trustProxy: boolean }) {
@@ -15,6 +15,8 @@ export function createProfileRouter({ authMiddleware, service, trustProxy }: { a
     else if (error instanceof ProfileConflictError) response.status(409).json({ code: "VERSION_CONFLICT", error: error.message });
     else if (error instanceof ProfileAssetError) response.status(400).json({ code: "AVATAR_INVALID", error: error.message });
     else if (error instanceof ProfilePublicNameError) response.status(400).json({ code: "PUBLIC_NAME_REQUIRED", error: error.message });
+    else if (error instanceof ProfileIdentityError) response.status(400).json({ code: "IDENTITY_INVALID", error: error.message });
+    else if (error instanceof ProfileIdentityConflictError) response.status(409).json({ code: "USERNAME_CONFLICT", error: error.message });
     else next(error);
   } });
   return router;

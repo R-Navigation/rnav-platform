@@ -119,6 +119,7 @@ test("getMigrationFiles returns SQL migrations in lexical order", async () => {
       "037_cms_content_fields.sql",
       "038_bridge_legacy_public_facilities.sql",
       "039_member_account_profile_consolidation.sql",
+      "040_normalize_person_account_names.sql",
     ],
   );
 });
@@ -136,6 +137,18 @@ test("member account consolidation maps legacy public keys without dropping comp
   assert.match(migration, /homepage.*github/);
   assert.match(migration, /btrim\(email\) = ''/);
   assert.doesNotMatch(migration, /DROP\s+(COLUMN|TABLE)|TRUNCATE/i);
+});
+
+test("person identity normalization preserves member slugs and records reversible audit details", async () => {
+  const migration = await import("node:fs/promises").then(({ readFile }) =>
+    readFile(new URL("./migrations/040_normalize_person_account_names.sql", import.meta.url), "utf8")
+  );
+  assert.match(migration, /'zixuan-huang', 'huangzixuan', '黄子旋', 'Zixuan-Huang'/);
+  assert.match(migration, /'you-li', 'liyou', '李由', 'You-Li'/);
+  assert.match(migration, /user\.identity_normalize/);
+  assert.match(migration, /oldUsername.*newUsername.*nameZh.*nameEn/s);
+  assert.doesNotMatch(migration, /member_slug/i);
+  assert.doesNotMatch(migration, /DROP|TRUNCATE|DELETE/i);
 });
 
 test("asset procurement source migration is additive and keeps procurement deletion safe", async () => {

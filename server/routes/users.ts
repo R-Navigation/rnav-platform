@@ -20,7 +20,7 @@ import {
   UserAdminError,
   type UserAdminService,
 } from "../services/user-admin/userAdminService.js";
-import { ProfileAssetError, ProfileConflictError, ProfilePublicNameError, type ProfileService } from "../services/account/profileService.js";
+import { ProfileAssetError, ProfileConflictError, ProfileIdentityConflictError, ProfileIdentityError, ProfilePublicNameError, type ProfileService } from "../services/account/profileService.js";
 export function createUsersRouter({
   authMiddleware,
   service,
@@ -51,6 +51,8 @@ export function createUsersRouter({
     else if (e instanceof ProfileConflictError) res.status(409).json({ code: "VERSION_CONFLICT", error: e.message });
     else if (e instanceof ProfileAssetError) res.status(400).json({ code: "AVATAR_INVALID", error: e.message });
     else if (e instanceof ProfilePublicNameError) res.status(400).json({ code: "PUBLIC_NAME_REQUIRED", error: e.message });
+    else if (e instanceof ProfileIdentityError) res.status(400).json({ code: "IDENTITY_INVALID", error: e.message });
+    else if (e instanceof ProfileIdentityConflictError) res.status(409).json({ code: "USERNAME_CONFLICT", error: e.message });
     else next(e);
   };
   const canList: RequestHandler = (req, res, next) =>

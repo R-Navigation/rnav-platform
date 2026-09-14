@@ -5,10 +5,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ConsoleApiError, consoleApi } from "@/lib/consoleApi";
 import { MediaPicker } from "@/features/console/ui/MediaPicker";
 import { academicStageLabels, publicProfileFieldGroups, type AcademicStage } from "@/features/console/members/profileModel";
+import { personIdentityFromChineseName } from "@/features/console/members/memberIdentity";
 
 type PersonalLink = { labelZh: string; labelEn: string; url: string };
 type Profile = {
-  version: number; username: string; memberStatus: "current" | "alumni"; academicStage: AcademicStage;
+  version: number; username: string; accountKind: "person" | "system"; memberStatus: "current" | "alumni"; academicStage: AcademicStage;
   publicVisible: boolean; nameZh: string; nameEn: string; publicEmail: string; phone: string; bioZh: string; bioEn: string;
   researchInterestsZh: string; researchInterestsEn: string; enrollmentYear: string; graduationYear: string;
   majorZh: string; majorEn: string; thesisZh: string; thesisEn: string; destinationZh: string; destinationEn: string;
@@ -28,6 +29,12 @@ export function ProfileConsole({ mustChangePassword }: { mustChangePassword: boo
   useEffect(() => { if (!mustChangePassword) consoleApi<Profile>("/api/profile").then((value) => { setProfile(value); setDraft(value); }).catch((reason) => setError(reason.message)); }, [mustChangePassword]);
   const visible = useMemo(() => new Set(draft?.publicFields ?? []), [draft]);
   const update = <K extends keyof Profile>(key: K, value: Profile[K]) => setDraft((current) => current ? { ...current, [key]: value } : current);
+  const updateIdentity = (nameZh: string) => setDraft((current) => {
+    if (!current) return current;
+    if (current.accountKind !== "person") return { ...current, nameZh };
+    const identity = personIdentityFromChineseName(nameZh);
+    return { ...current, nameZh, nameEn: identity?.nameEn ?? "", username: identity?.username ?? current.username };
+  });
   const switchTab = (next: typeof initial) => { if (mustChangePassword && next !== "security") return; setTab(next); router.replace(`/console/profile?section=${next}`, { scroll: false }); };
 
   async function save() {
@@ -95,8 +102,9 @@ export function ProfileConsole({ mustChangePassword }: { mustChangePassword: boo
         <div>{draft.avatarUrl ? <AvatarPreview alt="个人照片预览" className="w-40" profile={draft} /> : <div className="grid aspect-square w-40 place-items-center bg-slate-100 text-sm text-slate-500">尚未上传照片</div>}</div>
         <div><h2 className="font-semibold text-blue-950">个人照片</h2><p className="mt-2 text-sm text-slate-600">支持 JPG、PNG、WebP。重新上传并保存后，原照片若未被其他业务引用会进入回收站。</p><div className="mt-4 flex flex-wrap gap-3"><label className="cursor-pointer rounded-lg bg-cyan-700 px-4 py-2 text-sm font-semibold text-white">{draft.avatarUrl ? "重新上传" : "上传照片"}<input accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={uploadAvatar} type="file" /></label><button className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700" onClick={() => setMediaPickerOpen(true)} type="button">从资源库选择</button>{draft.avatarAssetId ? <button className="rounded-lg border border-slate-300 px-4 py-2 text-sm" onClick={() => { update("avatarAssetId", null); update("avatarUrl", null); }} type="button">移除照片</button> : null}</div>{draft.avatarUrl ? <div className="mt-5 grid gap-4 sm:grid-cols-3"><Range label="水平位置" max={100} min={0} onChange={(value) => update("avatarPositionX", value)} value={draft.avatarPositionX} /><Range label="垂直位置" max={100} min={0} onChange={(value) => update("avatarPositionY", value)} value={draft.avatarPositionY} /><Range label="缩放" max={3} min={1} onChange={(value) => update("avatarZoom", value)} step={0.05} value={draft.avatarZoom} /></div> : null}</div>
       </section>
-      <div className="grid gap-5 sm:grid-cols-2"><ReadOnly label="用户名" value={draft.username} /><ReadOnly label="成员状态（由管理员维护）" value={draft.memberStatus === "alumni" ? "校友" : "在组"} />
-        <TextField label="中文姓名" value={draft.nameZh} onChange={(value) => update("nameZh", value)} /><TextField label="英文姓名" value={draft.nameEn} onChange={(value) => update("nameEn", value)} />
+      <div className="grid gap-5 sm:grid-cols-2"><ReadOnly label="用户名（中文姓名全拼，姓在前）" value={draft.username} /><ReadOnly label="成员状态（由管理员维护）" value={draft.memberStatus === "alumni" ? "校友" : "在组"} />
+        <TextField label="中文姓名" value={draft.nameZh} onChange={updateIdentity} />
+        {draft.accountKind === "person" ? <ReadOnly label="英文姓名（名-姓，自动生成）" value={draft.nameEn} /> : <TextField label="英文姓名" value={draft.nameEn} onChange={(value) => update("nameEn", value)} />}
         <TextField label={alumni ? "毕业年份" : "入学年份"} placeholder="例如 2024" value={alumni ? draft.graduationYear : draft.enrollmentYear} onChange={(value) => update(alumni ? "graduationYear" : "enrollmentYear", value)} />
         <ReadOnly label="学术身份（由管理员维护）" value={academicStageLabels[draft.academicStage]} />
         <TextField label="中文专业" value={draft.majorZh} onChange={(value) => update("majorZh", value)} /><TextField label="英文专业" value={draft.majorEn} onChange={(value) => update("majorEn", value)} />
