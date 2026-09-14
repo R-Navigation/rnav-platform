@@ -47,3 +47,14 @@ test("preview only publishes graduation, thesis and destination for alumni", () 
   assert.equal(alumni.thesis?.en, "Thesis");
   assert.deepEqual(alumni.enrollmentYear, { zh: "", en: "" });
 });
+
+test("postdoc preview separates the postdoc title from the PhD cohort", () => {
+  const preview = memberPreview({
+    ...member,
+    academicStage: "postdoc",
+    enrollmentYear: "2024",
+    publicFields: ["academic_stage", "enrollment_year"],
+  });
+  assert.deepEqual(preview.role, { zh: "博士后", en: "Postdoctoral Researcher" });
+  assert.deepEqual(preview.degree, { zh: "2024级博士", en: "PhD, Class of 2024" });
+});

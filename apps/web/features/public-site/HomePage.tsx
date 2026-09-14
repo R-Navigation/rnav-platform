@@ -194,7 +194,7 @@ export function HomePage({ data }: { data: any }) {
                 <Link href={`/team#${member.slug}`} key={member.slug}>
                   <Media image={member.image} alt={text(member.name)} />
                   <h3>{text(member.name)}</h3>
-                  <p>{text(member.degree) || text(member.role)}</p>
+                  <p>{text(member.role) || text(member.degree)}</p>
                   <p className="line-clamp-2">
                     {text(member.research) || text(member.focus)}
                   </p>

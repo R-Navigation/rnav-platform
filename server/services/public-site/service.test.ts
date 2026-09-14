@@ -72,6 +72,14 @@ test("member normalization preserves a projected academic stage and year label",
   );
 });
 
+test("legacy postdoc members receive a role title instead of a postdoc degree label", async () => {
+  const repository = new MemoryPublicSiteRepository();
+  repository.team = [{ group: "postdoc", name: { zh: "成员" } }];
+  const member = (await createPublicSiteService(repository).getTeam()).postdocs[0];
+  assert.deepEqual(member.role, { zh: "博士后", en: "Postdoctoral Researcher" });
+  assert.equal(member.degree, undefined);
+});
+
 test("bootstrap supplies bilingual defaults and the required public navigation", async () => {
   const service = createPublicSiteService(new MemoryPublicSiteRepository());
   const bootstrap = await service.getBootstrap();

@@ -24,18 +24,22 @@ export function memberPreview(member: Member) {
   const academicVisible = fields.has("academic_stage");
   const enrollmentVisible = fields.has("enrollment_year");
   const graduationVisible = fields.has("graduation_year");
+  const postdoc = member.academicStage === "postdoc";
   return {
     name: {
       zh: fields.has("name_zh") ? member.nameZh : "",
       en: fields.has("name_en") ? member.nameEn : "",
     },
+    role: !alumni && academicVisible && postdoc
+      ? { zh: "博士后", en: "Postdoctoral Researcher" }
+      : { zh: "", en: "" },
     degree: !alumni && academicVisible
       ? enrollmentVisible && member.enrollmentYear
         ? {
-            zh: `${member.enrollmentYear}级${degree[0]}`,
-            en: `${degree[1]}, Class of ${member.enrollmentYear}`,
+            zh: `${member.enrollmentYear}级${postdoc ? "博士" : degree[0]}`,
+            en: `${postdoc ? "PhD" : degree[1]}, Class of ${member.enrollmentYear}`,
           }
-        : { zh: degree[0], en: degree[1] }
+        : postdoc ? { zh: "", en: "" } : { zh: degree[0], en: degree[1] }
       : { zh: "", en: "" },
     enrollmentYear: !alumni && !academicVisible && enrollmentVisible
       ? { zh: `${member.enrollmentYear}级`, en: `Class of ${member.enrollmentYear}` }

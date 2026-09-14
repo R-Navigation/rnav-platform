@@ -41,7 +41,8 @@ export function MemberCard({
           )}
           <p className="rnav-member-identity">
             {[
-              text(member.degree) || text(member.role),
+              text(member.role),
+              text(member.degree),
               text(member.enrollmentYear),
             ]
               .filter(Boolean)

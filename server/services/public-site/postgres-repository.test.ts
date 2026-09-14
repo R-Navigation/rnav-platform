@@ -87,6 +87,23 @@ test("public members come from visible account profiles and honor field visibili
   assert.match(teamSql,/u\.account_kind='person'/);
 });
 
+test("postdocs keep their role title but show the cohort as a PhD class", async () => {
+  const queryable = { async query(sql: string) {
+    if (!sql.includes("FROM user_profiles")) return { rows: [] };
+    return { rows: [{
+      username: "postdoc", member_slug: "postdoc", public_fields: ["name_zh", "academic_stage", "enrollment_year"],
+      member_status: "current", degree_level: "postdoc", enrollment_year: "2024", graduation_year: "",
+      name_zh: "博士后", name_en: "Postdoc", bio_zh: "", bio_en: "", major_zh: "", major_en: "",
+      research_interests_zh: "", research_interests_en: "", thesis_zh: "", thesis_en: "", destination_zh: "", destination_en: "",
+      personal_links: [], email: "", phone: "", avatar_url: null,
+    }] };
+  } };
+  const member = (await createPostgresPublicSiteRepository(queryable as never).getTeamMembers())[0];
+  assert.equal(member.group, "postdoc");
+  assert.deepEqual(member.role, { zh: "博士后", en: "Postdoctoral Researcher" });
+  assert.deepEqual(member.degree, { zh: "2024级博士", en: "PhD, Class of 2024" });
+});
+
 test("public lab projections expose only opted-in profile, public specs, and safe component fields",async()=>{const calls:string[]=[];const queryable={async query(sql:string){calls.push(sql);if(sql.includes("FROM lab_platform_public_profiles pp JOIN lab_platforms"))return{rows:[{id:"1",category:"robot",category_zh:"机器人",category_en:"Robots",title_zh:"平台",title_en:"Platform",description_zh:"公开",description_en:"Public",tags:["导航"],component_display_mode:"detail",sort_order:0,image_src:"/platform.jpg",code:"SECRET-CODE",vendor_serial:"SECRET-SERIAL",storage_location:"SECRET-ROOM",assigned_user_id:"SECRET-USER"}]};if(sql.includes("FROM lab_platform_specs"))return{rows:[{platform_id:"1",label_zh:"重量",label_en:"Weight",value_zh:"12",value_en:"12",unit:"kg",public_visible:true}]};if(sql.includes("FROM lab_assets a JOIN lab_device_types"))return{rows:[{current_platform_id:"1",platform_role_zh:"前视",platform_role_en:"Front",device_type:"相机",manufacturer:"Intel",model:"D455",code:"CAM-SECRET",vendor_serial:"SN-SECRET",storage_location:"ROOM",assigned_user_id:"USER"}]};return{rows:[]}}};const item=(await createPostgresPublicSiteRepository(queryable as never).getPublicLabPlatforms!())[0];const serialized=JSON.stringify(item);assert.equal(item.title.zh,"平台");assert.equal(item.specs.length,1);assert.equal(item.components[0].role.zh,"前视");for(const secret of["SECRET-CODE","SECRET-SERIAL","SECRET-ROOM","SECRET-USER","CAM-SECRET","SN-SECRET","ROOM","USER"])assert.equal(serialized.includes(secret),false);const platformSql=calls.find((sql)=>sql.includes("FROM lab_platform_public_profiles pp JOIN lab_platforms"))??"";const specSql=calls.find((sql)=>sql.includes("FROM lab_platform_specs"))??"";assert.match(platformSql,/WHERE pp\.public_visible=true/);assert.doesNotMatch(platformSql,/a\.code|vendor_serial|storage_location|assigned_user|borrower|procurement/);assert.match(specSql,/s\.public_visible=true/);});
 
 test("public platform component modes support none, summary, and detail",async()=>{const queryable={async query(sql:string){if(sql.includes("FROM lab_platform_public_profiles pp JOIN lab_platforms"))return{rows:["none","summary","detail"].map((mode,index)=>({id:String(index+1),category:"robot",title_zh:mode,title_en:mode,description_zh:"",description_en:"",tags:[],component_display_mode:mode,sort_order:index}))};if(sql.includes("FROM lab_assets a JOIN lab_device_types"))return{rows:[{current_platform_id:"1",platform_role_zh:"前视",device_type:"相机",manufacturer:"Intel",model:"D455"},{current_platform_id:"2",platform_role_zh:"前视",device_type:"相机",manufacturer:"Intel",model:"D455"},{current_platform_id:"2",platform_role_zh:"后视",device_type:"相机",manufacturer:"Intel",model:"D455"},{current_platform_id:"3",platform_role_zh:"前视",device_type:"相机",manufacturer:"Intel",model:"D455"}]};return{rows:[]}}};const items=await createPostgresPublicSiteRepository(queryable as never).getPublicLabPlatforms!();assert.equal(items[0].components.length,0);assert.deepEqual(items[1].components.map((item:any)=>item.count),[2]);assert.equal(items[2].components[0].role.zh,"前视");});

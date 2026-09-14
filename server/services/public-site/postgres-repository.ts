@@ -38,6 +38,7 @@ export function createPostgresPublicSiteRepository(pool: Queryable): PublicSiteR
         const alumni = row.member_status === "alumni";
         const publicNameZh = fields.has("name_zh") ? row.name_zh : "";
         const publicNameEn = fields.has("name_en") ? row.name_en : "";
+        const postdoc = row.degree_level === "postdoc";
         const degreeZh = row.degree_level === "phd" ? "博士" : row.degree_level === "master" ? "硕士" : row.degree_level === "undergrad" ? "本科" : row.degree_level === "postdoc" ? "博士后" : row.degree_level === "faculty" ? "教师" : "";
         const degreeEn = row.degree_level === "phd" ? "PhD" : row.degree_level === "master" ? "Master" : row.degree_level === "undergrad" ? "Bachelor" : row.degree_level === "postdoc" ? "Postdoctoral" : row.degree_level === "faculty" ? "Faculty" : "";
         const academicVisible = fields.has("academic_stage");
@@ -46,8 +47,11 @@ export function createPostgresPublicSiteRepository(pool: Queryable): PublicSiteR
         const academicZh = academicVisible ? degreeZh : "";
         const academicEn = academicVisible ? degreeEn : "";
         const currentDegree = academicVisible && yearVisible && year
-          ? { zh: degreeZh ? `${year}级${degreeZh}` : `${year}级`, en: degreeEn ? `${degreeEn}, Class of ${year}` : `Class of ${year}` }
-          : { zh: academicZh, en: academicEn };
+          ? { zh: `${year}级${postdoc ? "博士" : degreeZh}`, en: `${postdoc ? "PhD" : degreeEn}, Class of ${year}` }
+          : postdoc ? { zh: "", en: "" } : { zh: academicZh, en: academicEn };
+        const role = academicVisible && postdoc
+          ? { zh: "博士后", en: "Postdoctoral Researcher" }
+          : { zh: "", en: "" };
         const currentYear = !academicVisible && yearVisible && year
           ? { zh: `${year}级`, en: `Class of ${year}` }
           : { zh: "", en: "" };
@@ -61,6 +65,7 @@ export function createPostgresPublicSiteRepository(pool: Queryable): PublicSiteR
           sortOrder: 0,
           name: { zh: publicNameZh, en: publicNameEn },
           bio: fields.has("bio") ? locale(row, "bio") : { zh: "", en: "" },
+          role,
           degree: !alumni ? currentDegree : { zh: "", en: "" },
           enrollmentYear: !alumni ? currentYear : { zh: "", en: "" },
           graduation: alumni ? alumniSummary : { zh: "", en: "" },
