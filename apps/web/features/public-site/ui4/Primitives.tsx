@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useState, type CSSProperties, type ReactNode } from "react";
+import { RNAV_BRAND_ASSETS } from "../../../lib/brand";
 import { getLocalizedText, type Locale } from "../i18n";
 import { sanitizeActionUrl, sanitizePublicUrl } from "../url-sanitizer";
 import { imagePresentation, resolveHeroImage } from "./hero-image";
@@ -60,7 +61,14 @@ export function Media({
         />
       ) : (
         <span aria-hidden="true" className="v41-media-mark">
-          R<span>NAV</span>
+          <Image
+            alt=""
+            className="v41-media-fallback-logo"
+            height={70}
+            src={RNAV_BRAND_ASSETS.mark}
+            unoptimized
+            width={80}
+          />
         </span>
       )}
     </div>

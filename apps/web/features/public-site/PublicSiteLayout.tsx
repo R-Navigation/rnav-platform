@@ -4,6 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
+import { RNAV_BRAND_ASSETS } from "@/lib/brand";
 import { LanguageProvider, useLanguage } from "./LanguageProvider";
 import { getLocalizedText, normalizeInternalHref, type Locale } from "./i18n";
 import { Icon } from "./ui/PublicUi";
@@ -52,7 +53,14 @@ function Chrome({
             href="/"
             onClick={() => setMenuOpen(false)}
           >
-            {site.brand?.mark?.src ? <Image alt={site.brand.mark.alt || "RNAV"} className="h-9 w-auto object-contain" height={36} src={site.brand.mark.src} unoptimized width={96}/> : <span className="v41-wordmark">R<span>NAV</span></span>}
+            <Image
+              alt={site.brand?.mark?.alt || "RNAV"}
+              className="v41-header-mark"
+              height={36}
+              src={site.brand?.mark?.src || RNAV_BRAND_ASSETS.mark}
+              unoptimized
+              width={site.brand?.mark?.src ? 96 : 41}
+            />
             <span className="v41-brand-name">
               <strong>{site.brand?.name?.en === "R-Nav Robotics Navigation Lab" ? "Resilient Navigation" : site.brand?.name?.en || "Resilient Navigation"}</strong>
               <span>{site.brand?.name?.zh === "R-Nav 砺行导航·机器人实验室" ? "砺行导航·机器人实验室" : site.brand?.name?.zh || "砺行导航·机器人实验室"}</span>

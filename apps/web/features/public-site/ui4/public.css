@@ -696,6 +696,14 @@
 .public-site .v41-wordmark > span {
   color: #09275f;
 }
+.public-site .v41-header-mark {
+  display: block;
+  width: auto;
+  height: 38px;
+  max-width: 96px;
+  flex-shrink: 0;
+  object-fit: contain;
+}
 .public-site .v41-brand-name {
   display: flex;
   flex-direction: column;
@@ -732,6 +740,11 @@
   gap: 14px;
   align-items: center;
   font-size: 12px;
+}
+.public-site .v41-footer-lockup {
+  display: block;
+  width: 128px;
+  height: auto;
 }
 .public-site .v41-footer-contacts {
   display: flex;
@@ -1023,13 +1036,13 @@
   place-content: center;
   height: 100%;
   min-height: 100px;
-  font-size: 30px;
-  font-weight: 800;
-  color: #a9bfd5;
-  letter-spacing: -0.07em;
 }
-.public-site .v41-media-mark span {
-  color: #6c8fb5;
+.public-site .v41-media img.v41-media-fallback-logo {
+  position: static;
+  width: clamp(44px, 18%, 80px);
+  height: auto;
+  opacity: 0.32;
+  object-fit: contain;
 }
 .public-site .v41-hero-media {
   min-height: 240px;

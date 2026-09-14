@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { ConsoleTier } from "./bootstrap";
@@ -9,6 +10,7 @@ import { ConsoleSidebarNav } from "./ConsoleSidebarNav";
 import { NotificationBell } from "./NotificationBell";
 import { TierBadge } from "./TierBadge";
 import { ConsoleIcon } from "./ui/ConsoleIcon";
+import { RNAV_BRAND_ASSETS } from "@/lib/brand";
 
 type ShellUser = { displayName: string; username: string; tier: ConsoleTier };
 
@@ -31,7 +33,7 @@ export function ConsoleShell({ modules, user, children }: { modules: ConsoleNavi
   const initials = (user.displayName || user.username).trim().slice(0, 2).toUpperCase();
   async function logout() { await fetch("/api/auth/logout", { method: "POST" }); router.replace("/login"); router.refresh(); }
 
-  const sidebar = <><div className="flex h-14 items-center gap-3 border-b border-slate-200 px-4"><span className="grid size-8 place-items-center rounded-lg bg-cyan-700 text-xs font-black tracking-tight text-white">RN</span><Link className="leading-tight" href="/console"><span className="block text-sm font-bold tracking-tight text-slate-950">RNAV</span><span className="block text-[10px] text-slate-400">实验室工作台</span></Link></div><ConsoleSidebarNav modules={modules}/></>;
+  const sidebar = <><div className="flex h-14 items-center gap-3 border-b border-slate-200 px-4"><Image alt="RNAV" className="h-8 w-auto shrink-0 object-contain" height={32} src={RNAV_BRAND_ASSETS.mark} unoptimized width={37}/><Link className="leading-tight" href="/console"><span className="block text-sm font-bold tracking-tight text-slate-950">RNAV</span><span className="block text-[10px] text-slate-400">实验室工作台</span></Link></div><ConsoleSidebarNav modules={modules}/></>;
 
   return <div className="console-root min-h-screen bg-[#f7f8fa] text-slate-900 lg:grid lg:grid-cols-[248px_minmax(0,1fr)]">
     <a className="fixed left-3 top-3 z-[100] -translate-y-20 rounded-lg bg-slate-950 px-4 py-2 text-sm text-white focus:translate-y-0" href="#console-content">跳到主要内容</a>

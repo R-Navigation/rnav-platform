@@ -1,4 +1,6 @@
 "use client";
+import Image from "next/image";
+import { RNAV_BRAND_ASSETS } from "@/lib/brand";
 import { getLocalizedText, type Locale } from "../i18n";
 import { sanitizeActionUrl } from "../url-sanitizer";
 export function Footer({ site, locale }: { site: any; locale: Locale }) {
@@ -6,10 +8,15 @@ export function Footer({ site, locale }: { site: any; locale: Locale }) {
     <footer className="v41-footer">
       <div className="v41-wrap v41-footer-main">
         <a className="v41-footer-brand" href="/">
-          <span className="v41-wordmark">
-            R<span>NAV</span>
-          </span>
-          <strong>{getLocalizedText(site.brand?.name, locale)}</strong>
+          <Image
+            alt="RNAV — Resilient Navigation"
+            className="v41-footer-lockup"
+            height={50}
+            src={RNAV_BRAND_ASSETS.horizontal}
+            unoptimized
+            width={128}
+          />
+          <span className="sr-only">{getLocalizedText(site.brand?.name, locale)}</span>
         </a>
         <div className="v41-footer-contacts">
           {(site.publicContacts ?? [])

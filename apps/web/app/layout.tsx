@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { RNAV_BRAND_ASSETS } from "@/lib/brand";
 import "maplibre-gl/dist/maplibre-gl.css";
 import "@/styles/globals.css";
 
@@ -10,6 +11,10 @@ export const metadata: Metadata = {
     template: "%s | RNAV Lab",
   },
   description: "RNAV 实验室统一网站与管理平台",
+  icons: {
+    icon: [{ url: RNAV_BRAND_ASSETS.mark, type: "image/svg+xml" }],
+    shortcut: RNAV_BRAND_ASSETS.mark,
+  },
   openGraph: { type: "website", locale: "zh_CN", siteName: "RNAV Lab", title: "RNAV Lab", description: "RNAV 实验室统一网站与管理平台", images: ["/og-default.svg"] },
   twitter: { card: "summary_large_image", title: "RNAV Lab", description: "RNAV 实验室统一网站与管理平台", images: ["/og-default.svg"] },
 };

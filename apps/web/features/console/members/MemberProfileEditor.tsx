@@ -4,6 +4,7 @@ import { MemberCard } from "@/features/public-site/ui4/MemberCard";
 import { memberPreview } from "./memberPreview";
 import { useEffect, useRef, useState } from "react";
 import { ConsoleApiError, consoleApi } from "@/lib/consoleApi";
+import { RNAV_BRAND_ASSETS } from "@/lib/brand";
 import type { Member } from "./MemberManagement";
 import { academicStageLabels, publicProfileFieldGroups, type AcademicStage } from "./profileModel";
 import { personIdentityFromChineseName } from "./memberIdentity";
@@ -510,8 +511,16 @@ export function MemberProfileEditor({
                     />
                   </div>
                 ) : (
-                  <span className="grid h-full place-content-center text-xs text-slate-500">
-                    RNAV
+                  <span className="grid h-full place-content-center">
+                    <Image
+                      alt=""
+                      aria-hidden="true"
+                      className="h-auto w-10 opacity-35"
+                      height={35}
+                      src={RNAV_BRAND_ASSETS.mark}
+                      unoptimized
+                      width={40}
+                    />
                   </span>
                 )
               }
