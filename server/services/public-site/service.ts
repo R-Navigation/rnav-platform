@@ -579,8 +579,7 @@ function normalizeMember(item: PublicRecord) {
   member.group = group;
   member.slug =
     clean(item.slug) || `${group}-${slugify(name.en || name.zh) || "member"}`;
-  if (["postdoc", "phd", "master", "undergrad"].includes(group) &&
-      (!("degree" in item) || text(item.degree).zh || text(item.degree).en)) {
+  if (["postdoc", "phd", "master", "undergrad"].includes(group) && !("degree" in item)) {
     const degrees: Record<string, LocaleText> = {
       postdoc: { zh: "博士后", en: "Postdoc" },
       phd: { zh: "博士", en: "PhD" },

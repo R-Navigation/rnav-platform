@@ -58,6 +58,20 @@ test("member normalization does not restore explicitly hidden academic fields", 
   assert.deepEqual((await createPublicSiteService(repository).getTeam()).masterStudents[0].degree, { zh: "", en: "" });
 });
 
+test("member normalization preserves a projected academic stage and year label", async () => {
+  const repository = new MemoryPublicSiteRepository();
+  repository.team = [{
+    group: "master",
+    name: { zh: "成员" },
+    degree: { zh: "2026级硕士", en: "Master, Class of 2026" },
+    enrollmentYear: { zh: "", en: "" },
+  }];
+  assert.deepEqual(
+    (await createPublicSiteService(repository).getTeam()).masterStudents[0].degree,
+    { zh: "2026级硕士", en: "Master, Class of 2026" },
+  );
+});
+
 test("bootstrap supplies bilingual defaults and the required public navigation", async () => {
   const service = createPublicSiteService(new MemoryPublicSiteRepository());
   const bootstrap = await service.getBootstrap();
