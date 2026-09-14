@@ -5,7 +5,7 @@ import type { Member } from "./MemberManagement";
 const member = {
   publicFields: [],
   memberStatus: "current",
-  degreeLevel: "master",
+  academicStage: "master",
   nameZh: "成员",
   nameEn: "Member",
   publicEmail: "public@example.com",
@@ -29,14 +29,14 @@ test("preview omits all unchecked fields and never exposes private account conta
   assert.equal(hidden.image, null);
   const visible = memberPreview({
     ...member,
-    publicFields: ["name_zh", "academic", "email", "avatar"],
+    publicFields: ["name_zh", "academic_stage", "enrollment_year", "email", "avatar"],
   });
   assert.deepEqual(visible.name, { zh: "成员", en: "" });
-  assert.equal(visible.enrollmentYear, "2026");
+  assert.deepEqual(visible.degree, { zh: "2026级硕士", en: "Master, Class of 2026" });
   assert.doesNotMatch(JSON.stringify(visible), /PRIVATE_ACCOUNT|PRIVATE_PHONE/);
 });
 test("preview only publishes graduation, thesis and destination for alumni", () => {
-  const fields = ["academic", "thesis", "destination"];
+  const fields = ["academic_stage", "graduation_year", "thesis", "destination"];
   assert.equal(memberPreview({ ...member, publicFields: fields }).thesis, null);
   const alumni = memberPreview({
     ...member,
@@ -45,5 +45,5 @@ test("preview only publishes graduation, thesis and destination for alumni", () 
   });
   assert.equal(alumni.graduation?.zh, "2028届硕士");
   assert.equal(alumni.thesis?.en, "Thesis");
-  assert.equal(alumni.enrollmentYear, "");
+  assert.deepEqual(alumni.enrollmentYear, { zh: "", en: "" });
 });

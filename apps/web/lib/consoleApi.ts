@@ -20,8 +20,24 @@ export async function consoleApi<T>(path: string, init?: RequestInit): Promise<T
   const errorPayload = payload && typeof payload === "object"
     ? payload as { error?: unknown; code?: unknown; issues?: unknown }
     : {};
+  const issueLabels: Record<string, string> = {
+    personalLinks: "个人链接",
+    graduationYear: "毕业年份",
+    enrollmentYear: "入组年份",
+    publicFields: "公开字段",
+    publicVisible: "官网展示",
+    academicStage: "学术身份",
+    email: "邮箱",
+  };
   const issueText = Array.isArray(errorPayload.issues)
-    ? errorPayload.issues.map((issue) => typeof issue === "string" ? issue : issue && typeof issue === "object" && "message" in issue ? String(issue.message) : "").filter(Boolean).join("；")
+    ? errorPayload.issues.map((issue) => {
+      if (typeof issue === "string") return issue;
+      if (!issue || typeof issue !== "object" || !("message" in issue)) return "";
+      const structured = issue as { message: unknown; path?: unknown };
+      const firstPath = Array.isArray(structured.path) ? String(structured.path[0] ?? "") : "";
+      const label = issueLabels[firstPath];
+      return `${label ? `${label}：` : ""}${String(structured.message)}`;
+    }).filter(Boolean).join("；")
     : "";
   if (!response.ok) throw new ConsoleApiError(
     issueText || (typeof errorPayload.error === "string" ? errorPayload.error : `请求失败（${response.status}）`),

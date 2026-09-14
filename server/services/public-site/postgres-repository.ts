@@ -32,29 +32,48 @@ export function createPostgresPublicSiteRepository(pool: Queryable): PublicSiteR
         FROM user_profiles p JOIN users u ON u.id=p.user_id
         LEFT JOIN media_assets m ON m.id=p.avatar_asset_id AND m.status='active'
         WHERE p.public_visible=true AND u.account_kind='person'
-        ORDER BY p.member_status,p.member_category,p.enrollment_year,p.name_en,u.username`);
+        ORDER BY p.member_status,p.degree_level,p.enrollment_year,p.name_en,u.username`);
       return rows.map((row) => {
         const fields = new Set<string>(row.public_fields ?? []);
         const alumni = row.member_status === "alumni";
+        const publicNameZh = fields.has("name_zh") ? row.name_zh : "";
+        const publicNameEn = fields.has("name_en") ? row.name_en : "";
         const degreeZh = row.degree_level === "phd" ? "博士" : row.degree_level === "master" ? "硕士" : row.degree_level === "undergrad" ? "本科" : row.degree_level === "postdoc" ? "博士后" : row.degree_level === "faculty" ? "教师" : "";
         const degreeEn = row.degree_level === "phd" ? "PhD" : row.degree_level === "master" ? "Master" : row.degree_level === "undergrad" ? "Bachelor" : row.degree_level === "postdoc" ? "Postdoctoral" : row.degree_level === "faculty" ? "Faculty" : "";
+        const academicVisible = fields.has("academic_stage");
+        const yearVisible = fields.has(alumni ? "graduation_year" : "enrollment_year");
         const year = alumni ? row.graduation_year : row.enrollment_year;
+        const academicZh = academicVisible ? degreeZh : "";
+        const academicEn = academicVisible ? degreeEn : "";
+        const currentDegree = academicVisible && yearVisible && year
+          ? { zh: degreeZh ? `${year}级${degreeZh}` : `${year}级`, en: degreeEn ? `${degreeEn}, Class of ${year}` : `Class of ${year}` }
+          : { zh: academicZh, en: academicEn };
+        const currentYear = !academicVisible && yearVisible && year
+          ? { zh: `${year}级`, en: `Class of ${year}` }
+          : { zh: "", en: "" };
+        const alumniSummary = {
+          zh: [yearVisible && year ? `${year}届` : "", academicZh].filter(Boolean).join(""),
+          en: [academicEn, yearVisible && year ? `Graduated ${year}` : ""].filter(Boolean).join(", "),
+        };
         return {
           slug: row.member_slug || row.username,
-          group: alumni ? "alumni" : row.degree_level === "faculty" ? "advisor" : row.degree_level || row.member_category,
+          group: alumni ? "alumni" : row.degree_level === "faculty" ? "advisor" : row.degree_level,
           sortOrder: 0,
-          name: { zh: fields.has("name_zh") ? row.name_zh : "", en: fields.has("name_en") ? row.name_en : "" },
+          name: { zh: publicNameZh, en: publicNameEn },
           bio: fields.has("bio") ? locale(row, "bio") : { zh: "", en: "" },
-          degree: fields.has("academic") && !alumni ? { zh: year && degreeZh ? `${year}级${degreeZh}` : degreeZh, en: year && degreeEn ? `${degreeEn}, Class of ${year}` : degreeEn } : { zh: "", en: "" },
-          enrollmentYear: fields.has("academic") && !alumni ? { zh: row.enrollment_year, en: row.enrollment_year } : { zh: "", en: "" },
-          graduation: fields.has("academic") && alumni ? { zh: year && degreeZh ? `${year}届${degreeZh}` : degreeZh, en: year && degreeEn ? `${degreeEn}, Graduated ${year}` : degreeEn } : { zh: "", en: "" },
+          degree: !alumni ? currentDegree : { zh: "", en: "" },
+          enrollmentYear: !alumni ? currentYear : { zh: "", en: "" },
+          graduation: alumni ? alumniSummary : { zh: "", en: "" },
           major: fields.has("major") ? locale(row, "major") : { zh: "", en: "" },
           research: fields.has("research") ? { zh: row.research_interests_zh, en: row.research_interests_en } : { zh: "", en: "" },
           thesis: fields.has("thesis") && alumni ? locale(row, "thesis") : { zh: "", en: "" },
           destination: fields.has("destination") && alumni ? locale(row, "destination") : { zh: "", en: "" },
-          image: fields.has("avatar") && row.avatar_url ? { assetId: row.avatar_asset_id, src: row.avatar_url, alt: row.name_zh || row.name_en, positionX: row.avatar_position_x, positionY: row.avatar_position_y, zoom: Number(row.avatar_zoom) } : null,
+          image: fields.has("avatar") && row.avatar_url ? { assetId: row.avatar_asset_id, src: row.avatar_url, alt: publicNameZh || publicNameEn || "Team member", positionX: row.avatar_position_x, positionY: row.avatar_position_y, zoom: Number(row.avatar_zoom) } : null,
           links: fields.has("links") && Array.isArray(row.personal_links) ? row.personal_links.map((link: any) => ({ label: { zh: link.labelZh ?? "", en: link.labelEn ?? "" }, href: link.url ?? "", icon: "link", variant: "" })) : [],
-          contacts: fields.has("email") && row.email ? [{ label: { zh: "邮箱", en: "Email" }, value: { zh: row.email, en: row.email } }] : [],
+          contacts: [
+            ...(fields.has("email") && row.email ? [{ label: { zh: "邮箱", en: "Email" }, value: { zh: row.email, en: row.email } }] : []),
+            ...(fields.has("phone") && row.phone ? [{ label: { zh: "电话", en: "Phone" }, value: { zh: row.phone, en: row.phone } }] : []),
+          ],
         };
       });
     },

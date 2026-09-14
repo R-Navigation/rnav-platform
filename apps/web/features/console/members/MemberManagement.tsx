@@ -22,6 +22,7 @@ import { groupMembers,memberGroups,type MemberGroupKey } from "./memberGrouping"
 import { ConsoleIcon } from "@/features/console/ui/ConsoleIcon";
 import { ConsoleSearchInput } from "@/features/console/ui/ConsoleFormControls";
 import { ConsoleToast } from "@/features/console/ui/ConsoleToast";
+import { academicStageLabels, type AcademicStage } from "./profileModel";
 
 export type Member = {
   id: string;
@@ -39,10 +40,8 @@ export type Member = {
   createdAt: string;
   publicVisible: boolean;
   memberStatus: "current" | "alumni";
-  memberCategory: string;
-  degreeLevel: string;
+  academicStage: AcademicStage | "";
   researchInterestsZh: string;
-  homepageUrl: string;
   templateKeys: string[];
   publicEmail: string; phone: string; bioZh: string; bioEn: string; researchInterestsEn: string;
   enrollmentYear: string; graduationYear: string; majorZh: string; majorEn: string; thesisZh: string; thesisEn: string;
@@ -92,14 +91,6 @@ const primary =
   "rounded-lg bg-cyan-700 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-cyan-800 disabled:bg-slate-400";
 const secondary =
   "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:border-cyan-700 disabled:opacity-40";
-const categories: Record<string, string> = {
-  advisor: "导师",
-  postdoc: "博士后",
-  phd: "博士生",
-  master: "硕士生",
-  undergrad: "本科生",
-  alumni: "校友",
-};
 const auditLabels: Record<string, string> = {
   "user.create": "创建成员账号",
   "user.status": "变更账号状态",
@@ -132,7 +123,7 @@ export function MemberManagement({
   const [tab, setTab] = useState<Tab>("profile");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
-  const [memberCategory, setMemberCategory] = useState("");
+  const [academicStage, setAcademicStage] = useState("");
   const [role, setRole] = useState("");
   const [profileFilter,setProfileFilter]=useState(["complete","incomplete","stale"].includes(initialProfileFilter??"")?initialProfileFilter!:"");
   const [visibilityFilter,setVisibilityFilter]=useState("");
@@ -224,12 +215,12 @@ export function MemberManagement({
   const visibleMembers = useMemo(
     () =>
       members.filter((member) => {
-        if (memberCategory && member.memberCategory !== memberCategory)
+        if (academicStage && member.academicStage !== academicStage)
           return false;
         if (role && !member.templateKeys.includes(role)) return false;
         return true;
       }),
-    [memberCategory, members, role],
+    [academicStage, members, role],
   );
   const selected = members.find((member) => member.id === selectedId) ?? null;
   const groupedMembers=useMemo(()=>groupMembers(visibleMembers),[visibleMembers]);
@@ -355,11 +346,11 @@ export function MemberManagement({
         <select className={input} value={loginFilter} onChange={(event)=>setLoginFilter(event.target.value)}><option value="">全部登录状态</option><option value="never">从未登录</option><option value="active">半年内登录</option><option value="stale">半年未登录</option></select>
         <select
           className={input}
-          onChange={(event) => setMemberCategory(event.target.value)}
-          value={memberCategory}
+          onChange={(event) => setAcademicStage(event.target.value)}
+          value={academicStage}
         >
-          <option value="">全部成员类别</option>
-          {Object.entries(categories).map(([key, label]) => (
+          <option value="">全部学术身份</option>
+          {Object.entries(academicStageLabels).map(([key, label]) => (
             <option key={key} value={key}>
               {label}
             </option>
@@ -445,8 +436,7 @@ export function MemberManagement({
                 <span className="relative grid size-16 shrink-0 place-items-center overflow-hidden rounded-full bg-slate-200 text-lg font-bold text-slate-600">{selected.avatarUrl ? <Image alt="" className="object-cover" fill sizes="64px" src={selected.avatarUrl} unoptimized/> : (selected.nameZh || selected.displayName || selected.username).slice(0, 2)}</span>
                 <div>
                 <p className="text-xs text-cyan-800">
-                  {selected.accountKind==="system"?<span className="rounded-full bg-slate-900 px-2 py-1 font-mono text-[10px] font-bold tracking-wider text-white">SYSTEM</span>:categories[selected.memberCategory] ??
-                    selected.memberCategory}{" "}
+                  {selected.accountKind==="system"?<span className="rounded-full bg-slate-900 px-2 py-1 font-mono text-[10px] font-bold tracking-wider text-white">SYSTEM</span>:selected.academicStage ? academicStageLabels[selected.academicStage] : "未设置学术身份"}{" "}
                   · {selected.memberStatus === "alumni" ? "校友" : "在组"}
                 </p>
                 <h2 className="mt-1 text-2xl font-bold text-blue-950">
@@ -493,7 +483,37 @@ export function MemberManagement({
             </nav>
             <div className="p-5 lg:p-6">
               {tab === "profile" ? (
-                <MemberProfileEditor busy={busy} canEdit={canWriteMembers} member={selected} onConvert={()=>run(()=>consoleApi(`/api/users/${selected.id}/convert-alumni`,{method:"POST",body:JSON.stringify({confirm:true})}),"已转换为校友，岗位权限和旧会话已清理。")} onSave={(body)=>run(()=>consoleApi(`/api/users/${selected.id}/profile`,{method:"PUT",body:JSON.stringify(body)}),"成员资料已保存。")} />
+                <MemberProfileEditor
+                  busy={busy}
+                  canEdit={canWriteMembers}
+                  member={selected}
+                  onConvert={() => run(
+                    () => consoleApi(`/api/users/${selected.id}/convert-alumni`, { method: "POST", body: JSON.stringify({ confirm: true }) }),
+                    "已转换为校友，岗位权限和旧会话已清理。",
+                  )}
+                  onReload={async () => {
+                    const saved = await consoleApi<Partial<Member>>(`/api/users/${selected.id}/profile`);
+                    setMembers((current) => current.map((item) => item.id === selected.id ? { ...item, ...saved } : item));
+                    return saved;
+                  }}
+                  onSave={async (body) => {
+                    setBusy(true);
+                    setError("");
+                    setMessage("");
+                    try {
+                      const saved = await consoleApi<Partial<Member>>(`/api/users/${selected.id}/profile`, { method: "PUT", body: JSON.stringify(body) });
+                      setMembers((current) => current.map((item) => item.id === selected.id ? { ...item, ...saved } : item));
+                      setMessage("成员资料已保存。");
+                      void loadMembers().catch(() => undefined);
+                      return saved;
+                    } catch (reason) {
+                      setError(reason instanceof Error ? reason.message : "保存失败。");
+                      throw reason;
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                />
               ) : null}
               {tab === "account" ? (
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -811,22 +831,22 @@ export function MemberManagement({
                 ["username", "用户名"],
                 ["nameZh", "中文姓名"],
                 ["nameEn", "英文姓名"],
-                ["email", "邮箱"],
+                ["email", "账号邮箱（可选）"],
               ].map(([name, label]) => (
                 <label className="text-sm" key={name}>
                   {name==="nameZh"&&createAccountKind==="system"?"显示名称":label}
                   <input
                     className={`${input} mt-1`}
                     name={name}
-                    required={name !== "nameEn"}
+                    required={name === "username" || name === "nameZh"}
                   />
                 </label>
               ))}
               <label className="text-sm sm:col-span-2">账号类型<select className={`${input} mt-1`} name="accountKind" value={createAccountKind} onChange={(event)=>setCreateAccountKind(event.target.value as "person"|"system")}><option value="person">人员账号</option><option value="system">系统账号</option></select><span className="mt-1 block text-xs text-slate-500">系统账号用于自动化、采集或专用管理，不参与官网团队展示。</span></label>
               {createAccountKind==="person"?<label className="text-sm">
-                成员类别
-                <select className={`${input} mt-1`} name="memberCategory">
-                  {Object.entries(categories).map(([key, label]) => (
+                学术身份
+                <select className={`${input} mt-1`} name="academicStage" required defaultValue="master">
+                  {Object.entries(academicStageLabels).map(([key, label]) => (
                     <option key={key} value={key}>
                       {label}
                     </option>

@@ -14,33 +14,37 @@ export function memberPreview(member: Member) {
       master: ["硕士", "Master"],
       undergrad: ["本科", "Undergraduate"],
     } as Record<string, string[]>
-  )[member.degreeLevel] || ["", ""];
+  )[member.academicStage] || ["", ""];
   const graduateDegree =
-    member.degreeLevel === "postdoc"
+    member.academicStage === "postdoc"
       ? "Postdoctoral"
-      : member.degreeLevel === "undergrad"
+      : member.academicStage === "undergrad"
         ? "Bachelor"
         : degree[1];
+  const academicVisible = fields.has("academic_stage");
+  const enrollmentVisible = fields.has("enrollment_year");
+  const graduationVisible = fields.has("graduation_year");
   return {
     name: {
       zh: fields.has("name_zh") ? member.nameZh : "",
       en: fields.has("name_en") ? member.nameEn : "",
     },
-    degree: !alumni
-      ? localized("academic", ...(degree as [string, string]))
+    degree: !alumni && academicVisible
+      ? enrollmentVisible && member.enrollmentYear
+        ? {
+            zh: `${member.enrollmentYear}级${degree[0]}`,
+            en: `${degree[1]}, Class of ${member.enrollmentYear}`,
+          }
+        : { zh: degree[0], en: degree[1] }
       : { zh: "", en: "" },
-    enrollmentYear:
-      !alumni && fields.has("academic") ? member.enrollmentYear : "",
+    enrollmentYear: !alumni && !academicVisible && enrollmentVisible
+      ? { zh: `${member.enrollmentYear}级`, en: `Class of ${member.enrollmentYear}` }
+      : { zh: "", en: "" },
     graduation: alumni
-      ? localized(
-          "academic",
-          member.graduationYear && degree[0]
-            ? `${member.graduationYear}届${degree[0]}`
-            : degree[0],
-          member.graduationYear && graduateDegree
-            ? `${graduateDegree}, Graduated ${member.graduationYear}`
-            : graduateDegree,
-        )
+      ? {
+          zh: `${graduationVisible && member.graduationYear ? `${member.graduationYear}届` : ""}${academicVisible ? degree[0] : ""}`,
+          en: [academicVisible ? graduateDegree : "", graduationVisible && member.graduationYear ? `Graduated ${member.graduationYear}` : ""].filter(Boolean).join(", "),
+        }
       : null,
     major: localized("major", member.majorZh, member.majorEn),
     research: localized(
@@ -70,14 +74,18 @@ export function memberPreview(member: Member) {
           href: link.url,
         }))
       : [],
-    contacts:
-      fields.has("email") && member.publicEmail
+    contacts: [
+      ...(fields.has("email") && member.publicEmail
         ? [
             {
               label: { zh: "邮箱", en: "Email" },
               value: { zh: member.publicEmail, en: member.publicEmail },
             },
           ]
-        : [],
+        : []),
+      ...(fields.has("phone") && member.phone
+        ? [{ label: { zh: "电话", en: "Phone" }, value: { zh: member.phone, en: member.phone } }]
+        : []),
+    ],
   };
 }

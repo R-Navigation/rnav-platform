@@ -207,12 +207,12 @@ export function createUserAdminService(pool: Pick<Pool, "query" | "connect">) {
       const result = await pool.query<any>(
         `SELECT users.id,users.username,users.email,users.display_name,users.base_tier,users.account_kind,users.status,
         users.must_change_password,users.last_login_at,users.created_at,
-        user_profiles.public_visible,user_profiles.member_status,user_profiles.member_category,user_profiles.degree_level,
+        user_profiles.public_visible,user_profiles.member_status,user_profiles.degree_level,
         user_profiles.name_zh,user_profiles.name_en,user_profiles.email public_email,user_profiles.phone,user_profiles.bio_zh,user_profiles.bio_en,
         user_profiles.research_interests_zh,user_profiles.research_interests_en,user_profiles.enrollment_year,user_profiles.graduation_year,
         user_profiles.major_zh,user_profiles.major_en,user_profiles.thesis_zh,user_profiles.thesis_en,user_profiles.destination_zh,user_profiles.destination_en,
         user_profiles.avatar_asset_id,media_assets.url avatar_url,user_profiles.avatar_position_x,user_profiles.avatar_position_y,user_profiles.avatar_zoom,
-        user_profiles.personal_links,user_profiles.public_fields,user_profiles.version,user_profiles.profile_content_updated_at,user_profiles.homepage_url,
+        user_profiles.personal_links,user_profiles.public_fields,user_profiles.version,user_profiles.profile_content_updated_at,
         COALESCE(array_agg(DISTINCT permission_template_permissions.permission_key) FILTER(WHERE permission_template_permissions.permission_key IS NOT NULL),ARRAY[]::text[]) template_permissions,
         COALESCE(array_agg(DISTINCT user_permission_templates.template_key) FILTER(WHERE user_permission_templates.template_key IS NOT NULL),ARRAY[]::text[]) template_keys,
         COALESCE(array_agg(DISTINCT user_permission_overrides.permission_key) FILTER(WHERE user_permission_overrides.decision='grant'),ARRAY[]::text[]) grants,
@@ -245,12 +245,10 @@ export function createUserAdminService(pool: Pick<Pool, "query" | "connect">) {
             createdAt: row.created_at,
             publicVisible: row.public_visible,
             memberStatus: row.member_status,
-            memberCategory: row.member_category,
-            degreeLevel: row.degree_level,
+            academicStage: row.degree_level,
             nameZh: row.name_zh,
             nameEn: row.name_en,
             researchInterestsZh: row.research_interests_zh,
-            homepageUrl: row.homepage_url,
             templateKeys: row.template_keys,
             publicEmail: row.public_email, phone: row.phone, bioZh: row.bio_zh, bioEn: row.bio_en,
             researchInterestsEn: row.research_interests_en, enrollmentYear: row.enrollment_year, graduationYear: row.graduation_year,
@@ -259,8 +257,8 @@ export function createUserAdminService(pool: Pick<Pool, "query" | "connect">) {
             avatarPositionX: row.avatar_position_x, avatarPositionY: row.avatar_position_y, avatarZoom: Number(row.avatar_zoom),
             personalLinks: row.personal_links, publicFields: row.public_fields, version: Number(row.version),
             profileContentUpdatedAt: row.profile_content_updated_at,
-            completeness: profileCompleteness({ memberStatus: row.member_status, publicVisible: row.public_visible, nameZh: row.name_zh,
-              nameEn: row.name_en, avatarAssetId: row.avatar_asset_id, degreeLevel: row.degree_level, enrollmentYear: row.enrollment_year,
+            completeness: profileCompleteness({ memberStatus: row.member_status, publicVisible: row.public_visible, publicFields: row.public_fields, nameZh: row.name_zh,
+              nameEn: row.name_en, avatarAssetId: row.avatar_asset_id, academicStage: row.degree_level, enrollmentYear: row.enrollment_year,
               graduationYear: row.graduation_year, majorZh: row.major_zh, majorEn: row.major_en,
               researchInterestsZh: row.research_interests_zh, researchInterestsEn: row.research_interests_en,
               destinationZh: row.destination_zh, destinationEn: row.destination_en }),
@@ -378,6 +376,11 @@ export function createUserAdminService(pool: Pick<Pool, "query" | "connect">) {
         );
       const password = temporaryPassword();
       const hash = await bcrypt.hash(password, 12);
+      const accountKind = body.accountKind ?? "person";
+      const rawEmail = body.email ?? "";
+      const accountEmail = rawEmail.trim()
+        ? rawEmail.trim().toLowerCase()
+        : null;
       const client = await pool.connect();
       try {
         await client.query("BEGIN");
@@ -387,34 +390,28 @@ export function createUserAdminService(pool: Pick<Pool, "query" | "connect">) {
           VALUES($1,$2,$3,$4,$5,$6,'active',true,'admin') RETURNING id`,
           [
             body.username,
-            body.email,
+            accountEmail,
             hash,
             body.baseTier,
-            body.accountKind ?? "person",
+            accountKind,
             body.nameZh || body.nameEn,
           ],
         );
         const id = user.rows[0].id;
-        const memberStatus =
-          body.memberCategory === "alumni" ? "alumni" : "current";
-        const degreeLevel =
-          body.memberCategory === "advisor"
-            ? "faculty"
-            : body.memberCategory === "alumni"
-              ? "master"
-              : body.memberCategory;
+        const publicFields = accountKind === "person"
+          ? ["avatar", "name_zh", "name_en", "academic_stage", "research"]
+          : [];
         await client.query(
-          `INSERT INTO user_profiles(user_id,member_slug,member_category,member_status,degree_level,name_zh,name_en,email,public_visible)
-          VALUES($1,$2,$3,$4,$5,$6,$7,$8,false)`,
+          `INSERT INTO user_profiles(user_id,member_slug,member_status,degree_level,name_zh,name_en,email,public_fields,public_visible)
+          VALUES($1,$2,'current',$3,$4,$5,$6,$7,false)`,
           [
             id,
             slug(body.username),
-            body.memberCategory,
-            memberStatus,
-            degreeLevel,
+            accountKind === "person" ? body.academicStage : "",
             body.nameZh,
             body.nameEn,
-            body.email,
+            accountEmail ?? "",
+            publicFields,
           ],
         );
         await client.query(
@@ -429,7 +426,7 @@ export function createUserAdminService(pool: Pick<Pool, "query" | "connect">) {
             JSON.stringify({
               username: body.username,
               baseTier: body.baseTier,
-              accountKind: body.accountKind ?? "person",
+              accountKind,
             }),
           ],
         );
@@ -583,6 +580,23 @@ export function createUserAdminService(pool: Pick<Pool, "query" | "connect">) {
       const client = await pool.connect();
       try {
         await client.query("BEGIN");
+        const target = await client.query<{
+          account_kind: "person" | "system";
+          name_zh: string;
+          name_en: string;
+          public_fields: string[];
+        }>(`SELECT users.account_kind,user_profiles.name_zh,user_profiles.name_en,user_profiles.public_fields
+          FROM users JOIN user_profiles ON user_profiles.user_id=users.id
+          WHERE users.id=$1 FOR UPDATE`, [userId]);
+        if (!target.rowCount)
+          throw new UserAdminError("User not found", "NOT_FOUND", 404);
+        const row = target.rows[0];
+        if (input.publicVisible && row.account_kind !== "person")
+          throw new UserAdminError("System accounts cannot be shown on the public team page", "SYSTEM_PROFILE_PRIVATE", 409);
+        if (input.publicVisible && !(
+          (row.name_zh.trim() && row.public_fields.includes("name_zh"))
+          || (row.name_en.trim() && row.public_fields.includes("name_en"))
+        )) throw new UserAdminError("官网展示至少需要公开一个已填写的姓名", "PUBLIC_NAME_REQUIRED", 409);
         const result = await client.query(
           "UPDATE user_profiles SET public_visible=$2,updated_at=now() WHERE user_id=$1",
           [userId, input.publicVisible],
@@ -666,8 +680,9 @@ export function createUserAdminService(pool: Pick<Pool, "query" | "connect">) {
       const target = await pool.query<{ base_tier: BaseTier }>("SELECT base_tier FROM users WHERE id=$1", [userId]);
       if (!target.rows[0]) throw new UserAdminError("User not found", "NOT_FOUND", 404);
       if (target.rows[0].base_tier === "super" && actor.baseTier !== "super") throw new UserAdminError("Only super can modify super users", "SUPER_REQUIRED", 403);
+      const normalizedEmail = email.trim() ? email.trim().toLowerCase() : null;
       try {
-        await pool.query("UPDATE users SET email=$2,updated_at=now() WHERE id=$1", [userId, email]);
+        await pool.query("UPDATE users SET email=$2,updated_at=now() WHERE id=$1", [userId, normalizedEmail]);
         await pool.query("INSERT INTO audit_logs(actor_id,action,target_type,target_id,detail) VALUES($1,'user.account_email','user',$2,$3::jsonb)", [actor.id, userId, JSON.stringify({ changed: true })]);
       } catch (error: any) {
         if (error?.code === "23505") throw new UserAdminError("Email already exists", "USER_CONFLICT", 409);
@@ -684,7 +699,7 @@ export function createUserAdminService(pool: Pick<Pool, "query" | "connect">) {
         const assets = await client.query<{ code: string }>("SELECT code FROM lab_assets WHERE assigned_user_id=$1 AND status='in_use' FOR UPDATE", [userId]);
         if (assets.rowCount) throw new UserAdminError(`Member still has ${assets.rowCount} in-use asset(s)`, "ALUMNI_ASSETS_IN_USE", 409);
         const procurements = await client.query<{ count: string }>("SELECT count(*)::text count FROM procurement_requests WHERE requester_id=$1 AND status IN ('submitted','approved','purchasing','purchased')", [userId]);
-        await client.query("UPDATE user_profiles SET member_status='alumni',member_category='alumni',profile_content_updated_at=now(),updated_at=now(),version=version+1 WHERE user_id=$1", [userId]);
+        await client.query("UPDATE user_profiles SET member_status='alumni',profile_content_updated_at=now(),updated_at=now(),version=version+1 WHERE user_id=$1", [userId]);
         await client.query("DELETE FROM user_permission_templates WHERE user_id=$1", [userId]);
         await client.query("DELETE FROM user_permission_overrides WHERE user_id=$1", [userId]);
         await client.query("DELETE FROM session_tokens WHERE user_id=$1", [userId]);
@@ -694,26 +709,25 @@ export function createUserAdminService(pool: Pick<Pool, "query" | "connect">) {
       } catch (error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); }
     },
     async validateImportUsers(body: z.output<typeof importUsersSchema>, actor: Actor) {
-      const normalized=body.rows.map((row)=>({...row,username:row.username.toLowerCase(),email:row.email.toLowerCase()}));
-      const existing=await pool.query<{username:string;email:string}>("SELECT username,COALESCE(email,'') email FROM users WHERE username=ANY($1::text[]) OR LOWER(COALESCE(email,''))=ANY($2::text[])",[normalized.map((row)=>row.username),normalized.map((row)=>row.email)]);
+      const normalized=body.rows.map((row)=>({...row,username:row.username.toLowerCase(),email:row.email.trim().toLowerCase()}));
+      const accountEmails=normalized.map((row)=>row.email).filter(Boolean);
+      const existing=await pool.query<{username:string;email:string}>("SELECT username,COALESCE(email,'') email FROM users WHERE username=ANY($1::text[]) OR LOWER(email)=ANY($2::text[])",[normalized.map((row)=>row.username),accountEmails]);
       const usernames=new Set(existing.rows.map((row)=>row.username));const emails=new Set(existing.rows.map((row)=>row.email.toLowerCase()));
-      const rows=normalized.map((row,index)=>{const issues:string[]=[];if(normalized.findIndex((candidate)=>candidate.username===row.username)!==index)issues.push("文件内用户名重复");if(normalized.findIndex((candidate)=>candidate.email===row.email)!==index)issues.push("文件内登录邮箱重复");if(usernames.has(row.username))issues.push("用户名已存在");if(emails.has(row.email))issues.push("登录邮箱已存在");if(row.baseTier==="super"&&actor.baseTier!=="super")issues.push("无权导入超级管理员");return{index:index+1,username:row.username,issues};});
+      const rows=normalized.map((row,index)=>{const issues:string[]=[];if(normalized.findIndex((candidate)=>candidate.username===row.username)!==index)issues.push("文件内用户名重复");if(row.email&&normalized.findIndex((candidate)=>candidate.email===row.email)!==index)issues.push("文件内账号邮箱重复");if(usernames.has(row.username))issues.push("用户名已存在");if(row.email&&emails.has(row.email))issues.push("账号邮箱已存在");if(row.baseTier==="super"&&actor.baseTier!=="super")issues.push("无权导入超级管理员");return{index:index+1,username:row.username,issues};});
       return{valid:rows.every((row)=>!row.issues.length),summary:{total:rows.length,errors:rows.filter((row)=>row.issues.length).length},rows};
     },
     async importUsers(body: z.output<typeof importUsersSchema>, actor: Actor) {
       if (body.rows.some((row) => row.baseTier === "super") && actor.baseTier !== "super") throw new UserAdminError("Only super can import super users", "SUPER_REQUIRED", 403);
-      const normalized = body.rows.map((row) => ({ ...row, username: row.username.toLowerCase(), email: row.email.toLowerCase() }));
-      const duplicate = normalized.find((row, index) => normalized.findIndex((candidate) => candidate.username === row.username || candidate.email === row.email) !== index);
+      const normalized = body.rows.map((row) => ({ ...row, username: row.username.toLowerCase(), email: row.email.trim().toLowerCase() }));
+      const duplicate = normalized.find((row, index) => normalized.findIndex((candidate) => candidate.username === row.username || (row.email && candidate.email === row.email)) !== index);
       if (duplicate) throw new UserAdminError("Import contains duplicate username or account email", "IMPORT_DUPLICATE", 409);
       const client = await pool.connect(); const credentials: Array<{ username: string; temporaryPassword: string }> = [];
       try {
         await client.query("BEGIN");
         for (const row of normalized) {
           const password = temporaryPassword(); const hash = await bcrypt.hash(password, 12);
-          const user = await client.query<{ id: string }>(`INSERT INTO users(username,email,password_hash,base_tier,display_name,status,must_change_password,created_source) VALUES($1,$2,$3,$4,$5,'active',true,'import') RETURNING id`, [row.username, row.email, hash, row.baseTier, row.nameZh || row.nameEn]);
-          const memberStatus = row.memberCategory === "alumni" ? "alumni" : "current";
-          const degreeLevel = row.memberCategory === "advisor" ? "faculty" : row.memberCategory === "alumni" ? "master" : row.memberCategory;
-          await client.query(`INSERT INTO user_profiles(user_id,member_slug,member_category,member_status,degree_level,name_zh,name_en,email,public_visible) VALUES($1,$2,$3,$4,$5,$6,$7,$8,false)`, [user.rows[0].id, slug(row.username), row.memberCategory, memberStatus, degreeLevel, row.nameZh, row.nameEn, row.publicEmail]);
+          const user = await client.query<{ id: string }>(`INSERT INTO users(username,email,password_hash,base_tier,account_kind,display_name,status,must_change_password,created_source) VALUES($1,$2,$3,$4,'person',$5,'active',true,'import') RETURNING id`, [row.username, row.email || null, hash, row.baseTier, row.nameZh || row.nameEn]);
+          await client.query(`INSERT INTO user_profiles(user_id,member_slug,member_status,degree_level,name_zh,name_en,email,public_fields,public_visible) VALUES($1,$2,'current',$3,$4,$5,$6,$7,false)`, [user.rows[0].id, slug(row.username), row.academicStage, row.nameZh, row.nameEn, row.publicEmail, ["avatar", "name_zh", "name_en", "academic_stage", "research"]]);
           await client.query("INSERT INTO user_permission_templates(user_id,template_key,assigned_by) VALUES($1,'normal-member',$2) ON CONFLICT DO NOTHING", [user.rows[0].id, actor.id]);
           credentials.push({ username: row.username, temporaryPassword: password });
         }

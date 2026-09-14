@@ -10,8 +10,12 @@ export class ProfileAssetError extends Error {
   constructor() { super("头像资源不存在或不是有效图片"); this.name = "ProfileAssetError"; }
 }
 
+export class ProfilePublicNameError extends Error {
+  constructor() { super("官网展示至少需要公开一个已填写的姓名"); this.name = "ProfilePublicNameError"; }
+}
+
 type ProfileRow = {
-  user_id: string; username: string; member_category: string; member_slug: string | null;
+  user_id: string; username: string; member_slug: string | null;
   member_status: "current" | "alumni"; degree_level: string; public_visible: boolean;
   name_zh: string; name_en: string; email: string; phone: string;
   bio_zh: string; bio_en: string; research_interests_zh: string; research_interests_en: string;
@@ -25,9 +29,9 @@ type ProfileRow = {
 
 function output(row: ProfileRow) {
   return {
-    userId: row.user_id, username: row.username, memberCategory: row.member_category,
-    memberSlug: row.member_slug, memberStatus: row.member_status, degreeLevel: row.degree_level,
-    publicVisible: row.public_visible, nameZh: row.name_zh, nameEn: row.name_en, email: row.email,
+    userId: row.user_id, username: row.username,
+    memberSlug: row.member_slug, memberStatus: row.member_status, academicStage: row.degree_level,
+    publicVisible: row.public_visible, nameZh: row.name_zh, nameEn: row.name_en, publicEmail: row.email,
     phone: row.phone, bioZh: row.bio_zh, bioEn: row.bio_en,
     researchInterestsZh: row.research_interests_zh, researchInterestsEn: row.research_interests_en,
     enrollmentYear: row.enrollment_year, graduationYear: row.graduation_year,
@@ -38,8 +42,8 @@ function output(row: ProfileRow) {
     personalLinks: Array.isArray(row.personal_links) ? row.personal_links : [],
     publicFields: row.public_fields, version: Number(row.version), accountEmail: row.account_email ?? "",
     updatedAt: row.updated_at ?? null, profileContentUpdatedAt: row.profile_content_updated_at ?? row.updated_at ?? null,
-    completeness: profileCompleteness({ memberStatus: row.member_status, publicVisible: row.public_visible,
-      nameZh: row.name_zh, nameEn: row.name_en, avatarAssetId: row.avatar_asset_id, degreeLevel: row.degree_level,
+    completeness: profileCompleteness({ memberStatus: row.member_status, publicVisible: row.public_visible, publicFields: row.public_fields,
+      nameZh: row.name_zh, nameEn: row.name_en, avatarAssetId: row.avatar_asset_id, academicStage: row.degree_level,
       enrollmentYear: row.enrollment_year, graduationYear: row.graduation_year, majorZh: row.major_zh, majorEn: row.major_en,
       researchInterestsZh: row.research_interests_zh, researchInterestsEn: row.research_interests_en,
       destinationZh: row.destination_zh, destinationEn: row.destination_en }),
@@ -75,17 +79,22 @@ export function createProfileService(pool: Pick<Pool, "query" | "connect">) {
         if (!asset.rowCount) throw new ProfileAssetError();
       }
       const before = output(current.rows[0]) as Record<string, unknown>;
-      const memberCategory = admin ? (body as AdminProfileUpdate).memberCategory : current.rows[0].member_category;
+      const memberStatus = admin ? (body as AdminProfileUpdate).memberStatus : current.rows[0].member_status;
+      const academicStage = admin ? (body as AdminProfileUpdate).academicStage : current.rows[0].degree_level;
       const publicVisible = admin ? (body as AdminProfileUpdate).publicVisible : current.rows[0].public_visible;
+      if (publicVisible && !(
+        (body.nameZh.trim() && body.publicFields.includes("name_zh"))
+        || (body.nameEn.trim() && body.publicFields.includes("name_en"))
+      )) throw new ProfilePublicNameError();
       const updated = await client.query(
-        `UPDATE user_profiles SET member_category=$3,member_status=$4,degree_level=$5,name_zh=$6,name_en=$7,email=$8,phone=$9,bio_zh=$10,bio_en=$11,
-           research_interests_zh=$12,research_interests_en=$13,enrollment_year=$14,graduation_year=$15,
-           major_zh=$16,major_en=$17,thesis_zh=$18,thesis_en=$19,destination_zh=$20,destination_en=$21,
-           avatar_asset_id=$22,avatar_position_x=$23,avatar_position_y=$24,avatar_zoom=$25,
-           personal_links=$26::jsonb,public_fields=$27,public_visible=$28,version=version+1,
+        `UPDATE user_profiles SET member_status=$3,degree_level=$4,name_zh=$5,name_en=$6,email=$7,phone=$8,bio_zh=$9,bio_en=$10,
+           research_interests_zh=$11,research_interests_en=$12,enrollment_year=$13,graduation_year=$14,
+           major_zh=$15,major_en=$16,thesis_zh=$17,thesis_en=$18,destination_zh=$19,destination_en=$20,
+           avatar_asset_id=$21,avatar_position_x=$22,avatar_position_y=$23,avatar_zoom=$24,
+           personal_links=$25::jsonb,public_fields=$26,public_visible=$27,version=version+1,
            profile_content_updated_at=now(),updated_at=now()
          WHERE user_id=$1 AND version=$2`,
-        [targetUserId, body.version, memberCategory, body.memberStatus, body.degreeLevel, body.nameZh, body.nameEn, body.email, body.phone, body.bioZh, body.bioEn,
+        [targetUserId, body.version, memberStatus, academicStage, body.nameZh, body.nameEn, body.publicEmail, body.phone, body.bioZh, body.bioEn,
           body.researchInterestsZh, body.researchInterestsEn, body.enrollmentYear, body.graduationYear,
           body.majorZh, body.majorEn, body.thesisZh, body.thesisEn, body.destinationZh, body.destinationEn,
           body.avatarAssetId, body.avatarPositionX, body.avatarPositionY, body.avatarZoom,
@@ -94,7 +103,7 @@ export function createProfileService(pool: Pick<Pool, "query" | "connect">) {
       if (!updated.rowCount) throw new ProfileConflictError();
       await client.query("UPDATE users SET display_name=COALESCE(NULLIF($2,''),NULLIF($3,''),username),updated_at=now() WHERE id=$1", [targetUserId, body.nameZh, body.nameEn]);
       await recycleUnreferencedAvatar(client, current.rows[0].avatar_asset_id === body.avatarAssetId ? null : current.rows[0].avatar_asset_id);
-      const after = { ...body, memberCategory, publicVisible } as Record<string, unknown>;
+      const after = { ...body, memberStatus, academicStage, publicVisible } as Record<string, unknown>;
       const changedFields = Object.keys(after).filter((key) => key !== "version" && JSON.stringify(before[key]) !== JSON.stringify(after[key]));
       await client.query("INSERT INTO audit_logs(actor_id,action,target_type,target_id,detail) VALUES($1,$2,'user',$3::text,$4::jsonb)",
         [actorUserId, admin ? "profile.admin_update" : "profile.update", targetUserId, JSON.stringify({ changedFields })]);

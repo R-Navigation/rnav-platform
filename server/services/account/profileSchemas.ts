@@ -4,8 +4,13 @@ const text = (max: number) => z.string().trim().max(max);
 const webUrl = z.string().trim().url().max(500).refine((value) => /^https?:\/\//i.test(value), "Only HTTP(S) links are supported");
 
 export const publicProfileFields = [
-  "avatar", "name_zh", "name_en", "academic", "major", "research",
-  "bio", "email", "links", "thesis", "destination",
+  "avatar", "name_zh", "name_en", "academic_stage", "enrollment_year",
+  "graduation_year", "major", "research", "bio", "email", "phone",
+  "links", "thesis", "destination",
+] as const;
+
+export const academicStages = [
+  "faculty", "postdoc", "phd", "master", "undergrad",
 ] as const;
 
 export const personalLinkSchema = z.object({
@@ -19,11 +24,9 @@ export const personalLinkSchema = z.object({
 
 const profileUpdateObject = z.object({
   version: z.coerce.number().int().positive(),
-  memberStatus: z.enum(["current", "alumni"]),
-  degreeLevel: z.enum(["", "faculty", "postdoc", "undergrad", "master", "phd"]),
   nameZh: text(100),
   nameEn: text(100),
-  email: z.union([z.literal(""), z.string().email().max(320)]),
+  publicEmail: z.union([z.literal(""), z.string().email().max(320)]),
   phone: text(50),
   bioZh: text(4000),
   bioEn: text(4000),
@@ -56,9 +59,22 @@ function validateProfile(value: z.output<typeof profileUpdateObject>, context: z
 export const profileUpdateSchema = profileUpdateObject.superRefine(validateProfile);
 
 export const adminProfileUpdateSchema = profileUpdateObject.extend({
-  memberCategory: z.enum(["advisor", "postdoc", "phd", "master", "undergrad", "alumni"]),
+  memberStatus: z.enum(["current", "alumni"]),
+  academicStage: z.enum(academicStages),
   publicVisible: z.boolean(),
-}).strict().superRefine(validateProfile);
+}).strict().superRefine((value, context) => {
+  validateProfile(value, context);
+  if (value.publicVisible && !(
+    (value.nameZh && value.publicFields.includes("name_zh"))
+    || (value.nameEn && value.publicFields.includes("name_en"))
+  )) {
+    context.addIssue({
+      code: "custom",
+      path: ["publicVisible"],
+      message: "官网展示至少需要公开一个已填写的姓名",
+    });
+  }
+});
 
 export type ProfileUpdate = z.output<typeof profileUpdateSchema>;
 export type AdminProfileUpdate = z.output<typeof adminProfileUpdateSchema>;

@@ -66,7 +66,7 @@ test("public members come from visible account profiles and honor field visibili
   let teamSql="";const queryable = { async query(sql: string) {
     teamSql=sql;
     if (sql.includes("FROM user_profiles")) return { rows: [{
-      user_id: "user-1", username: "alice", member_slug: "alice", public_fields: ["avatar", "name_zh", "academic", "major", "research", "links", "email"],
+      user_id: "user-1", username: "alice", member_slug: "alice", public_fields: ["avatar", "name_zh", "academic_stage", "enrollment_year", "major", "research", "links", "email"],
       member_status: "current", member_category: "phd", degree_level: "phd", enrollment_year: "2024", graduation_year: "",
       name_zh: "张三", name_en: "Alice", bio_zh: "私密简介", bio_en: "Private bio", major_zh: "自动化", major_en: "Automation",
       research_interests_zh: "导航", research_interests_en: "Navigation", thesis_zh: "", thesis_en: "", destination_zh: "", destination_en: "",
@@ -96,7 +96,7 @@ test("independently public assets use a safe allowlist and exclude retired recor
 test("alumni profiles expose graduation, thesis, and destination only when selected", async () => {
   const queryable = { async query(sql: string) {
     if (sql.includes("FROM user_profiles")) return { rows: [{
-      username: "graduate", member_slug: "graduate", public_fields: ["name_zh", "academic", "thesis", "destination"], member_status: "alumni",
+      username: "graduate", member_slug: "graduate", public_fields: ["name_zh", "academic_stage", "graduation_year", "thesis", "destination"], member_status: "alumni",
       member_category: "alumni", degree_level: "master", enrollment_year: "", graduation_year: "2025", name_zh: "李四", name_en: "Li Si",
       bio_zh: "", bio_en: "", major_zh: "", major_en: "", research_interests_zh: "", research_interests_en: "",
       thesis_zh: "毕业设计", thesis_en: "Thesis", destination_zh: "某研究院", destination_en: "Institute", personal_links: [], email: "",
@@ -108,4 +108,74 @@ test("alumni profiles expose graduation, thesis, and destination only when selec
   assert.deepEqual(member.graduation, { zh: "2025届硕士", en: "Master, Graduated 2025" });
   assert.deepEqual(member.thesis, { zh: "毕业设计", en: "Thesis" });
   assert.deepEqual(member.destination, { zh: "某研究院", en: "Institute" });
+});
+
+test("public member academic stage, years, email, and phone project independently", async () => {
+  const profile = {
+    username: "member", member_slug: "member", member_status: "current", degree_level: "phd",
+    enrollment_year: "2024", graduation_year: "2028", name_zh: "成员", name_en: "Member",
+    bio_zh: "", bio_en: "", major_zh: "", major_en: "", research_interests_zh: "", research_interests_en: "",
+    thesis_zh: "", thesis_en: "", destination_zh: "", destination_en: "", personal_links: [],
+    email: "public@example.com", phone: "12345",
+  };
+  const project = async (public_fields: string[]) => {
+    const queryable = { async query(sql: string) { return { rows: sql.includes("FROM user_profiles") ? [{ ...profile, public_fields }] : [] }; } };
+    return (await createPostgresPublicSiteRepository(queryable as never).getTeamMembers())[0];
+  };
+
+  const stageOnly = await project(["name_zh", "academic_stage"]);
+  assert.deepEqual(stageOnly.degree, { zh: "博士", en: "PhD" });
+  assert.deepEqual(stageOnly.enrollmentYear, { zh: "", en: "" });
+
+  const yearOnly = await project(["name_zh", "enrollment_year"]);
+  assert.deepEqual(yearOnly.degree, { zh: "", en: "" });
+  assert.deepEqual(yearOnly.enrollmentYear, { zh: "2024级", en: "Class of 2024" });
+
+  const phoneOnly = await project(["name_zh", "phone"]);
+  assert.deepEqual(phoneOnly.contacts, [{ label: { zh: "电话", en: "Phone" }, value: { zh: "12345", en: "12345" } }]);
+  assert.equal(JSON.stringify(phoneOnly).includes("public@example.com"), false);
+});
+
+test("every public profile field is projected independently", async () => {
+  const base = {
+    username: "toggle-member", member_slug: "toggle-member", member_status: "current", degree_level: "phd",
+    enrollment_year: "2024", graduation_year: "2028", name_zh: "唯一中文姓名", name_en: "Unique English Name",
+    bio_zh: "唯一简介", bio_en: "Unique Bio", major_zh: "唯一专业", major_en: "Unique Major",
+    research_interests_zh: "唯一研究", research_interests_en: "Unique Research",
+    thesis_zh: "唯一论文", thesis_en: "Unique Thesis", destination_zh: "唯一去向", destination_en: "Unique Destination",
+    personal_links: [{ labelZh: "唯一链接", labelEn: "Unique Link", url: "https://example.com/unique-link" }],
+    email: "unique-public@example.com", phone: "unique-phone-123", avatar_asset_id: "avatar-id",
+    avatar_url: "https://example.com/unique-avatar.png", avatar_position_x: 45, avatar_position_y: 55, avatar_zoom: "1.2",
+  };
+  const project = async (field: string, enabled: boolean, alumni = false) => {
+    const requiredName = field === "name_zh" ? "name_en" : "name_zh";
+    const public_fields = enabled ? [...new Set([requiredName, field])] : [requiredName];
+    const queryable = { async query(sql: string) { return { rows: sql.includes("FROM user_profiles") ? [{ ...base, member_status: alumni ? "alumni" : "current", public_fields }] : [] }; } };
+    return createPostgresPublicSiteRepository(queryable as never).getTeamMembers().then((members) => members[0]);
+  };
+  const cases: Array<[string, string, boolean?]> = [
+    ["avatar", "unique-avatar.png"], ["name_zh", "唯一中文姓名"], ["name_en", "Unique English Name"],
+    ["academic_stage", "PhD"], ["enrollment_year", "Class of 2024"], ["graduation_year", "Graduated 2028", true],
+    ["major", "Unique Major"], ["research", "Unique Research"], ["bio", "Unique Bio"],
+    ["email", "unique-public@example.com"], ["phone", "unique-phone-123"], ["links", "unique-link"],
+    ["thesis", "Unique Thesis", true], ["destination", "Unique Destination", true],
+  ];
+  for (const [field, sentinel, alumni] of cases) {
+    assert.equal(JSON.stringify(await project(field, true, alumni)).includes(sentinel), true, `${field} should project when enabled`);
+    assert.equal(JSON.stringify(await project(field, false, alumni)).includes(sentinel), false, `${field} should not project when disabled`);
+  }
+});
+
+test("avatar alt text does not leak a name whose public toggle is off", async () => {
+  const queryable = { async query(sql: string) { return { rows: sql.includes("FROM user_profiles") ? [{
+    username: "anonymous", member_slug: "anonymous", member_status: "current", degree_level: "master",
+    public_fields: ["avatar", "name_en"], name_zh: "不应公开的姓名", name_en: "Public Name",
+    avatar_asset_id: "avatar", avatar_url: "https://example.com/avatar.png", avatar_position_x: 50, avatar_position_y: 50, avatar_zoom: "1",
+    enrollment_year: "", graduation_year: "", bio_zh: "", bio_en: "", major_zh: "", major_en: "",
+    research_interests_zh: "", research_interests_en: "", thesis_zh: "", thesis_en: "", destination_zh: "", destination_en: "",
+    personal_links: [], email: "", phone: "",
+  }] : [] }; } };
+  const member = (await createPostgresPublicSiteRepository(queryable as never).getTeamMembers())[0];
+  assert.equal(member.image?.alt, "Public Name");
+  assert.equal(JSON.stringify(member).includes("不应公开的姓名"), false);
 });

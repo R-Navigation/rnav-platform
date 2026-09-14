@@ -36,6 +36,18 @@ test("console API surfaces structured validation issues", async () => {
   }
 });
 
+test("console API maps profile validation paths to readable field names", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    issues: [{ path: ["personalLinks", 0, "url"], message: "Invalid url" }],
+  }), { status: 400, headers: { "content-type": "application/json" } });
+  try {
+    await assert.rejects(consoleApi("/api/profile"), { message: "个人链接：Invalid url" });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("console API lets the browser set multipart boundaries for FormData", async () => {
   const originalFetch = globalThis.fetch;
   let headers: HeadersInit | undefined;

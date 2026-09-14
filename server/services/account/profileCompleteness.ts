@@ -1,10 +1,11 @@
 export type CompletenessProfile = {
   memberStatus: "current" | "alumni";
   publicVisible: boolean;
+  publicFields: string[];
   nameZh: string;
   nameEn: string;
   avatarAssetId: string | null;
-  degreeLevel: string;
+  academicStage: string;
   enrollmentYear: string;
   graduationYear: string;
   majorZh: string;
@@ -19,7 +20,7 @@ export function profileCompleteness(profile: CompletenessProfile) {
   const missing: string[] = [];
   if (!profile.nameZh && !profile.nameEn) missing.push("name");
   if (!profile.avatarAssetId) missing.push("avatar");
-  if (!profile.degreeLevel) missing.push("degree");
+  if (!profile.academicStage) missing.push("academicStage");
   if (!profile.majorZh && !profile.majorEn) missing.push("major");
   if (!profile.researchInterestsZh && !profile.researchInterestsEn) missing.push("research");
   if (profile.memberStatus === "current" && !profile.enrollmentYear) missing.push("enrollmentYear");
@@ -28,7 +29,11 @@ export function profileCompleteness(profile: CompletenessProfile) {
   return {
     missing,
     complete: missing.length === 0,
-    publishable: profile.publicVisible && missing.length === 0,
+    publishable:
+      profile.publicVisible
+      && (
+        (Boolean(profile.nameZh) && profile.publicFields.includes("name_zh"))
+        || (Boolean(profile.nameEn) && profile.publicFields.includes("name_en"))
+      ),
   };
 }
-

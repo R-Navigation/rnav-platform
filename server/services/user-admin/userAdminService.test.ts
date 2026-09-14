@@ -21,7 +21,7 @@ class Client {
 
 test("user creation creates a private self-managed profile and returns a one-time password", async () => {
   const client = new Client(); const service = createUserAdminService({ connect: async () => client } as never);
-  const result = await service.createUser({ username: "alice", nameZh: "张三", nameEn: "Alice", memberCategory: "phd", email: "a@example.com", baseTier: "normal" }, { id: "admin", baseTier: "super" });
+  const result = await service.createUser({ username: "alice", nameZh: "张三", nameEn: "Alice", academicStage: "phd", email: "a@example.com", baseTier: "normal" }, { id: "admin", baseTier: "super" });
   const insert = client.calls.find((call) => call.sql.includes("INSERT INTO users"));
   assert.equal(await bcrypt.compare(result.temporaryPassword, String(insert?.values?.[2])), true);
   assert.ok(client.calls.some((call) => call.sql.includes("INSERT INTO user_profiles")));
@@ -33,6 +33,25 @@ test("user creation creates a private self-managed profile and returns a one-tim
 });
 
 test("system account creation and conversion stay out of the public team",async()=>{const client=new Client();const service=createUserAdminService({connect:async()=>client} as never);await service.createUser({username:"robot",nameZh:"设备账号",nameEn:"Robot",email:"robot@example.com",baseTier:"normal",accountKind:"system"},{id:"admin",baseTier:"super"});const insert=client.calls.find((call)=>call.sql.includes("INSERT INTO users"));assert.equal(insert?.values?.[4],"system");await service.setAccountKind("user-2","system",{id:"admin",baseTier:"super"});assert.ok(client.calls.some((call)=>call.sql.includes("UPDATE user_profiles SET public_visible=false")));assert.ok(client.calls.some((call)=>call.sql.includes("'user.account_kind'")));});
+
+test("blank account email persists as NULL and new person public defaults stay granular", async () => {
+  const client = new Client();
+  const service = createUserAdminService({ connect: async () => client } as never);
+  await service.createUser({
+    username: "no-email",
+    nameZh: "无邮箱成员",
+    nameEn: "",
+    academicStage: "master",
+    email: "",
+    baseTier: "normal",
+    accountKind: "person",
+  }, { id: "admin", baseTier: "super" });
+  const userInsert = client.calls.find((call) => call.sql.includes("INSERT INTO users"));
+  const profileInsert = client.calls.find((call) => call.sql.includes("INSERT INTO user_profiles"));
+  assert.equal(userInsert?.values?.[1], null);
+  assert.equal(profileInsert?.values?.[2], "master");
+  assert.deepEqual(profileInsert?.values?.[6], ["avatar", "name_zh", "name_en", "academic_stage", "research"]);
+});
 
 test("last active super and self disable are protected", async () => {
   const client = new Client(); const service = createUserAdminService({ connect: async () => client } as never);
@@ -263,7 +282,7 @@ test("a deleted username and email can create a fresh account with a new UUID", 
       username: "test-user",
       nameZh: "测试账号",
       nameEn: "Test User",
-      memberCategory: "undergrad",
+      academicStage: "undergrad",
       email: "test-user@example.com",
       baseTier: "normal",
       accountKind: "person",
