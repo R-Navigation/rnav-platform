@@ -80,7 +80,9 @@ test("multi-table replacement and audit commit in one transaction", async () => 
   assert.equal(updatedAt, "8");
   const sql = client.calls.map(({ sql }) => sql);
   assert.equal(sql[0], "BEGIN");
-  assert.equal(sql.some((value) => value.includes("DELETE FROM research_items")), true);
+  assert.equal(sql.some((value) => value.includes("SELECT id FROM research_items FOR UPDATE")), true);
+  assert.equal(sql.some((value) => value.includes("ON CONFLICT (id) DO UPDATE")), true);
+  assert.equal(sql.some((value) => /^DELETE FROM research_items\s*$/i.test(value.trim())), false);
   assert.equal(sql.some((value) => value.includes("INSERT INTO research_item_authors")), true);
   const itemInsert = client.calls.find(({ sql: statement }) => statement.includes("INSERT INTO research_items"));
   assert.equal(itemInsert?.values?.includes("11111111-1111-4111-8111-111111111111"), true);

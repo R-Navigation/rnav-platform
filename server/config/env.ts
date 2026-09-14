@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 const optionalUrl = z.preprocess((value) => value === "" ? undefined : value, z.string().url().optional());
+const optionalString = z.preprocess((value) => value === "" ? undefined : value, z.string().optional());
 
 const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -17,6 +18,11 @@ const schema = z.object({
   COS_SECRET_ID: z.string().optional(), COS_SECRET_KEY: z.string().optional(), COS_REGION: z.string().optional(),
   COS_BUCKET: z.string().optional(), COS_PUBLIC_BASE_URL: optionalUrl, COS_PATH_PREFIX: z.string().default("rnav"),
   MEDIA_MAX_UPLOAD_BYTES: z.coerce.number().int().min(1).max(100 * 1024 * 1024).default(20 * 1024 * 1024),
+  OPENALEX_API_KEY: optionalString,
+  SCHOLARLY_SYNC_CONTACT_EMAIL: z.preprocess((value) => value === "" ? undefined : value, z.string().email().optional()),
+  SCHOLARLY_SYNC_ENABLED: z.enum(["true", "false"]).default("false"),
+  SCHOLARLY_SYNC_OPENALEX_BASE_URL: z.string().url().default("https://api.openalex.org"),
+  SCHOLARLY_SYNC_CROSSREF_BASE_URL: z.string().url().default("https://api.crossref.org"),
 }).passthrough();
 
 export function loadEnv(source: Record<string, string | undefined> = process.env) {
@@ -29,5 +35,10 @@ export function loadEnv(source: Record<string, string | undefined> = process.env
     monitorOfflineTimeoutSeconds: parsed.MONITOR_OFFLINE_TIMEOUT_SECONDS,
     cosSecretId: parsed.COS_SECRET_ID, cosSecretKey: parsed.COS_SECRET_KEY, cosRegion: parsed.COS_REGION, cosBucket: parsed.COS_BUCKET,
     cosPublicBaseUrl: parsed.COS_PUBLIC_BASE_URL, cosPathPrefix: parsed.COS_PATH_PREFIX, mediaMaxUploadBytes: parsed.MEDIA_MAX_UPLOAD_BYTES,
+    openAlexApiKey: parsed.OPENALEX_API_KEY,
+    scholarlySyncContactEmail: parsed.SCHOLARLY_SYNC_CONTACT_EMAIL,
+    scholarlySyncEnabled: parsed.SCHOLARLY_SYNC_ENABLED === "true",
+    scholarlySyncOpenAlexBaseUrl: parsed.SCHOLARLY_SYNC_OPENALEX_BASE_URL,
+    scholarlySyncCrossrefBaseUrl: parsed.SCHOLARLY_SYNC_CROSSREF_BASE_URL,
   };
 }

@@ -39,6 +39,11 @@ import { createSettingsRouter } from "./routes/settings.js";
 import { resolveWebDir } from "./webDir.js";
 import { createNotificationService } from "./services/notifications/notificationService.js";
 import { createNotificationsRouter } from "./routes/notifications.js";
+import { createScholarlySyncRepository } from "./services/scholarly-sync/repository.js";
+import { createOpenAlexClient } from "./services/scholarly-sync/providers/openAlexClient.js";
+import { createCrossrefClient } from "./services/scholarly-sync/providers/crossrefClient.js";
+import { createScholarlySyncService } from "./services/scholarly-sync/service.js";
+import { createScholarlySyncRouter } from "./routes/scholarly-sync.js";
 
 const env = loadEnv();
 const pool = new pg.Pool({ connectionString: env.databaseUrl });
@@ -52,6 +57,14 @@ await web.prepare();
 const publicService = createPublicSiteService(createPostgresPublicSiteRepository(pool));
 const siteAdminService = createSiteAdminService(createPostgresSiteAdminRepository(pool));
 const profileService = createProfileService(pool);
+const scholarlySyncService = createScholarlySyncService({
+  pool,
+  repository: createScholarlySyncRepository(pool),
+  openAlex: createOpenAlexClient({ baseUrl: env.scholarlySyncOpenAlexBaseUrl, apiKey: env.openAlexApiKey }),
+  crossref: createCrossrefClient({ baseUrl: env.scholarlySyncCrossrefBaseUrl, contactEmail: env.scholarlySyncContactEmail }),
+  enabled: env.scholarlySyncEnabled,
+  providerConfig: { openAlexKeyConfigured: Boolean(env.openAlexApiKey), crossrefContactConfigured: Boolean(env.scholarlySyncContactEmail) },
+});
 let hub: ReturnType<typeof createMonitorWebSocketHub>;
 const monitorService = createMonitorService(pool, { deviceTokenPepper: env.deviceTokenPepper, broadcast: (type, payload, audience) => hub.broadcast(type, payload, audience), onRealtimeError: (error) => console.error("Monitor realtime error", error) });
 hub = createMonitorWebSocketHub({ publicPath: env.monitorWsPath, consolePath: `${env.monitorWsPath}/console`, authorizeConsole: async (request) => {
@@ -70,6 +83,7 @@ const app = createApp({
     createMediaRouter({ authMiddleware, service: createMediaService(pool, createCosGateway({ secretId: env.cosSecretId, secretKey: env.cosSecretKey, region: env.cosRegion, bucket: env.cosBucket }),), trustProxy: true, maxBytes: env.mediaMaxUploadBytes, publicBaseUrl: env.cosPublicBaseUrl ?? `${env.publicBaseUrl}/media`, pathPrefix: env.cosPathPrefix }),
     createSettingsRouter({ authMiddleware, service: createSettingsService(pool), trustProxy: true }),
     createNotificationsRouter({ authMiddleware, service: createNotificationService(pool), trustProxy: true }),
+    createScholarlySyncRouter({ authMiddleware, service: scholarlySyncService, trustProxy: true }),
     createConsoleRouter({ authMiddleware, dashboardService: createConsoleDashboardService(pool) }), createPublicRouter({ service: publicService }),
     createSiteAdminRouter({ authMiddleware, service: siteAdminService, trustProxy: true }),
     createLabAssetsRouter({ authMiddleware, service: createLabAssetsService(pool), trustProxy: true }),

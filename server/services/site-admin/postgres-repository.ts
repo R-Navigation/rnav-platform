@@ -3,6 +3,7 @@ import { createPostgresPublicSiteRepository } from "../public-site/postgres-repo
 import { pageKeys, type ContactItems, type PageKey, type SiteRecord } from "./schemas.js";
 import type { PublicSiteRepository } from "../public-site/service.js";
 import type { SiteAdminRepository, SiteAdminSnapshot } from "./service.js";
+import { replaceResearchItemCollection } from "../research/researchItemRepository.js";
 
 type Queryable = Pick<Pool, "query">;
 type TransactionPool = Pick<Pool, "connect" | "query">;
@@ -206,18 +207,7 @@ export function createPostgresSiteAdminRepository(
 
     replaceResearchItems(items, expected, actorId) {
       return inReplacementTransaction(pool, { moduleKey: "research-items", actorId, action: "site.research.replace", targetType: "research_items", expected, count: items.length }, async (client) => {
-        await client.query("DELETE FROM research_items");
-        for (const [index, item] of items.entries()) {
-          const [titleZh, titleEn] = locale(item.title), [venueZh, venueEn] = locale(item.venue), [pdfZh, pdfEn] = locale(nested(item.pdf).label);
-          await client.query(
-            `INSERT INTO research_items (id, sort_order, title_zh, title_en, publication_year, venue_zh, venue_en, publication_type, topic, image_asset_id, image_src, image_alt, image_data_alt, pdf_asset_id, pdf_src, pdf_label_zh, pdf_label_en, updated_at)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,now())`,
-            [item.id, number(item.sortOrder ?? index), titleZh, titleEn, item.year === "" || item.year == null ? null : number(item.year), venueZh, venueEn, value(item.type), value(item.topic), ...imageValues(item.image), nested(item.pdf).assetId || null, nested(item.pdf).src || null, pdfZh, pdfEn]
-          );
-          await insertMany(client, "INSERT INTO research_item_keywords (research_item_id, sort_order, value_zh, value_en) VALUES ($1,$2,$3,$4)", list(item.keywords).map((entry, childIndex) => [item.id, childIndex, ...locale(entry)]));
-          await insertMany(client, "INSERT INTO research_item_authors (research_item_id, sort_order, name_zh, name_en, highlight) VALUES ($1,$2,$3,$4,$5)", list(item.authors).map((entry, childIndex) => [item.id, childIndex, ...locale(entry.name), Boolean(entry.highlight)]));
-          await insertMany(client, "INSERT INTO research_item_links (research_item_id, sort_order, label_zh, label_en, href, icon, variant) VALUES ($1,$2,$3,$4,$5,$6,$7)", list(item.links).map((entry, childIndex) => [item.id, childIndex, ...locale(entry.label), value(entry.href), value(entry.icon), value(entry.variant)]));
-        }
+        await replaceResearchItemCollection(client, items, actorId);
       });
     },
 

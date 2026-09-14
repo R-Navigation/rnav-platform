@@ -6,7 +6,7 @@ RNAV 课题组统一网站与内部业务平台。项目将公开网站、统一
 
 - Public: `/`, `/research`, `/team`, `/news`, `/facilities`, `/contact`, `/monitor`
 - Internal: `/console`, `/console/lab-assets`, `/console/monitor`, `/console/procurements`
-- API: `/api/auth`, `/api/public`, `/api/console`, `/api/lab-assets`, `/api/monitor`, `/api/procurements`
+- API: `/api/auth`, `/api/public`, `/api/console`, `/api/lab-assets`, `/api/monitor`, `/api/procurements`, `/api/scholarly-sync`
 - Realtime: `/ws` for public monitor data and `/ws/console` for device readers
 
 `/admin` is retired and redirects to `/console/site`. The legacy `/lab-assets` route redirects to `/console/lab-assets`.
@@ -63,3 +63,7 @@ npm run db:verify-migration -- \
 ```
 
 完整的 staging 演练、生产数据导出、账号准备、systemd 部署、nginx 切换、验收与回滚步骤见 [`docs/cutover-runbook.md`](docs/cutover-runbook.md)。
+
+## Scholarly Sync
+
+OpenAlex 负责论文发现，Crossref 负责 DOI 元数据校准，公开站仍只读取 `research_items`。配置、手动同步、定时任务与回滚说明见 [`docs/scholarly-sync-operations.md`](docs/scholarly-sync-operations.md)。

@@ -74,6 +74,8 @@ const deletionDependencies: Record<
   inventory_scans: { label: "资产盘点记录", blocking: true },
   device_alert_acknowledgements: { label: "设备告警处置记录", blocking: true },
   system_setting_updates: { label: "系统配置责任记录", blocking: true },
+  scholarly_profile: { label: "学术同步档案", blocking: false },
+  scholarly_work_members: { label: "论文成果关联", blocking: true },
 };
 
 const deletionDependencySql = `
@@ -101,7 +103,9 @@ const deletionDependencySql = `
   UNION ALL SELECT 'inventory_batches',count(*)::int FROM lab_asset_inventory_batches WHERE created_by=$1
   UNION ALL SELECT 'inventory_scans',count(*)::int FROM lab_asset_inventory_items WHERE scanned_by=$1
   UNION ALL SELECT 'device_alert_acknowledgements',count(*)::int FROM device_alerts WHERE acknowledged_by=$1
-  UNION ALL SELECT 'system_setting_updates',count(*)::int FROM system_settings WHERE updated_by=$1`;
+  UNION ALL SELECT 'system_setting_updates',count(*)::int FROM system_settings WHERE updated_by=$1
+  UNION ALL SELECT 'scholarly_profile',count(*)::int FROM member_scholarly_profiles WHERE user_id=$1
+  UNION ALL SELECT 'scholarly_work_members',count(*)::int FROM scholarly_work_members WHERE user_id=$1`;
 
 type DeletionTargetRow = {
   id: string;

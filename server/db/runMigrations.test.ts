@@ -120,6 +120,7 @@ test("getMigrationFiles returns SQL migrations in lexical order", async () => {
       "038_bridge_legacy_public_facilities.sql",
       "039_member_account_profile_consolidation.sql",
       "040_normalize_person_account_names.sql",
+      "041_scholarly_sync.sql",
     ],
   );
 });
@@ -149,6 +150,18 @@ test("person identity normalization preserves member slugs and records reversibl
   assert.match(migration, /oldUsername.*newUsername.*nameZh.*nameEn/s);
   assert.doesNotMatch(migration, /member_slug/i);
   assert.doesNotMatch(migration, /DROP|TRUNCATE|DELETE/i);
+});
+
+test("scholarly sync migration is additive, guards duplicate DOI, and registers existing publications as manual", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const migration = await readFile(new URL("./migrations/041_scholarly_sync.sql", import.meta.url), "utf8");
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS member_scholarly_profiles/);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS scholarly_works/);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS scholarly_work_members/);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS scholarly_sync_runs/);
+  assert.match(migration, /Duplicate DOI values found across research_items/);
+  assert.match(migration, /SELECT 'manual'.*'accepted'.*item\.id/s);
+  assert.doesNotMatch(migration, /DROP\s+(?:TABLE|COLUMN)|TRUNCATE/i);
 });
 
 test("asset procurement source migration is additive and keeps procurement deletion safe", async () => {

@@ -24,6 +24,7 @@ import { ConsoleSearchInput } from "@/features/console/ui/ConsoleFormControls";
 import { ConsoleToast } from "@/features/console/ui/ConsoleToast";
 import { academicStageLabels, type AcademicStage } from "./profileModel";
 import { personIdentityFromChineseName } from "./memberIdentity";
+import { ScholarlyProfileEditor } from "./ScholarlyProfileEditor";
 
 export type Member = {
   id: string;
@@ -84,7 +85,7 @@ type AuditEntry = {
   createdAt: string;
   actorName: string;
 };
-type Tab = "profile" | "account" | "roles" | "security" | "audit";
+type Tab = "profile" | "scholarly" | "account" | "roles" | "security" | "audit";
 
 const input =
   "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-cyan-700 focus:ring-2 focus:ring-cyan-100";
@@ -466,13 +467,14 @@ export function MemberManagement({
               {(
                 [
                   ["profile", "成员资料"],
+                  ["scholarly", "学术档案"],
                   ["account", "账号"],
                   ["roles", "角色与权限"],
                   ["security", "安全"],
                   ["audit", "操作记录"],
                 ] as const
               )
-                .filter(([key]) => (key !== "roles" || canWritePermissions)&&(selected.accountKind!=="system"||key!=="profile"))
+                .filter(([key]) => (key !== "roles" || canWritePermissions)&&(selected.accountKind!=="system"||!(["profile","scholarly"] as string[]).includes(key)))
                 .map(([key, label]) => (
                   <button
                     className={`shrink-0 border-b-2 px-4 py-3 text-sm font-semibold ${tab === key ? "border-cyan-700 text-cyan-800" : "border-transparent text-slate-500 hover:text-slate-900"}`}
@@ -518,6 +520,7 @@ export function MemberManagement({
                   }}
                 />
               ) : null}
+              {tab === "scholarly" ? <ScholarlyProfileEditor canEdit={canWriteMembers} userId={selected.id}/> : null}
               {tab === "account" ? (
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Info label="账号类型" value={selected.accountKind==="system"?"系统账号":"人员账号"} />

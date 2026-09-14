@@ -1,0 +1,11 @@
+[Unit]
+Description=RNAV Scholarly Publication Sync
+After=network-online.target postgresql.service
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/srv/rnav_platform
+EnvironmentFile=/srv/rnav_platform/.env
+Environment=PATH=/home/ubuntu/.nvm/versions/node/v24.18.0/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
+ExecStart=/home/ubuntu/.nvm/versions/node/v24.18.0/bin/npm run scholarly:sync

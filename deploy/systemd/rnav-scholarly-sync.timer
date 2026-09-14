@@ -1,0 +1,11 @@
+[Unit]
+Description=Run RNAV Scholarly Publication Sync daily
+
+[Timer]
+OnCalendar=*-*-* 04:17:00 Asia/Shanghai
+RandomizedDelaySec=15m
+Persistent=true
+Unit=rnav-scholarly-sync.service
+
+[Install]
+WantedBy=timers.target
