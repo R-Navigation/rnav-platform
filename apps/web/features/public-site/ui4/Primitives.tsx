@@ -28,9 +28,12 @@ export function Media({
   const src = sanitizePublicUrl(image?.src);
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const presentation = imagePresentation(image);
+  const placeholder = !src || src === failedSrc;
   return (
-    <div className={`v41-media ${className}`}>
-      {src && src !== failedSrc ? (
+    <div
+      className={`v41-media ${placeholder ? "v41-media-placeholder" : ""} ${className}`.trim()}
+    >
+      {!placeholder ? (
         <Image
           fill
           sizes={sizes}

@@ -511,7 +511,7 @@ export function MemberProfileEditor({
                     />
                   </div>
                 ) : (
-                  <span className="grid h-full place-content-center">
+                  <span className="flex h-full items-center justify-center">
                     <Image
                       alt=""
                       aria-hidden="true"
