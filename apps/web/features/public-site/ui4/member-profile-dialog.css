@@ -1,0 +1,55 @@
+.rnav-member-dialog {
+  width: min(920px, calc(100vw - 48px));
+  max-height: min(84vh, 820px);
+  padding: 0;
+  border: 0;
+  border-radius: 14px;
+  background: #fff;
+  color: #173458;
+  box-shadow: 0 28px 80px rgb(9 30 66 / 28%);
+}
+.rnav-member-dialog::backdrop { background: rgb(7 25 49 / 62%); backdrop-filter: blur(3px); }
+.rnav-member-dialog-shell { position: relative; display: flex; max-height: inherit; flex-direction: column; }
+.rnav-member-dialog-close { position: absolute; z-index: 2; top: 14px; right: 16px; display: grid; width: 44px; height: 44px; place-items: center; border: 1px solid #d9e4ef; border-radius: 50%; background: #fff; color: #173458; font-size: 28px; line-height: 1; cursor: pointer; }
+.rnav-member-dialog-header { display: grid; grid-template-columns: 144px minmax(0, 1fr); gap: 28px; padding: 32px 76px 28px 32px; background: #f2f7fc; }
+.rnav-member-dialog-photo { width: 144px; height: 180px; overflow: hidden; border-radius: 8px; background: #e3edf7; }
+.rnav-member-dialog-photo > *, .rnav-member-dialog-photo .v41-media { width: 100%; height: 100%; }
+.rnav-member-dialog-photo img { width: 100%; height: 100%; object-fit: cover; }
+.rnav-member-dialog-kicker { margin: 5px 0 10px; color: #1763c6; font-size: 11px; font-weight: 700; letter-spacing: .14em; }
+.rnav-member-dialog-header h2 { margin: 0; color: #0c2d57; font-size: clamp(28px, 4vw, 42px); line-height: 1.12; }
+.rnav-member-dialog-en, .rnav-member-dialog-identity, .rnav-member-dialog-research { margin: 8px 0 0; }
+.rnav-member-dialog-en, .rnav-member-dialog-identity { color: #526986; }
+.rnav-member-dialog-research { max-width: 620px; color: #315d85; line-height: 1.7; }
+.rnav-member-dialog-tabs { display: flex; gap: 24px; padding: 0 32px; border-bottom: 1px solid #dce5ef; }
+.rnav-member-dialog-tabs button { min-height: 52px; padding: 0 2px; border: 0; border-bottom: 2px solid transparent; background: none; color: #526986; font-weight: 700; cursor: pointer; }
+.rnav-member-dialog-tabs button[aria-selected="true"] { border-color: #1769e0; color: #0c2d57; }
+.rnav-member-dialog-body { min-height: 250px; overflow-y: auto; padding: 28px 32px 34px; }
+.rnav-member-dialog-bio { margin: 0; white-space: pre-wrap; color: #385777; line-height: 1.9; }
+.rnav-member-dialog-muted { color: #71839a; }
+.rnav-member-dialog-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 26px; margin: 28px 0 0; }
+.rnav-member-dialog-facts div { border-top: 1px solid #dce5ef; padding-top: 12px; }
+.rnav-member-dialog-facts dt { color: #71839a; font-size: 12px; }
+.rnav-member-dialog-facts dd { margin: 5px 0 0; line-height: 1.6; }
+.rnav-member-dialog-links { display: flex; flex-wrap: wrap; gap: 10px 20px; margin-top: 28px; }
+.rnav-member-dialog-links a, .rnav-member-publications a { color: #1763c6; font-weight: 700; text-decoration: none; }
+.rnav-member-dialog-links span { color: #526986; }
+.rnav-member-publications { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+.rnav-member-publications li { padding: 20px 0; border-bottom: 1px solid #dce5ef; }
+.rnav-member-publications li:first-child { padding-top: 0; }
+.rnav-member-publications h3 { margin: 6px 0 8px; color: #0c2d57; font-size: 17px; line-height: 1.45; }
+.rnav-member-publications p { margin: 0; color: #526986; font-size: 13px; line-height: 1.65; }
+.rnav-member-publication-meta { color: #1763c6 !important; font-size: 11px !important; font-weight: 700; letter-spacing: .04em; }
+.rnav-member-publications div { display: flex; gap: 16px; margin-top: 10px; font-size: 13px; }
+.rnav-member-dialog-state { display: grid; min-height: 210px; place-items: center; align-content: center; gap: 14px; color: #526986; text-align: center; }
+.rnav-member-dialog-state button { min-height: 44px; padding: 0 18px; border: 1px solid #1769e0; border-radius: 6px; background: #fff; color: #1763c6; font-weight: 700; cursor: pointer; }
+.rnav-member-dialog :focus-visible { outline: 3px solid #226ed8; outline-offset: 3px; }
+@media (max-width: 640px) {
+  .rnav-member-dialog { width: calc(100vw - 20px); max-height: 92vh; border-radius: 10px; }
+  .rnav-member-dialog-header { grid-template-columns: 88px minmax(0, 1fr); gap: 16px; padding: 22px 56px 20px 20px; }
+  .rnav-member-dialog-photo { width: 88px; height: 114px; }
+  .rnav-member-dialog-header h2 { font-size: 25px; }
+  .rnav-member-dialog-research { font-size: 13px; }
+  .rnav-member-dialog-tabs { padding: 0 20px; }
+  .rnav-member-dialog-body { padding: 22px 20px 28px; }
+  .rnav-member-dialog-facts { grid-template-columns: 1fr; }
+}

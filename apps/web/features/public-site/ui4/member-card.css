@@ -23,6 +23,17 @@
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
+.rnav-member-card h3 button {
+  margin: -4px;
+  padding: 4px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.rnav-member-card h3 button:hover { color: #1763c6; text-decoration: underline; text-underline-offset: 3px; }
 .rnav-member-card p {
   margin: 0;
 }
@@ -64,7 +75,7 @@
 .rnav-member-portrait button {
   padding: 0;
   border: 0;
-  cursor: zoom-in;
+  cursor: pointer;
 }
 .rnav-member-portrait img {
   object-fit: cover;

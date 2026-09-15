@@ -5,7 +5,7 @@ import { requirePasswordChanged } from "../middleware/requirePasswordChanged.js"
 import { requirePermission } from "../middleware/requirePermission.js";
 import { createRequireSameOrigin } from "../middleware/requireSameOrigin.js";
 import { ProviderHttpError } from "../services/scholarly-sync/providers/http.js";
-import { bulkAcceptSchema, bulkIgnoreSchema, bulkMergeSchema, bulkPlanSchema, managedFieldsSchema, mergeWorkSchema, openAlexAuthorIdSchema, resolveAuthorSchema, resolveResearchItemSchema, scholarlyProfilePatchSchema, userIdSchema, verifyAuthorSchema, workIdSchema, researchItemIdSchema } from "../services/scholarly-sync/schemas.js";
+import { bulkAcceptSchema, bulkIgnoreSchema, bulkMergeSchema, bulkPlanSchema, managedFieldsSchema, mergeWorkSchema, openAlexAuthorIdSchema, resolveAuthorSchema, resolveResearchItemSchema, scholarlyProfilePatchSchema, selfScholarlyProfilePatchSchema, userIdSchema, verifyAuthorSchema, workIdSchema, researchItemIdSchema } from "../services/scholarly-sync/schemas.js";
 import { ScholarlySyncError, type ScholarlySyncService } from "../services/scholarly-sync/service.js";
 
 type Options = { authMiddleware: RequestHandler; service: ScholarlySyncService; trustProxy: boolean };
@@ -31,6 +31,23 @@ export function createScholarlySyncRouter({ authMiddleware, service, trustProxy 
   const router = Router(); const sameOrigin = createRequireSameOrigin({ trustProxy });
   router.use("/api/scholarly-sync", authMiddleware, requireLogin, requirePasswordChanged);
   const action = (permission: string, handler: RequestHandler): RequestHandler[] => [requirePermission(permission), sameOrigin, handler];
+  const selfAction = (handler: RequestHandler): RequestHandler[] => [sameOrigin, handler];
+
+  router.get("/api/scholarly-sync/me", async (request, response, next) => {
+    try { const profile = await service.getProfile(request.authUser!.id); if (!profile) { response.status(404).json({ error: "成员不存在" }); return; } response.json({ profile }); } catch (error) { if (!fail(response, error)) next(error); }
+  });
+  router.patch("/api/scholarly-sync/me", ...selfAction(async (request, response, next) => {
+    try { const profile = await service.updateProfile(request.authUser!.id, selfScholarlyProfilePatchSchema.parse(request.body), request.authUser!.id, "self"); if (!profile) { response.status(404).json({ error: "成员不存在" }); return; } response.json({ profile }); } catch (error) { if (!fail(response, error)) next(error); }
+  }));
+  router.post("/api/scholarly-sync/me/resolve", ...selfAction(async (request, response, next) => {
+    try { response.json({ candidates: await service.resolveAuthor(request.authUser!.id, resolveAuthorSchema.parse(request.body)) }); } catch (error) { if (!fail(response, error)) next(error); }
+  }));
+  router.post("/api/scholarly-sync/me/verify-author", ...selfAction(async (request, response, next) => {
+    try { const body = verifyAuthorSchema.parse(request.body); response.json(await service.verifyAuthor(request.authUser!.id, parsedParam(openAlexAuthorIdSchema, body.openalexAuthorId), request.authUser!.id, "self")); } catch (error) { if (!fail(response, error)) next(error); }
+  }));
+  router.post("/api/scholarly-sync/me/sync", ...selfAction(async (request, response, next) => {
+    try { response.json(await service.syncMember(request.authUser!.id, request.authUser!.id, "self")); } catch (error) { if (!fail(response, error)) next(error); }
+  }));
 
   router.get("/api/scholarly-sync/members/:userId", requirePermission("site.members.write"), async (request, response, next) => {
     try { const profile = await service.getProfile(parsedParam(userIdSchema, request.params.userId)); if (!profile) { response.status(404).json({ error: "成员不存在" }); return; } response.json({ profile }); } catch (error) { if (!fail(response, error)) next(error); }

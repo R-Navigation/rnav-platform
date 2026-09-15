@@ -59,6 +59,21 @@ function profileRow(row: Record<string, unknown>): ScholarlyProfile {
   };
 }
 
+export function resolveScholarlyProfileUpdate(current: ScholarlyProfile, input: Partial<ScholarlyProfile>) {
+  const orcidId = input.orcidId === undefined ? current.orcidId : normalizeOrcid(input.orcidId);
+  if (input.orcidId && !orcidId) throw new Error("ORCID 格式或校验位无效");
+  const orcidChanged = input.orcidId !== undefined && orcidId !== current.orcidId;
+  const identityStatus = orcidChanged ? (orcidId ? "pending" : "unconfigured") : current.identityStatus;
+  const openalexAuthorId = orcidChanged ? null : current.openalexAuthorId;
+  const syncEnabled = orcidChanged ? false : (input.syncEnabled ?? current.syncEnabled);
+  const syncFromYear = input.syncFromYear === undefined ? current.syncFromYear : input.syncFromYear;
+  const syncToYear = input.syncToYear === undefined ? current.syncToYear : input.syncToYear;
+  const newWorkPolicy = orcidChanged ? "review" : (input.newWorkPolicy ?? current.newWorkPolicy);
+  if (syncEnabled && identityStatus !== "verified") throw new Error("请先验证 OpenAlex 作者身份再启用同步");
+  if (newWorkPolicy === "auto" && (!syncFromYear && !syncToYear)) throw new Error("自动接收前必须设置同步年份范围");
+  return { orcidId, orcidChanged, identityStatus, openalexAuthorId, syncEnabled, syncFromYear, syncToYear, newWorkPolicy };
+}
+
 const profileSelect = `SELECT users.id user_id,users.display_name,user_profiles.name_zh,user_profiles.name_en,
   user_profiles.degree_level,user_profiles.member_status,user_profiles.enrollment_year,user_profiles.graduation_year,
   scholarly.orcid_id,scholarly.openalex_author_id,COALESCE(scholarly.identity_status,'unconfigured') identity_status,
@@ -82,23 +97,13 @@ export function createScholarlySyncRepository(pool: Pick<Pool, "query" | "connec
   };
   return {
     getProfile: (userId: string) => readProfile(pool, userId),
-    async saveProfile(userId: string, input: Partial<ScholarlyProfile>, actorId: string) {
+    async saveProfile(userId: string, input: Partial<ScholarlyProfile>, actorId: string, source: "admin" | "self" = "admin") {
       const client = await pool.connect();
       try {
         await client.query("BEGIN");
         const current = await readProfile(client, userId);
         if (!current) { await client.query("ROLLBACK"); return null; }
-        const orcidId = input.orcidId === undefined ? current.orcidId : normalizeOrcid(input.orcidId);
-        if (input.orcidId && !orcidId) throw new Error("ORCID 格式或校验位无效");
-        const orcidChanged = input.orcidId !== undefined && orcidId !== current.orcidId;
-        const identityStatus = orcidChanged ? (orcidId ? "pending" : "unconfigured") : current.identityStatus;
-        const openalexAuthorId = orcidChanged ? null : current.openalexAuthorId;
-        const syncEnabled = orcidChanged ? false : (input.syncEnabled ?? current.syncEnabled);
-        const syncFromYear = input.syncFromYear === undefined ? current.syncFromYear : input.syncFromYear;
-        const syncToYear = input.syncToYear === undefined ? current.syncToYear : input.syncToYear;
-        const newWorkPolicy = orcidChanged ? "review" : (input.newWorkPolicy ?? current.newWorkPolicy);
-        if (syncEnabled && identityStatus !== "verified") throw new Error("请先验证 OpenAlex 作者身份再启用同步");
-        if (newWorkPolicy === "auto" && (!syncFromYear && !syncToYear)) throw new Error("自动接收前必须设置同步年份范围");
+        const { orcidId, orcidChanged, identityStatus, openalexAuthorId, syncEnabled, syncFromYear, syncToYear, newWorkPolicy } = resolveScholarlyProfileUpdate(current, input);
         await client.query(
           `INSERT INTO member_scholarly_profiles(user_id,orcid_id,openalex_author_id,identity_status,sync_enabled,sync_from_year,sync_to_year,new_work_policy,updated_at)
            VALUES($1,$2,$3,$4,$5,$6,$7,$8,now())
@@ -107,13 +112,13 @@ export function createScholarlySyncRepository(pool: Pick<Pool, "query" | "connec
            sync_to_year=EXCLUDED.sync_to_year,new_work_policy=EXCLUDED.new_work_policy,updated_at=now()`,
           [userId, orcidId, openalexAuthorId, identityStatus, syncEnabled, syncFromYear, syncToYear, newWorkPolicy],
         );
-        await client.query("INSERT INTO audit_logs(actor_id,action,target_type,target_id,detail) VALUES($1,'scholarly.profile.update','member_scholarly_profile',$2,$3::jsonb)", [actorId, userId, JSON.stringify({ orcidChanged, syncEnabled, syncFromYear, syncToYear, newWorkPolicy })]);
+        await client.query("INSERT INTO audit_logs(actor_id,action,target_type,target_id,detail) VALUES($1,'scholarly.profile.update','member_scholarly_profile',$2,$3::jsonb)", [actorId, userId, JSON.stringify({ source, orcidChanged, syncEnabled, syncFromYear, syncToYear, newWorkPolicy })]);
         const saved = await readProfile(client, userId);
         await client.query("COMMIT");
         return saved;
       } catch (error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); }
     },
-    async verifyAuthor(userId: string, openalexAuthorId: string, orcidId: string | null, actorId: string) {
+    async verifyAuthor(userId: string, openalexAuthorId: string, orcidId: string | null, actorId: string, source: "admin" | "self" = "admin") {
       const client = await pool.connect();
       try {
         await client.query("BEGIN");
@@ -124,7 +129,7 @@ export function createScholarlySyncRepository(pool: Pick<Pool, "query" | "connec
            openalex_author_id=EXCLUDED.openalex_author_id,identity_status='verified',verified_at=now(),verified_by=$4,updated_at=now()`,
           [userId, orcidId, openalexAuthorId, actorId],
         );
-        await client.query("INSERT INTO audit_logs(actor_id,action,target_type,target_id,detail) VALUES($1,'scholarly.author.verify','member_scholarly_profile',$2,$3::jsonb)", [actorId, userId, JSON.stringify({ openalexAuthorId })]);
+        await client.query("INSERT INTO audit_logs(actor_id,action,target_type,target_id,detail) VALUES($1,'scholarly.author.verify','member_scholarly_profile',$2,$3::jsonb)", [actorId, userId, JSON.stringify({ source, openalexAuthorId })]);
         const saved = await readProfile(client, userId);
         await client.query("COMMIT");
         return saved;

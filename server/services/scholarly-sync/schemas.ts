@@ -18,6 +18,17 @@ export const scholarlyProfilePatchSchema = z.object({
   }
 });
 
+export const selfScholarlyProfilePatchSchema = z.object({
+  orcidId: z.string().trim().max(32).nullable().optional(),
+  syncEnabled: z.boolean().optional(),
+  syncFromYear: z.number().int().min(1900).max(2200).nullable().optional(),
+  syncToYear: z.number().int().min(1900).max(2200).nullable().optional(),
+}).strict().superRefine((value, context) => {
+  if (value.syncFromYear != null && value.syncToYear != null && value.syncToYear < value.syncFromYear) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "结束年份不能早于起始年份", path: ["syncToYear"] });
+  }
+});
+
 export const resolveAuthorSchema = z.object({
   orcidId: z.string().trim().max(32).nullable().optional(),
   name: z.string().trim().min(1).max(200).optional(),

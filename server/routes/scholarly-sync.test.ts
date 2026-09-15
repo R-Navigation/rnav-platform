@@ -14,12 +14,12 @@ const memberId = "00000000-0000-4000-8000-000000000002";
 const workId = "00000000-0000-4000-8000-000000000003";
 const user = (permissions: string[]): AuthenticatedUser => ({ id: "00000000-0000-4000-8000-000000000001", username: "alice", displayName: "Alice", baseTier: "normal", permissions });
 
-async function request(method: string, path: string, options: { user?: AuthenticatedUser; body?: unknown; origin?: string; error?: unknown } = {}) {
+async function request(method: string, path: string, options: { user?: AuthenticatedUser; body?: unknown; origin?: string; error?: unknown; missingProfile?: boolean } = {}) {
   const calls: string[] = [];
   const invoke = async (name: string, value: unknown = {}) => { calls.push(name); if (options.error) throw options.error; return value; };
   const service = {
-    getProfile: async () => invoke("getProfile", { userId: memberId }),
-    updateProfile: async () => invoke("updateProfile", { userId: memberId }),
+    getProfile: async () => invoke("getProfile", options.missingProfile ? null : { userId: memberId }),
+    updateProfile: async () => invoke("updateProfile", options.missingProfile ? null : { userId: memberId }),
     resolveAuthor: async () => invoke("resolveAuthor", []), verifyAuthor: async () => invoke("verifyAuthor", {}),
     syncMember: async () => invoke("syncMember", {}), listCandidates: async () => invoke("listCandidates", []),
     acceptWork: async () => invoke("acceptWork", {}), mergeWork: async () => invoke("mergeWork", {}),
@@ -48,6 +48,31 @@ test("scholarly member profiles require member administration permission", async
   assert.equal((await request("GET", `/api/scholarly-sync/members/${memberId}`)).status, 401);
   assert.equal((await request("GET", `/api/scholarly-sync/members/${memberId}`, { user: user(["site.content.write"]) })).status, 403);
   assert.equal((await request("GET", `/api/scholarly-sync/members/${memberId}`, { user: user(["site.members.write"]) })).status, 200);
+});
+
+test("self scholarly routes use the logged-in member without administrative permissions", async () => {
+  const current = user([]);
+  const read = await request("GET", "/api/scholarly-sync/me?userId=00000000-0000-4000-8000-000000000099", { user: current });
+  assert.equal(read.status, 200); assert.deepEqual(read.calls, ["getProfile"]);
+  const saved = await request("PATCH", "/api/scholarly-sync/me", { user: current, origin: "same", body: { orcidId: null, syncFromYear: 2020, syncToYear: 2026, syncEnabled: false } });
+  assert.equal(saved.status, 200); assert.deepEqual(saved.calls, ["updateProfile"]);
+  const resolved = await request("POST", "/api/scholarly-sync/me/resolve", { user: current, origin: "same", body: { name: "Alice" } });
+  assert.equal(resolved.status, 200); assert.deepEqual(resolved.calls, ["resolveAuthor"]);
+});
+
+test("self scholarly mutations require same origin and reject governance or target fields", async () => {
+  const current = user([]);
+  assert.equal((await request("PATCH", "/api/scholarly-sync/me", { user: current, body: {} })).status, 403);
+  const governance = await request("PATCH", "/api/scholarly-sync/me", { user: current, origin: "same", body: { newWorkPolicy: "auto" } });
+  assert.equal(governance.status, 400); assert.deepEqual(governance.calls, []);
+  const target = await request("PATCH", "/api/scholarly-sync/me", { user: current, origin: "same", body: { userId: memberId } });
+  assert.equal(target.status, 400); assert.deepEqual(target.calls, []);
+});
+
+test("system accounts are indistinguishable from missing self scholarly profiles", async () => {
+  const response = await request("GET", "/api/scholarly-sync/me", { user: user([]), missingProfile: true });
+  assert.equal(response.status, 404);
+  assert.deepEqual(response.body, { error: "成员不存在" });
 });
 
 test("scholarly mutations require their domain permission and same origin", async () => {

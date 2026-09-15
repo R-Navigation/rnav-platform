@@ -6,6 +6,7 @@ import { ConsoleApiError, consoleApi } from "@/lib/consoleApi";
 import { MediaPicker } from "@/features/console/ui/MediaPicker";
 import { academicStageLabels, publicProfileFieldGroups, type AcademicStage } from "@/features/console/members/profileModel";
 import { personIdentityFromChineseName } from "@/features/console/members/memberIdentity";
+import { ScholarlyProfileForm } from "@/features/console/scholarly/ScholarlyProfileForm";
 
 type PersonalLink = { labelZh: string; labelEn: string; url: string };
 type Profile = {
@@ -18,12 +19,15 @@ type Profile = {
 };
 
 const input = "mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none focus:border-cyan-600 focus:ring-2 focus:ring-cyan-100";
-const tabs = [["profile", "个人资料"], ["public", "公开展示"], ["security", "账号安全"]] as const;
+type Tab = "profile" | "public" | "scholarly" | "security";
+const personTabs: ReadonlyArray<readonly [Tab, string]> = [["profile", "个人资料"], ["public", "公开展示"], ["scholarly", "学术档案"], ["security", "账号安全"]];
+const systemTabs: ReadonlyArray<readonly [Tab, string]> = [["profile", "个人资料"], ["public", "公开展示"], ["security", "账号安全"]];
 
 export function ProfileConsole({ mustChangePassword }: { mustChangePassword: boolean }) {
   const params = useSearchParams(), router = useRouter();
-  const initial = mustChangePassword ? "security" : params.get("section") === "security" ? "security" : params.get("section") === "public" ? "public" : "profile";
-  const [tab, setTab] = useState(initial), [profile, setProfile] = useState<Profile | null>(null), [draft, setDraft] = useState<Profile | null>(null);
+  const requestedSection = params.get("section");
+  const initial: Tab = mustChangePassword ? "security" : requestedSection === "security" || requestedSection === "public" || requestedSection === "scholarly" ? requestedSection : "profile";
+  const [tab, setTab] = useState<Tab>(initial), [profile, setProfile] = useState<Profile | null>(null), [draft, setDraft] = useState<Profile | null>(null);
   const [busy, setBusy] = useState(false), [message, setMessage] = useState(""), [error, setError] = useState("");
   const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
   useEffect(() => { if (!mustChangePassword) consoleApi<Profile>("/api/profile").then((value) => { setProfile(value); setDraft(value); }).catch((reason) => setError(reason.message)); }, [mustChangePassword]);
@@ -35,7 +39,8 @@ export function ProfileConsole({ mustChangePassword }: { mustChangePassword: boo
     const identity = personIdentityFromChineseName(nameZh);
     return { ...current, nameZh, nameEn: identity?.nameEn ?? "", username: identity?.username ?? current.username };
   });
-  const switchTab = (next: typeof initial) => { if (mustChangePassword && next !== "security") return; setTab(next); router.replace(`/console/profile?section=${next}`, { scroll: false }); };
+  const switchTab = (next: Tab) => { if (mustChangePassword && next !== "security") return; setTab(next); router.replace(`/console/profile?section=${next}`, { scroll: false }); };
+  useEffect(() => { if (draft?.accountKind === "system" && tab === "scholarly") { setTab("profile"); router.replace("/console/profile?section=profile", { scroll: false }); } }, [draft?.accountKind, router, tab]);
 
   async function save() {
     if (!draft) return;
@@ -92,6 +97,7 @@ export function ProfileConsole({ mustChangePassword }: { mustChangePassword: boo
   if (error && !draft) return <div className="border border-red-200 bg-red-50 p-5 text-sm text-red-800">{error}</div>;
   if (!draft) return <p className="text-sm text-slate-600">正在加载个人资料...</p>;
   const alumni = draft.memberStatus === "alumni";
+  const tabs = draft.accountKind === "person" ? personTabs : systemTabs;
   return <section className="max-w-5xl">
     <div><p className="text-xs font-semibold text-cyan-800">账号与公开身份</p><h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950">个人资料</h1><p className="mt-2 text-sm text-slate-600">管理员决定账号是否列入官网；列入后，具体展示内容由你自己控制。</p></div>
     <div className="mt-7 flex border-b border-slate-200" role="tablist">{tabs.map(([key, label]) => <button className={`px-4 py-3 text-sm font-semibold ${tab === key ? "border-b-2 border-cyan-700 text-cyan-800" : "text-slate-600"}`} key={key} onClick={() => switchTab(key)}>{label}</button>)}</div>
@@ -117,6 +123,7 @@ export function ProfileConsole({ mustChangePassword }: { mustChangePassword: boo
       <button className="rounded-lg bg-cyan-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-cyan-800 disabled:opacity-50" disabled={busy || JSON.stringify(profile) === JSON.stringify(draft)} onClick={save}>{busy ? "保存中..." : "保存资料"}</button>
     </div> : null}
     {tab === "public" ? <PublicProfilePanel busy={busy} draft={draft} onSave={save} update={update} visible={visible} /> : null}
+    {tab === "scholarly" && draft.accountKind === "person" ? <div className="mt-7"><ScholarlyProfileForm mode="self" /></div> : null}
     {tab === "security" ? <PasswordForm busy={busy} error="" onSubmit={changePassword} /> : null}
     <MediaPicker onClose={() => setMediaPickerOpen(false)} onSelect={(asset) => { update("avatarAssetId", asset.id); update("avatarUrl", asset.url); update("avatarPositionX", 50); update("avatarPositionY", 50); update("avatarZoom", 1); }} open={mediaPickerOpen}/>
   </section>;

@@ -104,6 +104,46 @@ test("postdocs keep their role title but show the cohort as a PhD class", async 
   assert.deepEqual(member.degree, { zh: "2024级博士", en: "PhD, Class of 2024" });
 });
 
+test("public member detail is privacy-gated and loads distinct accepted final publications in two queries", async () => {
+  const calls: Array<{ sql: string; values?: unknown[] }> = [];
+  const queryable = { async query(sql: string, values?: unknown[]) {
+    calls.push({ sql, values });
+    if (sql.includes("account_user_id")) return { rows: [{
+      account_user_id: "user-1", username: "alice", member_slug: "alice", public_visible: true,
+      public_fields: ["name_zh", "research"], member_status: "current", degree_level: "phd",
+      name_zh: "张三", name_en: "Private English", research_interests_zh: "导航", research_interests_en: "Navigation",
+      enrollment_year: "2024", graduation_year: "", bio_zh: "Private bio", bio_en: "", major_zh: "", major_en: "",
+      thesis_zh: "", thesis_en: "", destination_zh: "", destination_en: "", personal_links: [], email: "private@example.com", phone: "private-phone",
+    }] };
+    if (sql.includes("WITH final_ids")) return { rows: [{
+      id: "paper-1", sort_order: 0, title_zh: "", title_en: "A Paper", publication_year: 2025,
+      venue_zh: "", venue_en: "Journal", publication_type: "journal", topic: "navigation",
+      public_authors: [{ name: { zh: "", en: "Alice" }, highlight: true }],
+      public_links: [{ label: { zh: "DOI", en: "DOI" }, href: "https://doi.org/10.1/example", icon: "doi", variant: "" }],
+    }] };
+    return { rows: [] };
+  } };
+  const detail = await createPostgresPublicSiteRepository(queryable as never).getTeamMemberProfile!("alice");
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].values?.[0], "alice");
+  assert.match(calls[0].sql, /public_visible=true/);
+  assert.match(calls[0].sql, /account_kind='person'/);
+  assert.match(calls[1].sql, /SELECT DISTINCT COALESCE/);
+  assert.match(calls[1].sql, /decision='accepted'/);
+  assert.match(calls[1].sql, /mergedIntoResearchItemId/);
+  assert.deepEqual(detail?.member.name, { zh: "张三", en: "" });
+  assert.equal(detail?.publications.length, 1);
+  assert.equal(JSON.stringify(detail).includes("private@example.com"), false);
+  assert.equal(JSON.stringify(detail).includes("Private bio"), false);
+});
+
+test("unknown or private public member details both return null without querying publications", async () => {
+  let calls = 0;
+  const repository = createPostgresPublicSiteRepository({ async query() { calls += 1; return { rows: [] }; } } as never);
+  assert.equal(await repository.getTeamMemberProfile!("private-member"), null);
+  assert.equal(calls, 1);
+});
+
 test("public lab projections expose only opted-in profile, public specs, and safe component fields",async()=>{const calls:string[]=[];const queryable={async query(sql:string){calls.push(sql);if(sql.includes("FROM lab_platform_public_profiles pp JOIN lab_platforms"))return{rows:[{id:"1",category:"robot",category_zh:"机器人",category_en:"Robots",title_zh:"平台",title_en:"Platform",description_zh:"公开",description_en:"Public",tags:["导航"],component_display_mode:"detail",sort_order:0,image_src:"/platform.jpg",code:"SECRET-CODE",vendor_serial:"SECRET-SERIAL",storage_location:"SECRET-ROOM",assigned_user_id:"SECRET-USER"}]};if(sql.includes("FROM lab_platform_specs"))return{rows:[{platform_id:"1",label_zh:"重量",label_en:"Weight",value_zh:"12",value_en:"12",unit:"kg",public_visible:true}]};if(sql.includes("FROM lab_assets a JOIN lab_device_types"))return{rows:[{current_platform_id:"1",platform_role_zh:"前视",platform_role_en:"Front",device_type:"相机",manufacturer:"Intel",model:"D455",code:"CAM-SECRET",vendor_serial:"SN-SECRET",storage_location:"ROOM",assigned_user_id:"USER"}]};return{rows:[]}}};const item=(await createPostgresPublicSiteRepository(queryable as never).getPublicLabPlatforms!())[0];const serialized=JSON.stringify(item);assert.equal(item.title.zh,"平台");assert.equal(item.specs.length,1);assert.equal(item.components[0].role.zh,"前视");for(const secret of["SECRET-CODE","SECRET-SERIAL","SECRET-ROOM","SECRET-USER","CAM-SECRET","SN-SECRET","ROOM","USER"])assert.equal(serialized.includes(secret),false);const platformSql=calls.find((sql)=>sql.includes("FROM lab_platform_public_profiles pp JOIN lab_platforms"))??"";const specSql=calls.find((sql)=>sql.includes("FROM lab_platform_specs"))??"";assert.match(platformSql,/WHERE pp\.public_visible=true/);assert.doesNotMatch(platformSql,/a\.code|vendor_serial|storage_location|assigned_user|borrower|procurement/);assert.match(specSql,/s\.public_visible=true/);});
 
 test("public platform component modes support none, summary, and detail",async()=>{const queryable={async query(sql:string){if(sql.includes("FROM lab_platform_public_profiles pp JOIN lab_platforms"))return{rows:["none","summary","detail"].map((mode,index)=>({id:String(index+1),category:"robot",title_zh:mode,title_en:mode,description_zh:"",description_en:"",tags:[],component_display_mode:mode,sort_order:index}))};if(sql.includes("FROM lab_assets a JOIN lab_device_types"))return{rows:[{current_platform_id:"1",platform_role_zh:"前视",device_type:"相机",manufacturer:"Intel",model:"D455"},{current_platform_id:"2",platform_role_zh:"前视",device_type:"相机",manufacturer:"Intel",model:"D455"},{current_platform_id:"2",platform_role_zh:"后视",device_type:"相机",manufacturer:"Intel",model:"D455"},{current_platform_id:"3",platform_role_zh:"前视",device_type:"相机",manufacturer:"Intel",model:"D455"}]};return{rows:[]}}};const items=await createPostgresPublicSiteRepository(queryable as never).getPublicLabPlatforms!();assert.equal(items[0].components.length,0);assert.deepEqual(items[1].components.map((item:any)=>item.count),[2]);assert.equal(items[2].components[0].role.zh,"前视");});

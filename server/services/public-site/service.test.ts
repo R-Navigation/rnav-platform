@@ -27,6 +27,10 @@ class MemoryPublicSiteRepository implements PublicSiteRepository {
   async getTeamMembers() {
     return this.team;
   }
+  async getTeamMemberProfile(slug: string) {
+    const member = this.team.find((item) => item.slug === slug);
+    return member ? { member, publications: this.research } : null;
+  }
   async getFacilityItems() {
     return this.facilities;
   }
@@ -147,6 +151,17 @@ test("team groups members and derives a stable fallback slug", async () => {
   assert.equal(team.facultyLead?.slug, "advisor-professor-li");
   assert.equal(team.phdStudents[0].slug, "phd-zhang-san");
   assert.deepEqual(team.phdStudents[0].degree, { zh: "博士", en: "PhD" });
+});
+
+test("member detail applies the same public projection and sanitizes formal publication links", async () => {
+  const repository = new MemoryPublicSiteRepository();
+  repository.team = [{ slug: "alice", group: "phd", name: { zh: "爱丽丝" }, internalOrcid: "PRIVATE" }];
+  repository.research = [{ id: "paper-1", title: { en: "Paper" }, links: [{ label: { en: "DOI" }, href: "javascript:alert(1)" }] }];
+  const detail = await createPublicSiteService(repository).getTeamMemberProfile("alice");
+  assert.equal(detail?.member.slug, "alice");
+  assert.equal(JSON.stringify(detail).includes("PRIVATE"), false);
+  assert.equal(detail?.publications[0].links[0].href, "");
+  assert.equal(await createPublicSiteService(repository).getTeamMemberProfile("missing"), null);
 });
 
 test("homepage returns only configured authoritative records in configured order", async () => {

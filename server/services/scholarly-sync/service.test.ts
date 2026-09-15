@@ -49,3 +49,50 @@ test("merge keeps a second OpenAlex identity as an accepted alias when the publi
   const retry = await service.mergeWork("merge", "paper-existing", "actor");
   assert.equal(retry.unchanged, true); assert.equal(retry.alias, true);
 });
+
+test("a member-triggered sync always leaves newly discovered works for review", async () => {
+  const queries: string[] = [];
+  const client = {
+    async query(sql: string) {
+      queries.push(sql);
+      if (sql.includes("pg_try_advisory_lock")) return { rows: [{ locked: true }] };
+      return { rows: [], rowCount: 1 };
+    },
+    release() {},
+  };
+  const repository = {
+    getProfile: async () => ({ userId: "member-1" }),
+    createRun: async () => "run-1",
+    listSyncProfiles: async () => [{ userId: "member-1", openalexAuthorId: "A1", syncFromYear: 2020, syncToYear: 2026, newWorkPolicy: "auto" }],
+    findStoredWork: async () => null,
+    upsertDiscoveredWork: async () => ({ created: true, changed: true, row: { id: "work-1", decision: "pending", source_type: "openalex", source_snapshot: {} } }),
+    updateMemberSync: async () => undefined,
+    finishRun: async () => undefined,
+  };
+  const service = createScholarlySyncService({
+    pool: { query: client.query.bind(client), connect: async () => client } as never,
+    repository: repository as never,
+    openAlex: { getWorksByAuthor: async () => [{ id: "https://openalex.org/W1", title: "New paper", publication_year: 2026, type: "article", authorships: [] }] } as never,
+    crossref: {} as never, enabled: true,
+    providerConfig: { openAlexKeyConfigured: true, crossrefContactConfigured: false },
+  });
+  const result = await service.syncMember("member-1", "member-1", "self");
+  assert.equal(result.candidatesCreated, 1);
+  assert.equal(result.worksUpdated, 0);
+  assert.equal(queries.some((sql) => sql.startsWith("SELECT * FROM scholarly_works")), false);
+});
+
+test("system accounts are rejected before author lookup or synchronization", async () => {
+  let providerCalled = false, connected = false;
+  const service = createScholarlySyncService({
+    pool: { query: async () => ({ rows: [] }), connect: async () => { connected = true; throw new Error("must not connect"); } } as never,
+    repository: { getProfile: async () => null } as never,
+    openAlex: { getAuthor: async () => { providerCalled = true; return {}; } } as never,
+    crossref: {} as never, enabled: true,
+    providerConfig: { openAlexKeyConfigured: true, crossrefContactConfigured: false },
+  });
+  await assert.rejects(service.verifyAuthor("system-1", "A1", "system-1", "self"), /成员不存在/);
+  await assert.rejects(service.syncMember("system-1", "system-1", "self"), /成员不存在/);
+  assert.equal(providerCalled, false);
+  assert.equal(connected, false);
+});

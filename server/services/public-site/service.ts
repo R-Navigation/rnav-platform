@@ -12,6 +12,7 @@ export interface PublicSiteRepository {
   getResearchItems(): Promise<PublicRecord[]>;
   getNewsItems(): Promise<PublicRecord[]>;
   getTeamMembers(): Promise<PublicRecord[]>;
+  getTeamMemberProfile?(slug: string): Promise<{ member: PublicRecord; publications: PublicRecord[] } | null>;
   getFacilityItems(): Promise<PublicRecord[]>;
   getPublicLabPlatforms?(): Promise<PublicRecord[]>;
   getPublicLabAssets?(): Promise<PublicRecord[]>;
@@ -807,6 +808,14 @@ export function createPublicSiteService(repository: PublicSiteRepository) {
         undergraduateStudents: group("undergrad"),
         alumni: group("alumni"),
         recruitment: config.recruitment,
+      };
+    },
+    async getTeamMemberProfile(slug: string): Promise<PublicRecord | null> {
+      const result = await repository.getTeamMemberProfile?.(clean(slug));
+      if (!result) return null;
+      return {
+        member: normalizeMember(result.member),
+        publications: result.publications.map(normalizeItem),
       };
     },
     async getFacilities(): Promise<PublicRecord> {

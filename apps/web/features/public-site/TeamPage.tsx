@@ -4,6 +4,7 @@ import { useLanguage } from "./LanguageProvider";
 import { getLocalizedText } from "./i18n";
 import { ContactCta, Heading, Hero, Media } from "./ui4/Primitives";
 import { MemberCard } from "./ui4/MemberCard";
+import { MemberProfileDialog } from "./ui4/MemberProfileDialog";
 import { isDemoContent } from "./ui4/content";
 import { sanitizePublicUrl } from "./url-sanitizer";
 
@@ -11,11 +12,8 @@ export function TeamPage({ data }: { data: any }) {
   const { locale } = useLanguage(),
     zh = locale === "zh",
     text = (value: unknown) => getLocalizedText(value, locale);
-  const [photo, setPhoto] = useState<any>(null),
-    dialog = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    if (photo) dialog.current?.showModal();
-  }, [photo]);
+  const [selectedMember, setSelectedMember] = useState<any>(null),
+    profileTrigger = useRef<HTMLElement | null>(null);
   useEffect(() => {
     const reveal = () => {
       let id = window.location.hash.slice(1);
@@ -57,27 +55,24 @@ export function TeamPage({ data }: { data: any }) {
     },
     { key: "alumni", en: "ALUMNI", members: data.alumni ?? [] },
   ];
+  const openProfile = (member: any) => {
+    profileTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setSelectedMember(member);
+  };
+  const closeProfile = () => {
+    setSelectedMember(null);
+    window.requestAnimationFrame(() => profileTrigger.current?.focus());
+  };
   const person = (member: any) => (
     <MemberCard
       key={member.slug}
       member={member}
       locale={locale}
+      onOpenProfile={() => openProfile(member)}
       portrait={
-        sanitizePublicUrl(member.image?.src) ? (
-          <button
-            type="button"
-            aria-label={
-              zh
-                ? `查看${text(member.name)}的照片`
-                : `View ${text(member.name)}’s photo`
-            }
-            onClick={() => setPhoto(member)}
-          >
-            <Media image={member.image} alt={text(member.name)} sizes="80px" />
-          </button>
-        ) : (
-          <Media alt={text(member.name)} />
-        )
+        <button type="button" aria-haspopup="dialog" aria-label={zh ? `查看${text(member.name)}的公开资料` : `View ${text(member.name)}’s public profile`} onClick={() => openProfile(member)}>
+          {sanitizePublicUrl(member.image?.src) ? <Media image={member.image} alt={text(member.name)} sizes="80px" /> : <Media alt={text(member.name)} />}
+        </button>
       }
     />
   );
@@ -135,31 +130,7 @@ export function TeamPage({ data }: { data: any }) {
         image={data.header?.image}
         layered
       />
-      <dialog
-        className="v41-photo-dialog"
-        ref={dialog}
-        onClose={() => setPhoto(null)}
-        onClick={(event) => {
-          if (event.target === event.currentTarget) dialog.current?.close();
-        }}
-      >
-        <button
-          type="button"
-          onClick={() => dialog.current?.close()}
-          aria-label={zh ? "关闭照片" : "Close photo"}
-        >
-          ×
-        </button>
-        {photo && (
-          <>
-            <img
-              src={sanitizePublicUrl(photo.image?.src)}
-              alt={text(photo.name)}
-            />
-            <p>{text(photo.name)}</p>
-          </>
-        )}
-      </dialog>
+      <MemberProfileDialog locale={locale} member={selectedMember} onClose={closeProfile} />
     </main>
   );
 }

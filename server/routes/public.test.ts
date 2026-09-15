@@ -23,6 +23,8 @@ async function request(path: string, service: PublicSiteService) {
   let statusCode = 200;
   await new Promise<void>((resolve, reject) => {
     const response = {
+      get statusCode() { return statusCode; },
+      set statusCode(code: number) { statusCode = code; },
       setHeader() {
         return this;
       },
@@ -76,3 +78,12 @@ for (const [route, method] of Object.entries(methods)) {
     assert.deepEqual(response.body, { source: method });
   });
 }
+
+test("GET /api/public/team-members/:slug returns a profile and hides unknown members", async () => {
+  const found = await request("/api/public/team-members/alice", { getTeamMemberProfile: async (slug: string) => ({ member: { slug }, publications: [] }) } as unknown as PublicSiteService);
+  assert.equal(found.statusCode, 200);
+  assert.deepEqual(found.body, { member: { slug: "alice" }, publications: [] });
+  const missing = await request("/api/public/team-members/private", { getTeamMemberProfile: async () => null } as unknown as PublicSiteService);
+  assert.equal(missing.statusCode, 404);
+  assert.deepEqual(missing.body, { error: "成员不存在" });
+});

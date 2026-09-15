@@ -117,7 +117,7 @@ export function createScholarlySyncService(options: {
     } catch (error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); }
   }
 
-  async function sync(triggerType: "scheduled" | "manual_all" | "manual_member" | "backfill", actorId: string | null, userId?: string) {
+  async function sync(triggerType: "scheduled" | "manual_all" | "manual_member" | "backfill", actorId: string | null, userId?: string, source: "admin" | "self" = "admin") {
     if (!options.enabled) throw new ScholarlySyncError("论文自动同步尚未启用", "SYNC_DISABLED", 503);
     const lockClient = await pool.connect();
     let locked = false; let runId: string | null = null;
@@ -150,7 +150,7 @@ export function createScholarlySyncService(options: {
             if (upserted.created) summary.candidatesCreated += 1;
             if (crossrefAttempted) await pool.query("UPDATE scholarly_works SET source_snapshot=jsonb_set(source_snapshot,'{crossrefEnriched}',to_jsonb($2::boolean),true) WHERE id=$1", [upserted.row.id, crossrefEnriched]);
             const possibleDuplicate = Boolean((upserted.row.source_snapshot as { possibleDuplicateResearchItemId?: string } | undefined)?.possibleDuplicateResearchItemId);
-            if (upserted.created && profile.newWorkPolicy === "auto" && !possibleDuplicate) {
+            if (upserted.created && source !== "self" && profile.newWorkPolicy === "auto" && !possibleDuplicate) {
               await acceptWork(String(upserted.row.id), actorId, true); summary.worksUpdated += 1;
             } else if (upserted.row.decision === "accepted" && upserted.row.source_type === "openalex" && upserted.changed) {
               if (await applyManagedUpdates(String(upserted.row.id), mapped)) summary.worksUpdated += 1;
@@ -164,7 +164,7 @@ export function createScholarlySyncService(options: {
         }
       }
       summary.status = summary.failures ? (summary.membersChecked > 0 && successfulMembers === 0 ? "failed" : "partial") : "success";
-      if (actorId) await pool.query("INSERT INTO audit_logs(actor_id,action,target_type,target_id,detail) VALUES($1,'scholarly.sync.manual','scholarly_sync_run',$2,$3::jsonb)", [actorId, runId, JSON.stringify({ triggerType, userId: userId ?? null })]);
+      if (actorId) await pool.query("INSERT INTO audit_logs(actor_id,action,target_type,target_id,detail) VALUES($1,'scholarly.sync.manual','scholarly_sync_run',$2,$3::jsonb)", [actorId, runId, JSON.stringify({ source, triggerType, userId: userId ?? null })]);
       return { skipped: false, runId, ...summary };
     } catch (error) {
       summary.status = "failed"; summary.failures += 1; summary.errors.push({ message: cleanError(error) }); throw error;
@@ -264,7 +264,7 @@ export function createScholarlySyncService(options: {
 
   return {
     getProfile: (userId: string) => repository.getProfile(userId),
-    updateProfile: (userId: string, input: Parameters<ScholarlySyncRepository["saveProfile"]>[1], actorId: string) => repository.saveProfile(userId, input, actorId),
+    updateProfile: (userId: string, input: Parameters<ScholarlySyncRepository["saveProfile"]>[1], actorId: string, source: "admin" | "self" = "admin") => repository.saveProfile(userId, input, actorId, source),
     async resolveAuthor(userId: string, input: { orcidId?: string | null; name?: string; institution?: string }) {
       const profile = await repository.getProfile(userId);
       if (!profile) throw new ScholarlySyncError("成员不存在", "NOT_FOUND", 404);
@@ -272,14 +272,17 @@ export function createScholarlySyncService(options: {
       if (input.orcidId && !orcid) throw new ScholarlySyncError("ORCID 格式或校验位无效", "INVALID_ORCID");
       return orcid ? [await openAlex.resolveAuthorByOrcid(orcid)] : openAlex.searchAuthorCandidates(input.name || profile.memberName, input.institution);
     },
-    async verifyAuthor(userId: string, openalexAuthorId: string, actorId: string) {
-      const candidate = await openAlex.getAuthor(openalexAuthorId);
+    async verifyAuthor(userId: string, openalexAuthorId: string, actorId: string, source: "admin" | "self" = "admin") {
       const profile = await repository.getProfile(userId);
       if (!profile) throw new ScholarlySyncError("成员不存在", "NOT_FOUND", 404);
+      const candidate = await openAlex.getAuthor(openalexAuthorId);
       if (profile.orcidId && candidate.orcid && profile.orcidId !== candidate.orcid) throw new ScholarlySyncError("所选 OpenAlex 作者与成员 ORCID 不一致", "ORCID_CONFLICT", 409);
-      return { profile: await repository.verifyAuthor(userId, candidate.id, profile.orcidId ?? candidate.orcid, actorId), candidate };
+      return { profile: await repository.verifyAuthor(userId, candidate.id, profile.orcidId ?? candidate.orcid, actorId, source), candidate };
     },
-    syncMember: (userId: string, actorId: string) => sync("manual_member", actorId, userId),
+    async syncMember(userId: string, actorId: string, source: "admin" | "self" = "admin") {
+      if (!(await repository.getProfile(userId))) throw new ScholarlySyncError("成员不存在", "NOT_FOUND", 404);
+      return sync("manual_member", actorId, userId, source);
+    },
     syncAll: (actorId: string | null, scheduled = false) => sync(scheduled ? "scheduled" : "manual_all", actorId),
     backfill: (actorId: string | null = null) => sync("backfill", actorId),
     listCandidates: (decision: "pending" | "ignored") => repository.listCandidates(decision),

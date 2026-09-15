@@ -40,6 +40,18 @@ export function createPublicRouter({
       response.status(status).send("Public image unavailable");
     }
   });
+  router.get("/api/public/team-members/:slug", async (request, response, next) => {
+    try {
+      const slug = String(request.params.slug ?? "").trim();
+      if (!slug || slug.length > 200) { response.status(404).json({ error: "成员不存在" }); return; }
+      const profile = await service.getTeamMemberProfile(slug);
+      if (!profile) { response.status(404).json({ error: "成员不存在" }); return; }
+      response.set("Cache-Control", "public, max-age=60, stale-while-revalidate=300").json(profile);
+    } catch (error) {
+      console.error("[public-site] GET /api/public/team-members/:slug failed", error);
+      next(error);
+    }
+  });
   const routes = {
     bootstrap: service.getBootstrap,
     home: service.getHome,
