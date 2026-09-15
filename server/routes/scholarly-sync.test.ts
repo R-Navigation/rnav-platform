@@ -72,6 +72,12 @@ test("duplicate external identities return a safe conflict response", async () =
   assert.deepEqual(response.body, { error: "ORCID、OpenAlex ID 或 DOI 已被其他记录使用", code: "EXTERNAL_ID_CONFLICT" });
 });
 
+test("an existing research-item source binding is not misreported as an ORCID conflict", async () => {
+  const error = Object.assign(new Error("database detail must not leak"), { code: "23505", constraint: "scholarly_works_research_item_unique" });
+  const response = await request("POST", `/api/scholarly-sync/works/${workId}/merge`, { user: user(["site.content.write"]), origin: "same", body: { researchItemId: "paper-1" }, error });
+  assert.equal(response.status, 409); assert.deepEqual(response.body, { error: "目标论文已经绑定其他同步来源，请刷新候选后重试合并", code: "SOURCE_BINDING_CONFLICT" });
+});
+
 test("bulk routes reject more than 500 works before service calls", async () => {
   const ids = Array.from({ length: 501 }, (_, index) => `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`);
   const response = await request("POST", "/api/scholarly-sync/bulk/plan", { user: user(["site.content.write"]), origin: "same", body: { workIds: ids } });

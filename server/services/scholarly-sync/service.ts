@@ -62,7 +62,9 @@ export function createScholarlySyncService(options: {
       const row = result.rows[0];
       if (!row) throw new ScholarlySyncError("候选论文不存在", "NOT_FOUND", 404);
       if (row.decision === "accepted" && row.research_item_id) { await client.query("COMMIT"); return { researchItemId: row.research_item_id, unchanged: true }; }
-      const snapshot = row.source_snapshot as { normalized?: NormalizedScholarlyWork & { mappedType?: string } };
+      const snapshot = row.source_snapshot as { normalized?: NormalizedScholarlyWork & { mappedType?: string }; mergedIntoResearchItemId?: string };
+      if (row.decision === "accepted" && snapshot?.mergedIntoResearchItemId) { await client.query("COMMIT"); return { researchItemId: snapshot.mergedIntoResearchItemId, unchanged: true }; }
+      if (row.decision === "accepted") throw new ScholarlySyncError("已接收候选缺少有效论文绑定，请人工检查", "STATE_CONFLICT", 409);
       if (!snapshot?.normalized) throw new ScholarlySyncError("候选论文缺少规范化元数据", "INVALID_SNAPSHOT", 409);
       const normalized = { ...snapshot.normalized, mappedType: snapshot.normalized.mappedType ?? mapPublicationType(snapshot.normalized.providerType) };
       const linked = await client.query<{ openalex_author_id: string }>(`SELECT profile.openalex_author_id FROM member_scholarly_profiles profile JOIN scholarly_work_members member ON member.user_id=profile.user_id WHERE member.work_id=$1 AND profile.identity_status='verified'`, [workId]);
@@ -191,15 +193,28 @@ export function createScholarlySyncService(options: {
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
-      const work = await client.query<{ decision: string; research_item_id: string | null }>("SELECT decision,research_item_id FROM scholarly_works WHERE id=$1 FOR UPDATE", [workId]);
+      const work = await client.query<{ decision: string; research_item_id: string | null; source_snapshot: Record<string, unknown> }>("SELECT decision,research_item_id,source_snapshot FROM scholarly_works WHERE id=$1 FOR UPDATE", [workId]);
       if (!work.rowCount) throw new ScholarlySyncError("候选论文不存在", "NOT_FOUND", 404);
       if (work.rows[0].decision === "accepted" && work.rows[0].research_item_id === researchItemId) { await client.query("COMMIT"); return { researchItemId, unchanged: true }; }
+      if (work.rows[0].decision === "accepted" && work.rows[0].source_snapshot?.mergedIntoResearchItemId === researchItemId) { await client.query("COMMIT"); return { researchItemId, unchanged: true, alias: true }; }
       if (work.rows[0].decision === "accepted") throw new ScholarlySyncError("候选已绑定其他论文，请刷新后重试", "STATE_CONFLICT", 409);
       const item = await client.query("SELECT id FROM research_items WHERE id=$1 FOR UPDATE", [researchItemId]);
       if (!item.rowCount) throw new ScholarlySyncError("目标论文不存在", "NOT_FOUND", 404);
+      const targetRegistry = await client.query<{ id: string }>("SELECT id FROM scholarly_works WHERE research_item_id=$1 AND id<>$2 FOR UPDATE", [researchItemId, workId]);
+      if (targetRegistry.rows[0]) {
+        await client.query(
+          `INSERT INTO scholarly_work_members(work_id,user_id,author_position,matched_by,confidence)
+           SELECT $2,user_id,author_position,matched_by,confidence FROM scholarly_work_members WHERE work_id=$1
+           ON CONFLICT(work_id,user_id) DO UPDATE SET author_position=COALESCE(scholarly_work_members.author_position,EXCLUDED.author_position),confidence=GREATEST(scholarly_work_members.confidence,EXCLUDED.confidence)`,
+          [workId, targetRegistry.rows[0].id],
+        );
+        await client.query("UPDATE scholarly_works SET decision='accepted',research_item_id=NULL,managed_fields=ARRAY[]::text[],source_snapshot=jsonb_set(source_snapshot,'{mergedIntoResearchItemId}',to_jsonb($2::text),true),reviewed_at=now(),reviewed_by=$3,version=version+1 WHERE id=$1", [workId, researchItemId, actorId]);
+        await audit(client, actorId, "scholarly.work.merge", "scholarly_work", workId, { researchItemId, targetRegistryId: targetRegistry.rows[0].id, alias: true });
+        await client.query("COMMIT"); return { researchItemId, unchanged: false, alias: true };
+      }
       await client.query("UPDATE scholarly_works SET decision='accepted',research_item_id=$2,managed_fields=ARRAY[]::text[],reviewed_at=now(),reviewed_by=$3,version=version+1 WHERE id=$1", [workId, researchItemId, actorId]);
-      await audit(client, actorId, "scholarly.work.merge", "scholarly_work", workId, { researchItemId });
-      await client.query("COMMIT"); return { researchItemId, unchanged: false };
+      await audit(client, actorId, "scholarly.work.merge", "scholarly_work", workId, { researchItemId, alias: false });
+      await client.query("COMMIT"); return { researchItemId, unchanged: false, alias: false };
     } catch (error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); }
   }
 

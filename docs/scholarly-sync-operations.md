@@ -41,6 +41,8 @@ CMS 支持按成员、年份、期刊/会议和重复风险筛选候选。批量
 
 “安全接收”只接受仍为 pending、元数据完整且没有重复提示的论文。标题指纹只生成建议；标题、年份和作者均有重合时显示高置信合并建议，但仍需管理员确认。OpenAlex Work ID 或 DOI 精确匹配会归一到同一 registry，一篇共同论文可关联多个成员，不会重复生成公开论文。
 
+若 OpenAlex 自身为同一成果提供了多个 Work ID 或预出版/正式出版 DOI，合并时保留已有公开论文为主记录，并把第二个来源保存为已确认别名；别名不占用第二个 `research_item_id`，也不会生成重复的公开论文。其成员关系会归并到主 registry，重复执行同一合并操作是幂等的。
+
 ## systemd timer
 
 安装 `deploy/systemd/rnav-scholarly-sync.service` 与 `deploy/systemd/rnav-scholarly-sync.timer`，然后执行：

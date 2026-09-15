@@ -18,7 +18,11 @@ function fail(response: Response, error: unknown) {
     const status = error.code.endsWith("_TIMEOUT") ? 504 : error.status === 429 ? 429 : 502;
     response.status(status).json({ error: error.message, code: error.code, provider: error.provider, retryAt: error.retryAt, rateLimit: error.rateLimit }); return true;
   }
-  if (error && typeof error === "object" && "code" in error && error.code === "23505") { response.status(409).json({ error: "ORCID、OpenAlex ID 或 DOI 已被其他记录使用", code: "EXTERNAL_ID_CONFLICT" }); return true; }
+  if (error && typeof error === "object" && "code" in error && error.code === "23505") {
+    const constraint = "constraint" in error ? String(error.constraint) : "";
+    if (constraint === "scholarly_works_research_item_unique") { response.status(409).json({ error: "目标论文已经绑定其他同步来源，请刷新候选后重试合并", code: "SOURCE_BINDING_CONFLICT" }); return true; }
+    response.status(409).json({ error: "ORCID、OpenAlex ID 或 DOI 已被其他记录使用", code: "EXTERNAL_ID_CONFLICT" }); return true;
+  }
   if (error instanceof Error && /ORCID|OpenAlex|同步/.test(error.message)) { response.status(400).json({ error: error.message }); return true; }
   return false;
 }

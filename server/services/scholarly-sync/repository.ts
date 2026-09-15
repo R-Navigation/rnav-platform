@@ -153,7 +153,10 @@ export function createScholarlySyncRepository(pool: Pick<Pool, "query" | "connec
         const previousHash = row?.provider_hash ? String(row.provider_hash) : null;
         let created = false;
         const snapshot: Record<string, unknown> = { normalized: work };
-        if ((row?.source_snapshot as Record<string, unknown> | undefined)?.crossrefEnriched) snapshot.crossrefEnriched = true;
+        const previousSnapshot = row?.source_snapshot as Record<string, unknown> | undefined;
+        if (previousSnapshot?.crossrefEnriched) snapshot.crossrefEnriched = true;
+        if (previousSnapshot?.possibleDuplicateResearchItemId) snapshot.possibleDuplicateResearchItemId = previousSnapshot.possibleDuplicateResearchItemId;
+        if (previousSnapshot?.mergedIntoResearchItemId) snapshot.mergedIntoResearchItemId = previousSnapshot.mergedIntoResearchItemId;
         if (!row) {
           const possibleRows = await client.query<{ id: string; title_en: string; title_zh: string; publication_year: number | null }>(
             "SELECT id,title_en,title_zh,publication_year FROM research_items WHERE publication_year IS NOT DISTINCT FROM $1",
