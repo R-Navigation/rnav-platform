@@ -30,7 +30,8 @@
     "procurement:import-images": "tsx scripts/procurement/import-catalog-images.ts",
     "procurement:scrape-jd-public": "tsx scripts/procurement/scrape-jd-public.ts",
     "scholarly:sync": "tsx scripts/scholarly/sync-publications.ts",
-    "scholarly:backfill": "tsx scripts/scholarly/backfill-existing-publications.ts"
+    "scholarly:backfill": "tsx scripts/scholarly/backfill-existing-publications.ts",
+    "scholarly:reset-member": "tsx scripts/scholarly/reset-member-sync.ts"
   },
   "devDependencies": {
     "csv-parse": "^6.2.1",
