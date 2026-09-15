@@ -42,11 +42,11 @@ export function PublicationSyncPanel({ researchItems }: { researchItems: Array<{
   const highConfidenceMerges = selectedCandidates.filter((candidate) => candidate.duplicateSuggestion?.confidence === "high").map((candidate) => ({ workId: candidate.id, researchItemId: candidate.duplicateSuggestion!.researchItemId }));
   const chunks = <T,>(items: T[]) => Array.from({ length: Math.ceil(items.length / 50) }, (_, index) => items.slice(index * 50, index * 50 + 50));
   const executeChunks = async (ids: string[], operation: (chunk: string[]) => Promise<BulkResult>) => {
-    const totals = { requested: 0, accepted: 0, ignored: 0, merged: 0, failed: 0, skipped: 0 };
+    const totals = { requested: 0, accepted: 0, ignored: 0, merged: 0, failed: 0, skipped: 0, failedIds: [] as string[] };
     const batches = chunks(ids);
     for (const [index, batch] of batches.entries()) {
       setProgress(`正在处理第 ${index + 1}/${batches.length} 批（${batch.length} 篇）…`);
-      const result = await operation(batch); totals.requested += result.requested; totals.accepted += result.accepted ?? 0; totals.ignored += result.ignored ?? 0; totals.merged += result.merged ?? 0; totals.failed += result.failed; totals.skipped += result.skipped ?? 0;
+      const result = await operation(batch); totals.requested += result.requested; totals.accepted += result.accepted ?? 0; totals.ignored += result.ignored ?? 0; totals.merged += result.merged ?? 0; totals.failed += result.failed; totals.skipped += result.skipped ?? 0; totals.failedIds.push(...result.results.filter((item)=>item.status==="failed").map((item)=>item.workId));
     }
     return totals;
   };
@@ -55,10 +55,10 @@ export function PublicationSyncPanel({ researchItems }: { researchItems: Array<{
     try {
       let totals;
       if (kind === "merge") {
-        const batches = chunks(highConfidenceMerges); totals = { requested: 0, accepted: 0, ignored: 0, merged: 0, failed: 0, skipped: 0 };
-        for (const [index, batch] of batches.entries()) { setProgress(`正在合并第 ${index + 1}/${batches.length} 批（${batch.length} 篇）…`); const result = await scholarlyApi.bulkMerge(batch); totals.requested += result.requested; totals.merged += result.merged ?? 0; totals.failed += result.failed; }
+        const batches = chunks(highConfidenceMerges); totals = { requested: 0, accepted: 0, ignored: 0, merged: 0, failed: 0, skipped: 0, failedIds: [] as string[] };
+        for (const [index, batch] of batches.entries()) { setProgress(`正在合并第 ${index + 1}/${batches.length} 批（${batch.length} 篇）…`); const result = await scholarlyApi.bulkMerge(batch); totals.requested += result.requested; totals.merged += result.merged ?? 0; totals.failed += result.failed; totals.failedIds.push(...result.results.filter((item)=>item.status==="failed").map((item)=>item.workId)); }
       } else totals = await executeChunks(selected, kind === "accept" ? scholarlyApi.bulkAccept : scholarlyApi.bulkIgnore);
-      await load(); setSelected([]); setPlan(null); setMessage(`批量操作完成：处理 ${totals.requested} 篇，接收 ${totals.accepted}，合并 ${totals.merged}，忽略 ${totals.ignored}，跳过 ${totals.skipped}，失败 ${totals.failed}。`);
+      await load(); setSelected([...new Set(totals.failedIds)]); setPlan(null); setMessage(`批量操作完成：处理 ${totals.requested} 篇，接收 ${totals.accepted}，合并 ${totals.merged}，忽略 ${totals.ignored}，跳过 ${totals.skipped}，失败 ${totals.failed}。${totals.failed ? "失败项已保留选择，可直接重试。" : ""}`);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "批量操作失败，可保留选择后重试"); } finally { setBusy(false); setProgress(""); }
   };
   const makePlan = async () => {
