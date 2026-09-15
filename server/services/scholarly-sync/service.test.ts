@@ -82,6 +82,27 @@ test("a member-triggered sync always leaves newly discovered works for review", 
   assert.equal(queries.some((sql) => sql.startsWith("SELECT * FROM scholarly_works")), false);
 });
 
+test("scheduled sync never auto-accepts when the configured year range is incomplete", async () => {
+  const queries: string[] = [];
+  const client = { async query(sql: string) { queries.push(sql); if (sql.includes("pg_try_advisory_lock")) return { rows: [{ locked: true }] }; return { rows: [], rowCount: 1 }; }, release() {} };
+  const repository = {
+    createRun: async () => "run-1",
+    listSyncProfiles: async () => [{ userId: "member-1", openalexAuthorId: "A1", syncFromYear: 2020, syncToYear: null, newWorkPolicy: "auto" }],
+    findStoredWork: async () => null,
+    upsertDiscoveredWork: async () => ({ created: true, changed: true, row: { id: "work-1", decision: "pending", source_type: "openalex", source_snapshot: {} } }),
+    updateMemberSync: async () => undefined,
+    finishRun: async () => undefined,
+  };
+  const service = createScholarlySyncService({
+    pool: { query: client.query.bind(client), connect: async () => client } as never, repository: repository as never,
+    openAlex: { getWorksByAuthor: async () => [{ id: "https://openalex.org/W1", title: "New paper", publication_year: 2026, type: "article", authorships: [] }] } as never,
+    crossref: {} as never, enabled: true, providerConfig: { openAlexKeyConfigured: true, crossrefContactConfigured: false },
+  });
+  const result = await service.syncAll(null, true);
+  assert.equal(result.candidatesCreated, 1); assert.equal(result.worksUpdated, 0);
+  assert.equal(queries.some((sql) => sql.startsWith("SELECT * FROM scholarly_works")), false);
+});
+
 test("system accounts are rejected before author lookup or synchronization", async () => {
   let providerCalled = false, connected = false;
   const service = createScholarlySyncService({

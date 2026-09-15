@@ -121,6 +121,7 @@ test("getMigrationFiles returns SQL migrations in lexical order", async () => {
       "039_member_account_profile_consolidation.sql",
       "040_normalize_person_account_names.sql",
       "041_scholarly_sync.sql",
+      "042_scholarly_sync_admin_settings.sql",
     ],
   );
 });
@@ -162,6 +163,18 @@ test("scholarly sync migration is additive, guards duplicate DOI, and registers 
   assert.match(migration, /Duplicate DOI values found across research_items/);
   assert.match(migration, /SELECT 'manual'.*'accepted'.*item\.id/s);
   assert.doesNotMatch(migration, /DROP\s+(?:TABLE|COLUMN)|TRUNCATE/i);
+});
+
+test("scholarly admin settings keep provider secrets outside ordinary settings JSON", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const migration = await readFile(new URL("./migrations/042_scholarly_sync_admin_settings.sql", import.meta.url), "utf8");
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS scholarly_sync_settings/);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS system_secrets/);
+  assert.match(migration, /ciphertext bytea NOT NULL/);
+  assert.match(migration, /nonce bytea NOT NULL/);
+  assert.match(migration, /auth_tag bytea NOT NULL/);
+  assert.doesNotMatch(migration, /INSERT INTO system_secrets|OPENALEX_API_KEY|value_json/i);
+  assert.doesNotMatch(migration, /^\s*(?:DROP\s+(?:TABLE|COLUMN)|TRUNCATE|DELETE)\b/im);
 });
 
 test("asset procurement source migration is additive and keeps procurement deletion safe", async () => {

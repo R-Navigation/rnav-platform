@@ -43,16 +43,20 @@ async function audit(client: Pick<PoolClient, "query">, actorId: string, action:
   await client.query("INSERT INTO audit_logs(actor_id,action,target_type,target_id,detail) VALUES($1,$2,$3,$4,$5::jsonb)", [actorId, action, targetType, targetId, JSON.stringify(detail)]);
 }
 
+type ProviderConfig = { openAlexKeyConfigured: boolean; crossrefContactConfigured: boolean };
+type DynamicOption<T> = T | (() => T | Promise<T>);
+
 export function createScholarlySyncService(options: {
   pool: Pick<Pool, "query" | "connect">;
   repository: ScholarlySyncRepository;
   openAlex: OpenAlexClient;
   crossref: CrossrefClient;
-  enabled: boolean;
-  providerConfig: { openAlexKeyConfigured: boolean; crossrefContactConfigured: boolean };
+  enabled: DynamicOption<boolean>;
+  providerConfig: DynamicOption<ProviderConfig>;
   openAlexStatus?: OpenAlexStatusMonitor;
 }) {
   const { pool, repository, openAlex, crossref } = options;
+  const resolveOption = async <T,>(value: DynamicOption<T>) => typeof value === "function" ? (value as () => T | Promise<T>)() : value;
 
   async function acceptWork(workId: string, actorId: string | null, automatic = false) {
     const client = await pool.connect();
@@ -118,7 +122,7 @@ export function createScholarlySyncService(options: {
   }
 
   async function sync(triggerType: "scheduled" | "manual_all" | "manual_member" | "backfill", actorId: string | null, userId?: string, source: "admin" | "self" = "admin") {
-    if (!options.enabled) throw new ScholarlySyncError("论文自动同步尚未启用", "SYNC_DISABLED", 503);
+    if (!(await resolveOption(options.enabled))) throw new ScholarlySyncError("论文自动同步尚未启用", "SYNC_DISABLED", 503);
     const lockClient = await pool.connect();
     let locked = false; let runId: string | null = null;
     let successfulMembers = 0;
@@ -150,7 +154,10 @@ export function createScholarlySyncService(options: {
             if (upserted.created) summary.candidatesCreated += 1;
             if (crossrefAttempted) await pool.query("UPDATE scholarly_works SET source_snapshot=jsonb_set(source_snapshot,'{crossrefEnriched}',to_jsonb($2::boolean),true) WHERE id=$1", [upserted.row.id, crossrefEnriched]);
             const possibleDuplicate = Boolean((upserted.row.source_snapshot as { possibleDuplicateResearchItemId?: string } | undefined)?.possibleDuplicateResearchItemId);
-            if (upserted.created && source !== "self" && profile.newWorkPolicy === "auto" && !possibleDuplicate) {
+            const automaticPolicyAllowed = profile.newWorkPolicy === "auto"
+              && Number.isInteger(profile.syncFromYear) && Number.isInteger(profile.syncToYear)
+              && profile.syncFromYear! <= profile.syncToYear!;
+            if (upserted.created && source !== "self" && automaticPolicyAllowed && !possibleDuplicate) {
               await acceptWork(String(upserted.row.id), actorId, true); summary.worksUpdated += 1;
             } else if (upserted.row.decision === "accepted" && upserted.row.source_type === "openalex" && upserted.changed) {
               if (await applyManagedUpdates(String(upserted.row.id), mapped)) summary.worksUpdated += 1;
@@ -294,11 +301,21 @@ export function createScholarlySyncService(options: {
     bulkMerge,
     ignoreWork: (workId: string, actorId: string) => decision(workId, "ignore", actorId),
     restoreWork: (workId: string, actorId: string) => decision(workId, "restore", actorId),
-    status: async () => ({ ...(await repository.status()), enabled: options.enabled, providers: { openAlex: options.openAlexStatus?.getStatus() ?? { configured: options.providerConfig.openAlexKeyConfigured, health: options.providerConfig.openAlexKeyConfigured ? "unknown" : "key_missing", checkedAt: null, lastSuccessAt: null, httpStatus: null, rateLimit: { limit: null, remaining: null, creditsUsed: null, resetSeconds: null, resetAt: null }, message: options.providerConfig.openAlexKeyConfigured ? "尚未检测 OpenAlex 状态" : "OpenAlex API Key 未配置" }, crossref: { configured: options.providerConfig.crossrefContactConfigured, health: options.providerConfig.crossrefContactConfigured ? "configured" : "contact_missing" } } }),
+    status: async () => {
+      const [repositoryStatus, enabled, providerConfig] = await Promise.all([repository.status(), resolveOption(options.enabled), resolveOption(options.providerConfig)]);
+      options.openAlexStatus?.setConfigured(providerConfig.openAlexKeyConfigured);
+      return { ...repositoryStatus, enabled, providers: { openAlex: options.openAlexStatus?.getStatus() ?? { configured: providerConfig.openAlexKeyConfigured, health: providerConfig.openAlexKeyConfigured ? "unknown" : "key_missing", checkedAt: null, lastSuccessAt: null, httpStatus: null, rateLimit: { limit: null, remaining: null, creditsUsed: null, resetSeconds: null, resetAt: null }, message: providerConfig.openAlexKeyConfigured ? "尚未检测 OpenAlex 状态" : "OpenAlex API Key 未配置" }, crossref: { configured: providerConfig.crossrefContactConfigured, health: providerConfig.crossrefContactConfigured ? "configured" : "contact_missing" } } };
+    },
     async checkOpenAlexStatus(actorId: string) {
-      const status = options.openAlexStatus ? await options.openAlexStatus.check(openAlex) : null;
+      const providerConfig = await resolveOption(options.providerConfig);
+      options.openAlexStatus?.setConfigured(providerConfig.openAlexKeyConfigured);
+      const status = options.openAlexStatus ? await options.openAlexStatus.check(openAlex, true) : null;
       await auditBulk(actorId, "scholarly.provider.check", { provider: "openalex", health: status?.health ?? "unknown", checkedAt: status?.checkedAt ?? null });
       return status;
+    },
+    async resetOpenAlexStatus() {
+      const providerConfig = await resolveOption(options.providerConfig);
+      options.openAlexStatus?.reset(providerConfig.openAlexKeyConfigured);
     },
     listRuns: () => repository.listRuns(),
     getResearchItemSyncInfo: (id: string) => repository.getResearchItemSyncInfo(id),

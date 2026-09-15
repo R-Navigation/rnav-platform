@@ -4,7 +4,8 @@ import { openAlexAuthorSchema, openAlexWorkSchema } from "../schemas.js";
 import type { OpenAlexAuthorCandidate } from "../types.js";
 import { fetchProviderJson, type ProviderFetch, type ProviderObservation } from "./http.js";
 
-type Options = { baseUrl?: string; apiKey?: string; fetchImpl?: ProviderFetch; onObservation?: (observation: ProviderObservation) => void };
+type DynamicValue = string | undefined | (() => string | undefined | Promise<string | undefined>);
+type Options = { baseUrl?: string; apiKey?: DynamicValue; fetchImpl?: ProviderFetch; onObservation?: (observation: ProviderObservation) => void };
 const authorListSchema = z.object({ results: z.array(openAlexAuthorSchema) }).passthrough();
 const workListSchema = z.object({ results: z.array(openAlexWorkSchema), meta: z.object({ next_cursor: z.string().nullable().optional() }).passthrough() }).passthrough();
 const authorSelect = "id,display_name,orcid,works_count,last_known_institutions,affiliations";
@@ -12,10 +13,12 @@ const workSelect = "id,doi,title,publication_year,publication_date,type,authorsh
 
 export function createOpenAlexClient(options: Options = {}) {
   const baseUrl = new URL(options.baseUrl ?? "https://api.openalex.org");
+  const apiKey = async () => typeof options.apiKey === "function" ? options.apiKey() : options.apiKey;
   const request = async (path: string, params: Record<string, string | undefined> = {}) => {
     const url = new URL(path, baseUrl);
     for (const [key, value] of Object.entries(params)) if (value) url.searchParams.set(key, value);
-    if (options.apiKey) url.searchParams.set("api_key", options.apiKey);
+    const key = await apiKey();
+    if (key) url.searchParams.set("api_key", key);
     return fetchProviderJson("OpenAlex", url, { fetchImpl: options.fetchImpl, onObservation: options.onObservation });
   };
 
@@ -82,7 +85,8 @@ export function createOpenAlexClient(options: Options = {}) {
     },
     async checkRateLimit() {
       const url = new URL("/rate-limit", baseUrl);
-      if (options.apiKey) url.searchParams.set("api_key", options.apiKey);
+      const key = await apiKey();
+      if (key) url.searchParams.set("api_key", key);
       return fetchProviderJson("OpenAlex", url, { fetchImpl: options.fetchImpl, retries: 0, onObservation: options.onObservation });
     },
   };

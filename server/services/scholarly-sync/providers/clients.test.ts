@@ -21,3 +21,20 @@ test("Crossref uses polite identification without exposing it outside the provid
   const work = await client.getWorkByDoi("10.1000/abc");
   assert.equal(work.DOI, "10.1000/ABC"); assert.equal(observed.url?.searchParams.get("mailto"), "scholarly@example.org"); assert.match(observed.userAgent ?? "", /RNAV-Scholarly-Sync/);
 });
+
+test("provider clients resolve updated credentials for each request", async () => {
+  let key = "first-key"; const openAlexKeys: Array<string | null> = [];
+  const openAlex = createOpenAlexClient({ apiKey: async () => key, fetchImpl: async (input) => {
+    const url = new URL(String(input)); openAlexKeys.push(url.searchParams.get("api_key"));
+    return url.pathname === "/works" ? Response.json({ results: [], meta: { next_cursor: null } }) : Response.json({ id: "https://openalex.org/A1", display_name: "Researcher" });
+  } });
+  await openAlex.getAuthor("A1"); key = "second-key"; await openAlex.getAuthor("A1");
+  assert.deepEqual(openAlexKeys, ["first-key", "first-key", "second-key", "second-key"]);
+
+  let email = "first@example.org"; const crossrefEmails: Array<string | null> = [];
+  const crossref = createCrossrefClient({ contactEmail: async () => email, fetchImpl: async (input) => {
+    crossrefEmails.push(new URL(String(input)).searchParams.get("mailto")); return Response.json({ message: { DOI: "10.1000/test" } });
+  } });
+  await crossref.getWorkByDoi("10.1000/test"); email = "second@example.org"; await crossref.getWorkByDoi("10.1000/test");
+  assert.deepEqual(crossrefEmails, ["first@example.org", "second@example.org"]);
+});

@@ -9,13 +9,16 @@ export type OpenAlexStatus = {
 const emptyRateLimit = (): ProviderRateLimit => ({ limit: null, remaining: null, creditsUsed: null, resetSeconds: null, resetAt: null });
 
 export function createOpenAlexStatusMonitor(configured: boolean, ttlMs = 60_000) {
-  let status: OpenAlexStatus = { configured, health: configured ? "unknown" : "key_missing", checkedAt: null, lastSuccessAt: null, httpStatus: null, rateLimit: emptyRateLimit(), message: configured ? "尚未检测 OpenAlex 状态" : "OpenAlex API Key 未配置" };
+  const initial = (value: boolean): OpenAlexStatus => ({ configured: value, health: value ? "unknown" : "key_missing", checkedAt: null, lastSuccessAt: null, httpStatus: null, rateLimit: emptyRateLimit(), message: value ? "尚未检测 OpenAlex 状态" : "OpenAlex API Key 未配置" });
+  let status: OpenAlexStatus = initial(configured);
   const observe = (observation: ProviderObservation) => {
     status = { ...status, ...observation, configured, lastSuccessAt: observation.health === "healthy" ? observation.checkedAt : status.lastSuccessAt };
   };
   return {
     observe,
     getStatus: () => status,
+    reset(value = configured) { configured = value; status = initial(value); },
+    setConfigured(value: boolean) { if (configured !== value) { configured = value; status = initial(value); } },
     async check(client: Pick<OpenAlexClient, "checkRateLimit">, force = false) {
       if (!configured) return status;
       const fresh = status.checkedAt && Date.now() - new Date(status.checkedAt).getTime() < ttlMs;

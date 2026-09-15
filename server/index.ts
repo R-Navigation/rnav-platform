@@ -35,6 +35,7 @@ import { createCosGateway } from "./services/media/cosGateway.js";
 import { createMediaService } from "./services/media/mediaService.js";
 import { createMediaRouter } from "./routes/media.js";
 import { createSettingsService } from "./services/settings/settingsService.js";
+import { createScholarlySyncSettingsService } from "./services/settings/scholarlySyncSettingsService.js";
 import { createSettingsRouter } from "./routes/settings.js";
 import { resolveWebDir } from "./webDir.js";
 import { createNotificationService } from "./services/notifications/notificationService.js";
@@ -58,14 +59,25 @@ await web.prepare();
 const publicService = createPublicSiteService(createPostgresPublicSiteRepository(pool));
 const siteAdminService = createSiteAdminService(createPostgresSiteAdminRepository(pool));
 const profileService = createProfileService(pool);
+const scholarlySyncSettingsService = createScholarlySyncSettingsService(pool, {
+  encryptionSecret: env.sessionSecret,
+  fallbacks: {
+    enabled: env.scholarlySyncEnabled,
+    openAlexApiKey: env.openAlexApiKey,
+    crossrefContactEmail: env.scholarlySyncContactEmail,
+  },
+});
 const openAlexStatus = createOpenAlexStatusMonitor(Boolean(env.openAlexApiKey));
 const scholarlySyncService = createScholarlySyncService({
   pool,
   repository: createScholarlySyncRepository(pool),
-  openAlex: createOpenAlexClient({ baseUrl: env.scholarlySyncOpenAlexBaseUrl, apiKey: env.openAlexApiKey, onObservation: openAlexStatus.observe }),
-  crossref: createCrossrefClient({ baseUrl: env.scholarlySyncCrossrefBaseUrl, contactEmail: env.scholarlySyncContactEmail }),
-  enabled: env.scholarlySyncEnabled,
-  providerConfig: { openAlexKeyConfigured: Boolean(env.openAlexApiKey), crossrefContactConfigured: Boolean(env.scholarlySyncContactEmail) },
+  openAlex: createOpenAlexClient({ baseUrl: env.scholarlySyncOpenAlexBaseUrl, apiKey: async () => (await scholarlySyncSettingsService.getRuntimeConfig()).openAlexApiKey, onObservation: openAlexStatus.observe }),
+  crossref: createCrossrefClient({ baseUrl: env.scholarlySyncCrossrefBaseUrl, contactEmail: async () => (await scholarlySyncSettingsService.getRuntimeConfig()).crossrefContactEmail }),
+  enabled: async () => (await scholarlySyncSettingsService.getRuntimeConfig()).enabled,
+  providerConfig: async () => {
+    const config = await scholarlySyncSettingsService.getRuntimeConfig();
+    return { openAlexKeyConfigured: Boolean(config.openAlexApiKey), crossrefContactConfigured: Boolean(config.crossrefContactEmail) };
+  },
   openAlexStatus,
 });
 let hub: ReturnType<typeof createMonitorWebSocketHub>;
@@ -84,7 +96,7 @@ const app = createApp({
     createUsersRouter({ authMiddleware, service: createUserAdminService(pool), profileService, trustProxy: true }),
     createPermissionsRouter({ authMiddleware, service: createPermissionAdminService(pool), trustProxy: true }),
     createMediaRouter({ authMiddleware, service: createMediaService(pool, createCosGateway({ secretId: env.cosSecretId, secretKey: env.cosSecretKey, region: env.cosRegion, bucket: env.cosBucket }),), trustProxy: true, maxBytes: env.mediaMaxUploadBytes, publicBaseUrl: env.cosPublicBaseUrl ?? `${env.publicBaseUrl}/media`, pathPrefix: env.cosPathPrefix }),
-    createSettingsRouter({ authMiddleware, service: createSettingsService(pool), trustProxy: true }),
+    createSettingsRouter({ authMiddleware, service: createSettingsService(pool), scholarlySettings: scholarlySyncSettingsService, scholarlySync: scholarlySyncService, trustProxy: true }),
     createNotificationsRouter({ authMiddleware, service: createNotificationService(pool), trustProxy: true }),
     createScholarlySyncRouter({ authMiddleware, service: scholarlySyncService, trustProxy: true }),
     createConsoleRouter({ authMiddleware, dashboardService: createConsoleDashboardService(pool) }), createPublicRouter({ service: publicService }),

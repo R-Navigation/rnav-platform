@@ -14,3 +14,12 @@ test("OpenAlex status caches successful observations for sixty seconds", async (
   await monitor.check(client as never); await monitor.check(client as never);
   assert.equal(calls, 1); assert.equal(monitor.getStatus().health, "healthy"); assert.ok(monitor.getStatus().lastSuccessAt);
 });
+
+test("OpenAlex status resets when the configured key changes", () => {
+  const monitor = createOpenAlexStatusMonitor(true);
+  monitor.observe({ health: "healthy", checkedAt: "2026-09-15T00:00:00.000Z", httpStatus: 200, rateLimit: { limit: 100, remaining: 90, creditsUsed: 10, resetSeconds: 30, resetAt: "2026-09-15T00:00:30.000Z" }, message: "ok" });
+  monitor.reset(true);
+  assert.equal(monitor.getStatus().health, "unknown"); assert.equal(monitor.getStatus().rateLimit.remaining, null);
+  monitor.setConfigured(false);
+  assert.equal(monitor.getStatus().health, "key_missing");
+});

@@ -70,7 +70,7 @@ export function resolveScholarlyProfileUpdate(current: ScholarlyProfile, input: 
   const syncToYear = input.syncToYear === undefined ? current.syncToYear : input.syncToYear;
   const newWorkPolicy = orcidChanged ? "review" : (input.newWorkPolicy ?? current.newWorkPolicy);
   if (syncEnabled && identityStatus !== "verified") throw new Error("请先验证 OpenAlex 作者身份再启用同步");
-  if (newWorkPolicy === "auto" && (!syncFromYear && !syncToYear)) throw new Error("自动接收前必须设置同步年份范围");
+  if (newWorkPolicy === "auto" && (!Number.isInteger(syncFromYear) || !Number.isInteger(syncToYear) || syncFromYear! > syncToYear!)) throw new Error("自动接收前必须设置有效的同步起止年份");
   return { orcidId, orcidChanged, identityStatus, openalexAuthorId, syncEnabled, syncFromYear, syncToYear, newWorkPolicy };
 }
 
