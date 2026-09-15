@@ -21,9 +21,25 @@ API Key 只能进入服务端环境，不应写进 Git、浏览器响应、审�
 ```bash
 npm run scholarly:sync
 npm run scholarly:backfill
+npm run scholarly:reset-member -- --user <USER_ID> --dry-run
+npm run scholarly:reset-member -- --user <USER_ID> --execute --confirm <USERNAME>
 ```
 
 `scholarly:sync` 使用 PostgreSQL advisory lock，已有任务运行时会安全跳过。`scholarly:backfill` 只为带 DOI 的现有人工论文绑定 OpenAlex 来源，不修改其展示字段。
+
+`scholarly:reset-member` 仅用于清理成员错误的首次同步。执行前必须完成 custom-format 备份、用 `pg_restore --list` 验证备份，并暂停 timer。脚本默认 dry-run；正式执行还必须输入当前账号名。它会保留成员 ORCID/OpenAlex 已验证身份、同步运行历史、审计历史、人工论文、共享论文和首页重点论文；遇到可能伤及这些数据的情况会直接阻止执行。脚本完成后保持该成员 `sync_enabled=false`，不要自动重新同步。
+
+## Provider 状态与额度
+
+CMS 的论文自动同步面板显示 OpenAlex 的真实健康状态、服务端 Key 配置状态、最近一次检测、剩余额度、本次 credits 消耗和额度重置时间。“检测状态”最多每 60 秒请求一次 OpenAlex；页面加载不会自动轮询，也不会将 API Key 返回浏览器。
+
+状态会区分 Key 缺失、鉴权失败、额度耗尽、频率限制、超时和上游服务异常。限额是 credits/budget，不要在文案或告警中换算为固定请求次数；不同端点的消耗不同，生产告警应以响应头为准。
+
+## 批量整理
+
+CMS 支持按成员、年份、期刊/会议和重复风险筛选候选。批量计划和批量动作的服务端上限为 500 条，前端每 50 条顺序提交；每篇论文独立事务处理，因此单项失败不会回滚已经成功的项目，最终摘要可用于重试失败项。
+
+“安全接收”只接受仍为 pending、元数据完整且没有重复提示的论文。标题指纹只生成建议；标题、年份和作者均有重合时显示高置信合并建议，但仍需管理员确认。OpenAlex Work ID 或 DOI 精确匹配会归一到同一 registry，一篇共同论文可关联多个成员，不会重复生成公开论文。
 
 ## systemd timer
 

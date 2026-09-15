@@ -5,7 +5,7 @@ import { requirePasswordChanged } from "../middleware/requirePasswordChanged.js"
 import { requirePermission } from "../middleware/requirePermission.js";
 import { createRequireSameOrigin } from "../middleware/requireSameOrigin.js";
 import { ProviderHttpError } from "../services/scholarly-sync/providers/http.js";
-import { managedFieldsSchema, mergeWorkSchema, openAlexAuthorIdSchema, resolveAuthorSchema, resolveResearchItemSchema, scholarlyProfilePatchSchema, userIdSchema, verifyAuthorSchema, workIdSchema, researchItemIdSchema } from "../services/scholarly-sync/schemas.js";
+import { bulkAcceptSchema, bulkIgnoreSchema, bulkMergeSchema, bulkPlanSchema, managedFieldsSchema, mergeWorkSchema, openAlexAuthorIdSchema, resolveAuthorSchema, resolveResearchItemSchema, scholarlyProfilePatchSchema, userIdSchema, verifyAuthorSchema, workIdSchema, researchItemIdSchema } from "../services/scholarly-sync/schemas.js";
 import { ScholarlySyncError, type ScholarlySyncService } from "../services/scholarly-sync/service.js";
 
 type Options = { authMiddleware: RequestHandler; service: ScholarlySyncService; trustProxy: boolean };
@@ -14,7 +14,10 @@ const parsedParam = <T>(schema: { parse(value: unknown): T }, value: unknown) =>
 function fail(response: Response, error: unknown) {
   if (error instanceof ZodError) { response.status(400).json({ error: "Validation failed", issues: error.issues }); return true; }
   if (error instanceof ScholarlySyncError) { response.status(error.status).json({ error: error.message, code: error.code }); return true; }
-  if (error instanceof ProviderHttpError) { response.status(502).json({ error: `${error.provider} 暂时不可用`, code: "PROVIDER_UNAVAILABLE" }); return true; }
+  if (error instanceof ProviderHttpError) {
+    const status = error.code.endsWith("_TIMEOUT") ? 504 : error.status === 429 ? 429 : 502;
+    response.status(status).json({ error: error.message, code: error.code, provider: error.provider, retryAt: error.retryAt, rateLimit: error.rateLimit }); return true;
+  }
   if (error && typeof error === "object" && "code" in error && error.code === "23505") { response.status(409).json({ error: "ORCID、OpenAlex ID 或 DOI 已被其他记录使用", code: "EXTERNAL_ID_CONFLICT" }); return true; }
   if (error instanceof Error && /ORCID|OpenAlex|同步/.test(error.message)) { response.status(400).json({ error: error.message }); return true; }
   return false;
@@ -56,6 +59,18 @@ export function createScholarlySyncRouter({ authMiddleware, service, trustProxy 
   router.post("/api/scholarly-sync/works/:id/restore", ...action("site.content.write", async (request, response, next) => {
     try { response.json(await service.restoreWork(parsedParam(workIdSchema, request.params.id), request.authUser!.id)); } catch (error) { if (!fail(response, error)) next(error); }
   }));
+  router.post("/api/scholarly-sync/bulk/plan", ...action("site.content.write", async (request, response, next) => {
+    try { response.json(await service.planBulk(bulkPlanSchema.parse(request.body).workIds)); } catch (error) { if (!fail(response, error)) next(error); }
+  }));
+  router.post("/api/scholarly-sync/bulk/accept", ...action("site.content.write", async (request, response, next) => {
+    try { response.json(await service.bulkAccept(bulkAcceptSchema.parse(request.body).workIds, request.authUser!.id)); } catch (error) { if (!fail(response, error)) next(error); }
+  }));
+  router.post("/api/scholarly-sync/bulk/ignore", ...action("site.content.write", async (request, response, next) => {
+    try { response.json(await service.bulkIgnore(bulkIgnoreSchema.parse(request.body).workIds, request.authUser!.id)); } catch (error) { if (!fail(response, error)) next(error); }
+  }));
+  router.post("/api/scholarly-sync/bulk/merge", ...action("site.content.write", async (request, response, next) => {
+    try { response.json(await service.bulkMerge(bulkMergeSchema.parse(request.body).items, request.authUser!.id)); } catch (error) { if (!fail(response, error)) next(error); }
+  }));
 
   router.get("/api/scholarly-sync/research-items/:id", requirePermission("site.content.write"), async (request, response, next) => {
     try { response.json({ sync: await service.getResearchItemSyncInfo(parsedParam(researchItemIdSchema, request.params.id)) }); } catch (error) { if (!fail(response, error)) next(error); }
@@ -70,6 +85,9 @@ export function createScholarlySyncRouter({ authMiddleware, service, trustProxy 
   router.get("/api/scholarly-sync/status", requirePermission("site.content.write"), async (_request, response, next) => {
     try { response.json(await service.status()); } catch (error) { if (!fail(response, error)) next(error); }
   });
+  router.post("/api/scholarly-sync/providers/openalex/check", ...action("site.content.write", async (request, response, next) => {
+    try { response.json({ provider: await service.checkOpenAlexStatus(request.authUser!.id) }); } catch (error) { if (!fail(response, error)) next(error); }
+  }));
   router.post("/api/scholarly-sync/sync-all", ...action("site.content.write", async (request, response, next) => {
     try { response.json(await service.syncAll(request.authUser!.id)); } catch (error) { if (!fail(response, error)) next(error); }
   }));

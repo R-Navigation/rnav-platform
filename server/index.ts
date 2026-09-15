@@ -44,6 +44,7 @@ import { createOpenAlexClient } from "./services/scholarly-sync/providers/openAl
 import { createCrossrefClient } from "./services/scholarly-sync/providers/crossrefClient.js";
 import { createScholarlySyncService } from "./services/scholarly-sync/service.js";
 import { createScholarlySyncRouter } from "./routes/scholarly-sync.js";
+import { createOpenAlexStatusMonitor } from "./services/scholarly-sync/providers/openAlexStatus.js";
 
 const env = loadEnv();
 const pool = new pg.Pool({ connectionString: env.databaseUrl });
@@ -57,13 +58,15 @@ await web.prepare();
 const publicService = createPublicSiteService(createPostgresPublicSiteRepository(pool));
 const siteAdminService = createSiteAdminService(createPostgresSiteAdminRepository(pool));
 const profileService = createProfileService(pool);
+const openAlexStatus = createOpenAlexStatusMonitor(Boolean(env.openAlexApiKey));
 const scholarlySyncService = createScholarlySyncService({
   pool,
   repository: createScholarlySyncRepository(pool),
-  openAlex: createOpenAlexClient({ baseUrl: env.scholarlySyncOpenAlexBaseUrl, apiKey: env.openAlexApiKey }),
+  openAlex: createOpenAlexClient({ baseUrl: env.scholarlySyncOpenAlexBaseUrl, apiKey: env.openAlexApiKey, onObservation: openAlexStatus.observe }),
   crossref: createCrossrefClient({ baseUrl: env.scholarlySyncCrossrefBaseUrl, contactEmail: env.scholarlySyncContactEmail }),
   enabled: env.scholarlySyncEnabled,
   providerConfig: { openAlexKeyConfigured: Boolean(env.openAlexApiKey), crossrefContactConfigured: Boolean(env.scholarlySyncContactEmail) },
+  openAlexStatus,
 });
 let hub: ReturnType<typeof createMonitorWebSocketHub>;
 const monitorService = createMonitorService(pool, { deviceTokenPepper: env.deviceTokenPepper, broadcast: (type, payload, audience) => hub.broadcast(type, payload, audience), onRealtimeError: (error) => console.error("Monitor realtime error", error) });

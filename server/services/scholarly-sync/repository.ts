@@ -4,6 +4,46 @@ import type { ManagedField, NormalizedScholarlyWork, ScholarlyProfile } from "./
 
 type Queryable = Pick<Pool, "query"> | Pick<PoolClient, "query">;
 
+const candidateSelect = `SELECT work.id,work.decision,work.source_type,work.openalex_work_id,work.doi_normalized,work.source_snapshot,
+  work.first_seen_at,work.last_seen_at,work.version,work.research_item_id,
+  COALESCE(jsonb_agg(jsonb_build_object('userId',users.id,'name',COALESCE(NULLIF(profile.name_zh,''),NULLIF(profile.name_en,''),users.display_name),'position',member.author_position) ORDER BY member.author_position) FILTER(WHERE users.id IS NOT NULL),'[]'::jsonb) members
+  FROM scholarly_works work LEFT JOIN scholarly_work_members member ON member.work_id=work.id
+  LEFT JOIN users ON users.id=member.user_id LEFT JOIN user_profiles profile ON profile.user_id=users.id`;
+
+const normalizedName = (value: string) => value.toLocaleLowerCase().normalize("NFKD").replace(/[^\p{L}\p{N}]+/gu, "");
+export function countAuthorOverlap(candidateAuthors: string[], existingAuthors: string[]) {
+  const candidates = new Set(candidateAuthors.map(normalizedName).filter(Boolean));
+  return existingAuthors.filter((name) => candidates.has(normalizedName(name))).length;
+}
+export function resolveStoredWorkMatch<T>(rows: T[]) {
+  if (rows.length > 1) throw new Error("DOI 与 OpenAlex Work ID 命中了不同记录，请人工处理身份冲突");
+  return rows[0] ?? null;
+}
+
+async function enrichCandidates(queryable: Queryable, rows: Record<string, unknown>[]) {
+  const duplicateIds = [...new Set(rows.map((row) => (row.source_snapshot as { possibleDuplicateResearchItemId?: string } | null)?.possibleDuplicateResearchItemId).filter((value): value is string => Boolean(value)))];
+  const existing = duplicateIds.length ? await queryable.query<Record<string, unknown>>(
+    `SELECT item.id,item.title_zh,item.title_en,item.publication_year,item.venue_zh,item.venue_en,
+      COALESCE(jsonb_agg(jsonb_build_object('nameZh',author.name_zh,'nameEn',author.name_en) ORDER BY author.sort_order) FILTER(WHERE author.id IS NOT NULL),'[]'::jsonb) authors
+     FROM research_items item LEFT JOIN research_item_authors author ON author.research_item_id=item.id
+     WHERE item.id=ANY($1::text[]) GROUP BY item.id`, [duplicateIds],
+  ) : { rows: [] as Record<string, unknown>[] };
+  const itemMap = new Map(existing.rows.map((row) => [String(row.id), row]));
+  return rows.map((row) => {
+    const snapshot = row.source_snapshot as { normalized?: { authors?: Array<{ displayName?: string }> }; possibleDuplicateResearchItemId?: string } | null;
+    const target = snapshot?.possibleDuplicateResearchItemId ? itemMap.get(snapshot.possibleDuplicateResearchItemId) : undefined;
+    const targetAuthors = Array.isArray(target?.authors) ? target.authors as Array<{ nameZh?: string; nameEn?: string }> : [];
+    const authorOverlap = countAuthorOverlap((snapshot?.normalized?.authors ?? []).map((author) => author.displayName ?? ""), targetAuthors.flatMap((author) => [author.nameZh, author.nameEn].filter((name): name is string => Boolean(name))));
+    const duplicateSuggestion = target ? {
+      researchItemId: String(target.id), title: String(target.title_zh || target.title_en || target.id),
+      year: target.publication_year == null ? null : Number(target.publication_year), venue: String(target.venue_zh || target.venue_en || ""),
+      authors: targetAuthors.map((author) => author.nameZh || author.nameEn || "").filter(Boolean),
+      confidence: authorOverlap > 0 ? "high" : "possible", authorOverlap,
+    } : null;
+    return { ...row, id: row.id, decision: row.decision, sourceSnapshot: row.source_snapshot as { normalized?: unknown } | null, source_snapshot: undefined, duplicateSuggestion, risk: duplicateSuggestion ? (duplicateSuggestion.confidence === "high" ? "high_confidence_duplicate" : "possible_duplicate") : "safe" };
+  });
+}
+
 function profileRow(row: Record<string, unknown>): ScholarlyProfile {
   return {
     userId: String(row.user_id), orcidId: row.orcid_id ? String(row.orcid_id) : null,
@@ -36,6 +76,10 @@ async function readProfile(queryable: Queryable, userId: string) {
 }
 
 export function createScholarlySyncRepository(pool: Pick<Pool, "query" | "connect">) {
+  const candidateRows = async (where: string, values: unknown[]) => {
+    const result = await pool.query<Record<string, unknown>>(`${candidateSelect} WHERE ${where} GROUP BY work.id ORDER BY work.first_seen_at DESC`, values);
+    return enrichCandidates(pool, result.rows);
+  };
   return {
     getProfile: (userId: string) => readProfile(pool, userId),
     async saveProfile(userId: string, input: Partial<ScholarlyProfile>, actorId: string) {
@@ -92,10 +136,10 @@ export function createScholarlySyncRepository(pool: Pick<Pool, "query" | "connec
     },
     async findStoredWork(work: NormalizedScholarlyWork) {
       const result = await pool.query<Record<string, unknown>>(
-        "SELECT id,provider_hash,provider_updated_at,source_snapshot,decision,source_type,research_item_id FROM scholarly_works WHERE openalex_work_id=$1 OR ($2::text IS NOT NULL AND doi_normalized=$2) ORDER BY (doi_normalized=$2) DESC,(openalex_work_id=$1) DESC LIMIT 1",
+        "SELECT id,provider_hash,provider_updated_at,source_snapshot,decision,source_type,research_item_id FROM scholarly_works WHERE openalex_work_id=$1 OR ($2::text IS NOT NULL AND doi_normalized=$2) ORDER BY (doi_normalized=$2) DESC,(openalex_work_id=$1) DESC LIMIT 2",
         [work.openalexWorkId, work.doi],
       );
-      return result.rows[0] ?? null;
+      return resolveStoredWorkMatch(result.rows);
     },
     async upsertDiscoveredWork(work: NormalizedScholarlyWork & { mappedType: string }, hash: string, userId: string) {
       const client = await pool.connect();
@@ -105,8 +149,7 @@ export function createScholarlySyncRepository(pool: Pick<Pool, "query" | "connec
           "SELECT * FROM scholarly_works WHERE openalex_work_id=$1 OR ($2::text IS NOT NULL AND doi_normalized=$2) ORDER BY (doi_normalized=$2) DESC,(openalex_work_id=$1) DESC FOR UPDATE",
           [work.openalexWorkId, work.doi],
         );
-        if (found.rows.length > 1) throw new Error("DOI 与 OpenAlex Work ID 命中了不同记录，请人工处理身份冲突");
-        let row = found.rows[0];
+        let row = resolveStoredWorkMatch(found.rows) ?? undefined;
         const previousHash = row?.provider_hash ? String(row.provider_hash) : null;
         let created = false;
         const snapshot: Record<string, unknown> = { normalized: work };
@@ -151,16 +194,11 @@ export function createScholarlySyncRepository(pool: Pick<Pool, "query" | "connec
       await pool.query(`UPDATE scholarly_sync_runs SET status=$2,finished_at=now(),members_checked=$3,works_seen=$4,candidates_created=$5,works_updated=$6,failures=$7,error_summary=$8::jsonb WHERE id=$1`, [id, summary.status, summary.membersChecked, summary.worksSeen, summary.candidatesCreated, summary.worksUpdated, summary.failures, JSON.stringify(summary.errors)]);
     },
     async listCandidates(decision: "pending" | "ignored") {
-      const result = await pool.query<Record<string, unknown>>(
-        `SELECT work.id,work.decision,work.source_type,work.openalex_work_id,work.doi_normalized,work.source_snapshot,
-          work.first_seen_at,work.last_seen_at,work.version,
-          COALESCE(jsonb_agg(jsonb_build_object('userId',users.id,'name',COALESCE(NULLIF(profile.name_zh,''),NULLIF(profile.name_en,''),users.display_name),'position',member.author_position) ORDER BY member.author_position) FILTER(WHERE users.id IS NOT NULL),'[]'::jsonb) members
-         FROM scholarly_works work LEFT JOIN scholarly_work_members member ON member.work_id=work.id
-         LEFT JOIN users ON users.id=member.user_id LEFT JOIN user_profiles profile ON profile.user_id=users.id
-         WHERE work.decision=$1 AND work.source_type='openalex' GROUP BY work.id ORDER BY work.first_seen_at DESC`,
-        [decision],
-      );
-      return result.rows.map((row) => ({ ...row, sourceSnapshot: row.source_snapshot, source_snapshot: undefined }));
+      return candidateRows("work.decision=$1 AND work.source_type='openalex'", [decision]);
+    },
+    async getWorksByIds(ids: string[]) {
+      if (!ids.length) return [];
+      return candidateRows("work.id=ANY($1::uuid[])", [ids]);
     },
     async status() {
       const [profiles, candidates, ignored, lastRun] = await Promise.all([

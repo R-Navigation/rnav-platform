@@ -4,6 +4,7 @@ import test from "node:test";
 import express, { type RequestHandler } from "express";
 import type { AuthenticatedUser } from "../middleware/auth.js";
 import { createScholarlySyncRouter } from "./scholarly-sync.js";
+import { ProviderHttpError } from "../services/scholarly-sync/providers/http.js";
 
 function auth(user?: AuthenticatedUser): RequestHandler {
   return (request, _response, next) => { request.authUser = user; next(); };
@@ -27,6 +28,9 @@ async function request(method: string, path: string, options: { user?: Authentic
     resolveResearchItemSource: async () => invoke("resolveResearchItemSource", {}),
     setManagedFields: async () => invoke("setManagedFields", {}), status: async () => invoke("status", {}),
     syncAll: async () => invoke("syncAll", {}), listRuns: async () => invoke("listRuns", []),
+    planBulk: async () => invoke("planBulk", {}), bulkAccept: async () => invoke("bulkAccept", {}),
+    bulkIgnore: async () => invoke("bulkIgnore", {}), bulkMerge: async () => invoke("bulkMerge", {}),
+    checkOpenAlexStatus: async () => invoke("checkOpenAlexStatus", {}),
   };
   const app = express(); app.use(express.json());
   app.use(createScholarlySyncRouter({ authMiddleware: auth(options.user), service: service as never, trustProxy: false }));
@@ -66,4 +70,16 @@ test("duplicate external identities return a safe conflict response", async () =
   const response = await request("PATCH", `/api/scholarly-sync/members/${memberId}`, { user: user(["site.members.write"]), origin: "same", body: {}, error });
   assert.equal(response.status, 409);
   assert.deepEqual(response.body, { error: "ORCID、OpenAlex ID 或 DOI 已被其他记录使用", code: "EXTERNAL_ID_CONFLICT" });
+});
+
+test("bulk routes reject more than 500 works before service calls", async () => {
+  const ids = Array.from({ length: 501 }, (_, index) => `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`);
+  const response = await request("POST", "/api/scholarly-sync/bulk/plan", { user: user(["site.content.write"]), origin: "same", body: { workIds: ids } });
+  assert.equal(response.status, 400); assert.deepEqual(response.calls, []);
+});
+
+test("provider diagnostics expose a classified retry response", async () => {
+  const error = new ProviderHttpError("OpenAlex", 429, "OpenAlex 今日额度已用尽", "OPENALEX_BUDGET_EXHAUSTED", { limit: 10000, remaining: 0, creditsUsed: 1, resetSeconds: 60, resetAt: "2026-09-15T05:00:00.000Z" });
+  const response = await request("POST", "/api/scholarly-sync/providers/openalex/check", { user: user(["site.content.write"]), origin: "same", error });
+  assert.equal(response.status, 429); assert.equal((response.body as { code: string }).code, "OPENALEX_BUDGET_EXHAUSTED");
 });

@@ -2,9 +2,9 @@ import { z } from "zod";
 import { normalizeOrcid, normalizeProviderId } from "../normalizer.js";
 import { openAlexAuthorSchema, openAlexWorkSchema } from "../schemas.js";
 import type { OpenAlexAuthorCandidate } from "../types.js";
-import { fetchProviderJson, type ProviderFetch } from "./http.js";
+import { fetchProviderJson, type ProviderFetch, type ProviderObservation } from "./http.js";
 
-type Options = { baseUrl?: string; apiKey?: string; fetchImpl?: ProviderFetch };
+type Options = { baseUrl?: string; apiKey?: string; fetchImpl?: ProviderFetch; onObservation?: (observation: ProviderObservation) => void };
 const authorListSchema = z.object({ results: z.array(openAlexAuthorSchema) }).passthrough();
 const workListSchema = z.object({ results: z.array(openAlexWorkSchema), meta: z.object({ next_cursor: z.string().nullable().optional() }).passthrough() }).passthrough();
 const authorSelect = "id,display_name,orcid,works_count,last_known_institutions,affiliations";
@@ -16,7 +16,7 @@ export function createOpenAlexClient(options: Options = {}) {
     const url = new URL(path, baseUrl);
     for (const [key, value] of Object.entries(params)) if (value) url.searchParams.set(key, value);
     if (options.apiKey) url.searchParams.set("api_key", options.apiKey);
-    return fetchProviderJson("OpenAlex", url, { fetchImpl: options.fetchImpl });
+    return fetchProviderJson("OpenAlex", url, { fetchImpl: options.fetchImpl, onObservation: options.onObservation });
   };
 
   const getWorksByAuthor = async (authorId: string, fromYear?: number | null, toYear?: number | null, limit?: number) => {
@@ -79,6 +79,11 @@ export function createOpenAlexClient(options: Options = {}) {
     async searchWorks(title: string) {
       const parsed = workListSchema.parse(await request("/works", { search: title.trim(), select: workSelect, per_page: "5", cursor: "*" }));
       return parsed.results;
+    },
+    async checkRateLimit() {
+      const url = new URL("/rate-limit", baseUrl);
+      if (options.apiKey) url.searchParams.set("api_key", options.apiKey);
+      return fetchProviderJson("OpenAlex", url, { fetchImpl: options.fetchImpl, retries: 0, onObservation: options.onObservation });
     },
   };
 }

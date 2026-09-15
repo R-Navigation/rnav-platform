@@ -4,8 +4,10 @@ import { mapPublicationType, normalizeDoi, normalizeOrcid, normalizeWork, provid
 import type { CrossrefClient } from "./providers/crossrefClient.js";
 import { ProviderHttpError } from "./providers/http.js";
 import type { OpenAlexClient } from "./providers/openAlexClient.js";
+import type { OpenAlexStatusMonitor } from "./providers/openAlexStatus.js";
 import type { ScholarlySyncRepository } from "./repository.js";
 import type { ManagedField, NormalizedScholarlyWork } from "./types.js";
+import { createBulkPlan } from "./bulkPlanner.js";
 
 export class ScholarlySyncError extends Error {
   constructor(message: string, readonly code = "SCHOLARLY_SYNC_ERROR", readonly status = 400) {
@@ -48,6 +50,7 @@ export function createScholarlySyncService(options: {
   crossref: CrossrefClient;
   enabled: boolean;
   providerConfig: { openAlexKeyConfigured: boolean; crossrefContactConfigured: boolean };
+  openAlexStatus?: OpenAlexStatusMonitor;
 }) {
   const { pool, repository, openAlex, crossref } = options;
 
@@ -184,6 +187,66 @@ export function createScholarlySyncService(options: {
     } catch (error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); }
   }
 
+  async function mergeWork(workId: string, researchItemId: string, actorId: string) {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const work = await client.query<{ decision: string; research_item_id: string | null }>("SELECT decision,research_item_id FROM scholarly_works WHERE id=$1 FOR UPDATE", [workId]);
+      if (!work.rowCount) throw new ScholarlySyncError("候选论文不存在", "NOT_FOUND", 404);
+      if (work.rows[0].decision === "accepted" && work.rows[0].research_item_id === researchItemId) { await client.query("COMMIT"); return { researchItemId, unchanged: true }; }
+      if (work.rows[0].decision === "accepted") throw new ScholarlySyncError("候选已绑定其他论文，请刷新后重试", "STATE_CONFLICT", 409);
+      const item = await client.query("SELECT id FROM research_items WHERE id=$1 FOR UPDATE", [researchItemId]);
+      if (!item.rowCount) throw new ScholarlySyncError("目标论文不存在", "NOT_FOUND", 404);
+      await client.query("UPDATE scholarly_works SET decision='accepted',research_item_id=$2,managed_fields=ARRAY[]::text[],reviewed_at=now(),reviewed_by=$3,version=version+1 WHERE id=$1", [workId, researchItemId, actorId]);
+      await audit(client, actorId, "scholarly.work.merge", "scholarly_work", workId, { researchItemId });
+      await client.query("COMMIT"); return { researchItemId, unchanged: false };
+    } catch (error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); }
+  }
+
+  async function auditBulk(actorId: string, action: string, detail: unknown) {
+    await pool.query("INSERT INTO audit_logs(actor_id,action,target_type,target_id,detail) VALUES($1,$2,'scholarly_bulk','batch',$3::jsonb)", [actorId, action, JSON.stringify(detail)]);
+  }
+
+  async function planBulk(workIds: string[]) {
+    return createBulkPlan(workIds, await repository.getWorksByIds(workIds));
+  }
+
+  async function bulkAccept(workIds: string[], actorId: string) {
+    const plan = await planBulk(workIds); const results: Array<Record<string, unknown>> = [];
+    for (const item of plan.items) {
+      if (item.action === "already_accepted") { results.push({ ...item, status: "already_accepted" }); continue; }
+      if (item.action !== "safe_accept") { results.push({ ...item, status: "skipped" }); continue; }
+      try { const result = await acceptWork(item.workId, actorId); results.push({ ...item, status: result.unchanged ? "already_accepted" : "accepted", ...result }); }
+      catch (error) { results.push({ ...item, status: "failed", error: cleanError(error) }); }
+    }
+    const summary = { requested: workIds.length, accepted: results.filter((item) => item.status === "accepted").length, alreadyAccepted: results.filter((item) => item.status === "already_accepted").length, skipped: results.filter((item) => item.status === "skipped").length, failed: results.filter((item) => item.status === "failed").length, results };
+    await auditBulk(actorId, "scholarly.bulk.accept", { ...summary, results: undefined }); return summary;
+  }
+
+  async function bulkIgnore(workIds: string[], actorId: string) {
+    const works = await repository.getWorksByIds(workIds); const byId = new Map(works.map((work) => [String(work.id), work])); const results: Array<Record<string, unknown>> = [];
+    for (const workId of workIds) {
+      const current = byId.get(workId);
+      if (!current) { results.push({ workId, status: "failed", error: "候选论文不存在" }); continue; }
+      if (current.decision === "ignored") { results.push({ workId, status: "already_ignored" }); continue; }
+      if (current.decision !== "pending") { results.push({ workId, status: "skipped", error: "仅待确认论文可以忽略" }); continue; }
+      try { await decision(workId, "ignore", actorId); results.push({ workId, status: "ignored" }); }
+      catch (error) { results.push({ workId, status: "failed", error: cleanError(error) }); }
+    }
+    const summary = { requested: workIds.length, ignored: results.filter((item) => item.status === "ignored").length, alreadyIgnored: results.filter((item) => item.status === "already_ignored").length, skipped: results.filter((item) => item.status === "skipped").length, failed: results.filter((item) => item.status === "failed").length, results };
+    await auditBulk(actorId, "scholarly.bulk.ignore", { ...summary, results: undefined }); return summary;
+  }
+
+  async function bulkMerge(items: Array<{ workId: string; researchItemId: string }>, actorId: string) {
+    const results: Array<Record<string, unknown>> = [];
+    for (const item of items) {
+      try { const result = await mergeWork(item.workId, item.researchItemId, actorId); results.push({ ...item, status: result.unchanged ? "already_merged" : "merged" }); }
+      catch (error) { results.push({ ...item, status: "failed", error: cleanError(error) }); }
+    }
+    const summary = { requested: items.length, merged: results.filter((item) => item.status === "merged").length, alreadyMerged: results.filter((item) => item.status === "already_merged").length, failed: results.filter((item) => item.status === "failed").length, results };
+    await auditBulk(actorId, "scholarly.bulk.merge", { ...summary, results: undefined }); return summary;
+  }
+
   return {
     getProfile: (userId: string) => repository.getProfile(userId),
     updateProfile: (userId: string, input: Parameters<ScholarlySyncRepository["saveProfile"]>[1], actorId: string) => repository.saveProfile(userId, input, actorId),
@@ -206,21 +269,19 @@ export function createScholarlySyncService(options: {
     backfill: (actorId: string | null = null) => sync("backfill", actorId),
     listCandidates: (decision: "pending" | "ignored") => repository.listCandidates(decision),
     acceptWork: (workId: string, actorId: string) => acceptWork(workId, actorId),
-    async mergeWork(workId: string, researchItemId: string, actorId: string) {
-      const client = await pool.connect();
-      try {
-        await client.query("BEGIN");
-        const item = await client.query("SELECT id FROM research_items WHERE id=$1 FOR UPDATE", [researchItemId]);
-        if (!item.rowCount) throw new ScholarlySyncError("目标论文不存在", "NOT_FOUND", 404);
-        const changed = await client.query("UPDATE scholarly_works SET decision='accepted',research_item_id=$2,managed_fields=ARRAY[]::text[],reviewed_at=now(),reviewed_by=$3,version=version+1 WHERE id=$1 AND decision IN ('pending','ignored') RETURNING id", [workId, researchItemId, actorId]);
-        if (!changed.rowCount) throw new ScholarlySyncError("候选状态已经变化，请刷新后重试", "STATE_CONFLICT", 409);
-        await audit(client, actorId, "scholarly.work.merge", "scholarly_work", workId, { researchItemId });
-        await client.query("COMMIT"); return { researchItemId };
-      } catch (error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); }
-    },
+    mergeWork,
+    planBulk,
+    bulkAccept,
+    bulkIgnore,
+    bulkMerge,
     ignoreWork: (workId: string, actorId: string) => decision(workId, "ignore", actorId),
     restoreWork: (workId: string, actorId: string) => decision(workId, "restore", actorId),
-    status: async () => ({ ...(await repository.status()), enabled: options.enabled, providers: options.providerConfig }),
+    status: async () => ({ ...(await repository.status()), enabled: options.enabled, providers: { openAlex: options.openAlexStatus?.getStatus() ?? { configured: options.providerConfig.openAlexKeyConfigured, health: options.providerConfig.openAlexKeyConfigured ? "unknown" : "key_missing", checkedAt: null, lastSuccessAt: null, httpStatus: null, rateLimit: { limit: null, remaining: null, creditsUsed: null, resetSeconds: null, resetAt: null }, message: options.providerConfig.openAlexKeyConfigured ? "尚未检测 OpenAlex 状态" : "OpenAlex API Key 未配置" }, crossref: { configured: options.providerConfig.crossrefContactConfigured, health: options.providerConfig.crossrefContactConfigured ? "configured" : "contact_missing" } } }),
+    async checkOpenAlexStatus(actorId: string) {
+      const status = options.openAlexStatus ? await options.openAlexStatus.check(openAlex) : null;
+      await auditBulk(actorId, "scholarly.provider.check", { provider: "openalex", health: status?.health ?? "unknown", checkedAt: status?.checkedAt ?? null });
+      return status;
+    },
     listRuns: () => repository.listRuns(),
     getResearchItemSyncInfo: (id: string) => repository.getResearchItemSyncInfo(id),
     async setManagedFields(id: string, fields: ManagedField[], actorId: string) {

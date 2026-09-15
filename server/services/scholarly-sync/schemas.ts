@@ -26,6 +26,15 @@ export const resolveAuthorSchema = z.object({
 
 export const verifyAuthorSchema = z.object({ openalexAuthorId: openAlexAuthorIdSchema }).strict();
 export const mergeWorkSchema = z.object({ researchItemId: researchItemIdSchema }).strict();
+const bulkWorkIdsSchema = z.array(workIdSchema).min(1).max(500).superRefine((ids, context) => {
+  if (new Set(ids).size !== ids.length) context.addIssue({ code: z.ZodIssueCode.custom, message: "候选论文 ID 不能重复" });
+});
+export const bulkPlanSchema = z.object({ workIds: bulkWorkIdsSchema }).strict();
+export const bulkAcceptSchema = z.object({ workIds: bulkWorkIdsSchema }).strict();
+export const bulkIgnoreSchema = z.object({ workIds: bulkWorkIdsSchema }).strict();
+export const bulkMergeSchema = z.object({ items: z.array(z.object({ workId: workIdSchema, researchItemId: researchItemIdSchema }).strict()).min(1).max(500) }).strict().superRefine((value, context) => {
+  if (new Set(value.items.map((item) => item.workId)).size !== value.items.length) context.addIssue({ code: z.ZodIssueCode.custom, message: "同一候选论文不能重复合并", path: ["items"] });
+});
 export const managedFieldsSchema = z.object({ managedFields: z.array(z.enum(managedFieldKeys)).max(managedFieldKeys.length) }).strict();
 export const resolveResearchItemSchema = z.object({ openalexWorkId: z.string().trim().regex(/^(?:https?:\/\/openalex\.org\/)?W\d+$/i).optional() }).strict();
 
@@ -61,3 +70,13 @@ export const crossrefWorkSchema = z.object({
   "published-print": z.object({ "date-parts": z.array(z.array(z.number())) }).optional(),
   "published-online": z.object({ "date-parts": z.array(z.array(z.number())) }).optional(),
 }).passthrough();
+
+export const providerRateLimitSchema = z.object({
+  limit: z.number().nullable(), remaining: z.number().nullable(), creditsUsed: z.number().nullable(),
+  resetSeconds: z.number().nullable(), resetAt: z.string().datetime().nullable(),
+});
+export const providerStatusSchema = z.object({
+  configured: z.boolean(), health: z.enum(["healthy", "key_missing", "auth_error", "budget_exhausted", "rate_limited", "timeout", "provider_error", "unknown"]),
+  checkedAt: z.string().datetime().nullable(), lastSuccessAt: z.string().datetime().nullable(), httpStatus: z.number().nullable(),
+  rateLimit: providerRateLimitSchema, message: z.string(),
+});
